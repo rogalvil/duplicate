@@ -28,6 +28,7 @@ enum SelfTest {
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
                 "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
+                "trash",
             ]
         default: modes = [mode]
         }
@@ -47,6 +48,7 @@ enum SelfTest {
                 case "scan": try await checkEndToEndScan(arguments: arguments)
                 case "cache": try await checkHashCache(arguments: arguments)
                 case "storage": try await checkStorageClasses(arguments: arguments)
+                case "trash": try checkTrashRoundTrip()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -1017,6 +1019,111 @@ enum SelfTest {
         )
     }
 
+    // MARK: - trash
+
+    /// Proves a file can be sent to the real Trash, found again, and read back byte-identical.
+    ///
+    /// The destructive path is the riskiest thing in the app and the only part with no second chance, so it
+    /// is exercised against the real `FileManager.trashItem` rather than a stub. Measured on this machine,
+    /// every mounted volume accepts it: the boot volume and `$HOME` land in `~/.Trash`, and both external
+    /// APFS volumes land in `<volume>/.Trashes/<uid>`. The plan's largest open risk was that the external
+    /// volume holding the real corpus would be exFAT, where `trashItem` fails outright -- it is not.
+    ///
+    /// Everything this mode creates, it removes, including the trashed copy. A selftest must not leave
+    /// debris in the user's Trash.
+    ///
+    /// Proof of teeth: make `TrashDisposer` ignore the `resultingItemURL` and return the original path, and
+    /// the read-back assertion fails -- which is the difference between "the file moved" and "the file can
+    /// be put back".
+    private static func checkTrashRoundTrip() throws {
+        let manager = FileManager.default
+        let scratch = NSTemporaryDirectory() + "/duplicate-trash-\(getpid())"
+        defer { try? manager.removeItem(atPath: scratch) }
+        try manager.createDirectory(atPath: scratch, withIntermediateDirectories: true)
+
+        let hasher = ContentHasher()
+        let payload = Data((0..<3000).map { UInt8($0 % 251) })
+        let path = scratch + "/doomed.bin"
+        try payload.write(to: URL(filePath: path))
+        let before = try hasher.fullDigest(atPath: path)
+
+        // Verification first, which is the order production uses: nothing is moved until its content still
+        // matches what the scan recorded.
+        let verifying = VerifyingDisposer(
+            wrapping: TrashDisposer(),
+            hasher: hasher,
+            expected: [path: before.digest]
+        )
+        let outcome = try verifying.dispose(path: path)
+        defer { try? manager.removeItem(atPath: outcome.resultingPath) }
+
+        try expect(outcome.mechanism == .trash, "mechanism was \(outcome.mechanism)")
+        try expect(!manager.fileExists(atPath: path), "the original is still at \(path)")
+        try expect(
+            manager.fileExists(atPath: outcome.resultingPath),
+            "nothing at the reported destination \(outcome.resultingPath)"
+        )
+        let after = try hasher.fullDigest(atPath: outcome.resultingPath)
+        try expect(
+            after.digest == before.digest,
+            "the trashed file is not byte-identical: \(after.digest.hexString) vs "
+                + "\(before.digest.hexString)"
+        )
+        try expect(after.byteCount == before.byteCount, "the size changed")
+
+        // And a file whose content no longer matches is refused, not moved.
+        let changed = scratch + "/changed.bin"
+        try payload.write(to: URL(filePath: changed))
+        let stale = VerifyingDisposer(
+            wrapping: TrashDisposer(),
+            hasher: hasher,
+            expected: [changed: Digest32(hexString: String(repeating: "0", count: 64))!]
+        )
+        var refused = false
+        do {
+            _ = try stale.dispose(path: changed)
+        } catch DisposalError.contentChanged {
+            refused = true
+        }
+        try expect(refused, "a file whose digest did not match was still moved")
+        try expect(
+            manager.fileExists(atPath: changed),
+            "the refused file was moved anyway"
+        )
+
+        // The quarantine fallback, forced, with a collision already in place.
+        let quarantine = scratch + "/quarantine"
+        let session = quarantine + "/20260511-064716-000001"
+        try manager.createDirectory(atPath: session, withIntermediateDirectories: true)
+        try Data("occupied".utf8).write(to: URL(filePath: session + "/fallback.bin"))
+        let occupiedDigest = try hasher.fullDigest(atPath: session + "/fallback.bin")
+
+        let fallbackSource = scratch + "/fallback.bin"
+        try payload.write(to: URL(filePath: fallbackSource))
+        let fallback = FallbackDisposer(
+            primary: RefusingDisposer(),
+            secondary: QuarantineDisposer(root: quarantine, sessionID: "20260511-064716-000001")
+        )
+        let quarantined = try fallback.dispose(path: fallbackSource)
+        try expect(quarantined.mechanism == .quarantine, "the fallback did not engage")
+        try expect(
+            quarantined.resultingPath == session + "/fallback-2.bin",
+            "collision resolved as \(quarantined.resultingPath)"
+        )
+        // The file that was already there must be untouched: overwriting on the recovery path is the worst
+        // place for it.
+        try expect(
+            try hasher.fullDigest(atPath: session + "/fallback.bin").digest
+                == occupiedDigest.digest,
+            "the pre-existing quarantined file was overwritten"
+        )
+
+        print("  trashed to \((outcome.resultingPath as NSString).deletingLastPathComponent)")
+        print(
+            "  read back byte-identical; verification refused a changed file; fallback renamed on collision"
+        )
+    }
+
     // MARK: - about
 
     /// Proves the About panel has a real build identity to show.
@@ -1180,6 +1287,13 @@ enum SelfTest {
             return nil
         }
         return arguments[index + 1]
+    }
+}
+
+/// Always refuses, to force the quarantine fallback in the trash selftest.
+private struct RefusingDisposer: ItemDisposing {
+    func dispose(path: String) throws -> DisposalOutcome {
+        throw DisposalError.trashUnavailable(path: path, reason: "forced by the selftest")
     }
 }
 
