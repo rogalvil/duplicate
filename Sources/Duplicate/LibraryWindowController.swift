@@ -327,6 +327,14 @@ final class LibraryWindowController: NSWindowController {
         panel.showWindow(nil)
     }
 
+    /// Tells every open review to re-read the disk.
+    ///
+    /// The Sessions menu can undo a session while a review of that scan is open, and that review's rows are
+    /// about files that just moved back.
+    func reloadOpenReviews() {
+        for controller in reviewWindows.values { controller.reloadFromDisk() }
+    }
+
     /// Whether any open review is in the middle of an apply.
     ///
     /// Asked by `applicationShouldTerminate`: quitting halfway through would leave files half-moved and a

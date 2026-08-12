@@ -50,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
         let outcome = UndoCoordinator.undo(sessionID: session, in: state)
+        // Any open review of the affected scan is now showing rows about files that moved back.
+        libraryWindow?.reloadOpenReviews()
+
         let result = NSAlert()
         result.messageText = String(
             format: Strings.string("undo.done.headline"),
