@@ -19,6 +19,8 @@ public struct HashResult: Hashable, Sendable {
 
 /// Hashes file content. Injected so downstream stages can be driven without a filesystem.
 public protocol FileHashing: Sendable {
+    /// Whether a file of this size is worth probing before reading it whole.
+    func usesPrefixStage(forSize size: Int64) -> Bool
     /// A cheap discriminator over the head, the tail and the length. Never a content identity.
     func prefixDigest(atPath path: String, size: Int64) throws -> Digest32
     /// The full SHA-256, and the number of bytes it covered.

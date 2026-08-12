@@ -130,6 +130,16 @@ No re-descubrirlas:
   trata como distintas y perdería una de sus dos decisiones — o sea, un archivo mandado a la Papelera
   sin haberse revisado nunca. Y `String <` no es orden de code point, así que ordenar con él
   divergiría del `sorted()` de Python. Todo pasa por `PathOrder`, que compara bytes UTF-8.
+- **La normalización Unicode de un nombre de archivo depende del volumen.** Medido: el volumen de
+  arranque (APFS case-insensitive) **convierte a NFD** un nombre escrito como NFC, mientras WD12TB
+  (APFS case-sensitive) **preserva NFC**. Consecuencia práctica: no se puede montar en `/tmp` un
+  fixture con un nombre NFC, así que la divergencia entre orden por bytes y `String <` se testea sobre
+  strings en memoria (suite `PathOrder`) y no a través del filesystem.
+
+  Que la divergencia sea real en producción sí está medido: el corpus tiene **38 rutas solo-NFD y 10
+  solo-NFC** de 71,580. Y APFS es normalization-**insensitive** para lookup en los dos volúmenes, así
+  que el mismo nombre en NFC y en NFD es un solo archivo — el par del corpus son nombres *distintos*
+  que usan formas distintas, no un nombre en dos formas.
 - **WD12TB es APFS case-sensitive.** `Foo.jpg` y `foo.jpg` son dos archivos ahí y uno en el volumen
   de arranque. Otra razón para no normalizar rutas nunca.
 - **`git diff --quiet` ignora los archivos sin trackear**, así que un árbol lleno de fuentes nuevas

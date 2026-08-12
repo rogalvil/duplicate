@@ -27,7 +27,7 @@ enum SelfTest {
         case "all":
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
-                "walk-permissions", "trash-exclusion",
+                "walk-permissions", "trash-exclusion", "scan",
             ]
         default: modes = [mode]
         }
@@ -44,6 +44,7 @@ enum SelfTest {
                 case "digest": try checkDigestAgainstShasum(arguments: arguments)
                 case "walk-permissions": try checkWalkPermissions()
                 case "trash-exclusion": try checkTrashExclusion(arguments: arguments)
+                case "scan": try await checkEndToEndScan(arguments: arguments)
                 default:
                     print("FAILED: unknown selftest mode '\(name)'")
                     return 1
@@ -616,6 +617,168 @@ enum SelfTest {
         )
     }
 
+    // MARK: - scan
+
+    /// Runs a real end-to-end scan against a synthesized tree with a known answer.
+    ///
+    /// Everything before this mode tests a stage. This tests the pipeline: walk, bucket, probe, hash,
+    /// group, encode. It also asserts the two properties that make a scan trustworthy and that no unit
+    /// test can reach as convincingly:
+    ///
+    /// - **The document is identical at every concurrency width.** If completion order could leak into
+    ///   the output, two runs of the same tree would differ and the interop round-trip would start
+    ///   failing intermittently -- the worst possible failure mode for a byte-compatibility claim.
+    /// - **A saved scan reloads to the same bytes.** Which is what the app will do minutes later when
+    ///   the user opens it to review.
+    ///
+    /// - Note: `--dir <path>` scans a real directory instead, asserting only the invariants that hold
+    ///   for any tree. Read-only in both cases: nothing is moved or deleted.
+    ///
+    /// Proof of teeth: sort the group's files with Swift's `String <` instead of ``PathOrder`` and the
+    /// known-answer assertion fails on the Unicode pair.
+    private static func checkEndToEndScan(arguments: [String]) async throws {
+        let instant = ScanIdentifier.Instant(
+            year: 2026, month: 5, day: 11, hour: 6, minute: 47, second: 16, microsecond: 685054
+        )
+        let finder = DuplicateFinder()
+
+        if let root = value(for: "--dir", in: arguments) {
+            let progress = ProgressCounters()
+            let outcome = try await finder.find(root: root, instant: instant, progress: progress)
+            let snapshot = progress.snapshot()
+            try expect(snapshot.phase == .finished, "phase ended at \(snapshot.phase)")
+            for group in outcome.scan.groups {
+                try expect(
+                    group.files.count > 1,
+                    "a group with \(group.files.count) member survived"
+                )
+                try expect(
+                    group.files == PathOrder.sorted(group.files),
+                    "a group's files were not in byte order"
+                )
+            }
+            print(
+                "  \(root): \(outcome.scan.groups.count) groups, "
+                    + "\(outcome.scan.fileCount) files, "
+                    + "\(ByteSize.format(outcome.scan.redundantByteCountUpperBound)) redundant "
+                    + "(upper bound), \(outcome.walk.inaccessiblePaths.count) unreadable directories"
+            )
+            return
+        }
+
+        let scratch = NSTemporaryDirectory() + "/duplicate-scan-\(getpid())"
+        let manager = FileManager.default
+        defer { try? manager.removeItem(atPath: scratch) }
+
+        // A known answer: one group of three, one group of two, and several files that must not group.
+        let big = Data((0..<400_000).map { UInt8($0 % 251) })
+        let small = Data(repeating: 3, count: 900)
+        var decoy = big
+        decoy[399_999] = decoy[399_999] &+ 1  // same size as `big`, different last byte
+
+        // A pair that the filesystem can hold and whose two orderings disagree, so this fixture has
+        // teeth against a PathOrder-to-String regression.
+        //
+        //   firstByBytes  = "á.bin" written as a, U+0301  ->  61 cc 81 2e ...
+        //   secondByBytes = "b.bin"                       ->  62 2e ...
+        //
+        // By bytes the decomposed name sorts first (0x61 < 0x62), which is what Python's sorted() over
+        // Path does. Swift's `<` normalises to U+00E1 = 225 and compares against "b" = 98, putting "b"
+        // first. An ASCII-only pair would agree under both and prove nothing -- the first version of this
+        // fixture used one, and the teeth-proof caught it.
+        //
+        // The pair cannot be NFC-versus-NFD: measured on this machine, the case-insensitive boot volume
+        // normalises a filename written as NFC into NFD, so /tmp cannot hold an NFC name at all. The
+        // external case-sensitive volume does preserve NFC, which is why the real corpus contains both
+        // forms -- 38 NFD-only and 10 NFC-only paths out of 71,580.
+        let firstByBytes = "a\u{0301}.bin"
+        let secondByBytes = "b.bin"
+
+        let layout: [(String, Data)] = [
+            ("a/one.bin", big),
+            ("b/two.bin", big),
+            ("c/deep/three.bin", big),
+            ("decoy.bin", decoy),
+            ("s/\(secondByBytes)", small),
+            ("s/\(firstByBytes)", small),
+            ("unique.bin", Data(repeating: 9, count: 77)),
+            (".DS_Store", small),  // noise: must never appear, even though it matches `small`
+        ]
+        for (relative, payload) in layout {
+            let path = scratch + "/" + relative
+            try manager.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true
+            )
+            try payload.write(to: URL(filePath: path))
+        }
+
+        // Every width must produce the same bytes.
+        var documents: Set<Data> = []
+        var last: DuplicateFinder.Outcome?
+        for width in [1, 2, 4, 8] {
+            let outcome = try await finder.find(
+                root: scratch,
+                instant: instant,
+                configuration: .init(concurrency: width)
+            )
+            documents.insert(try JSONWriter.document(DuplicateScanCodec.encode(outcome.scan)))
+            last = outcome
+        }
+        try expect(
+            documents.count == 1,
+            "the document changed with the concurrency width (\(documents.count) variants)"
+        )
+        let outcome = try expectSome(last, "no scan ran")
+
+        try expect(
+            outcome.scan.groups.count == 2,
+            "expected 2 groups, got \(outcome.scan.groups.count)"
+        )
+        // Largest first.
+        try expect(outcome.scan.groups[0].size == 400_000, "group order or size is wrong")
+        try expect(
+            outcome.scan.groups[0].files.count == 3,
+            "expected 3 members in the large group, got \(outcome.scan.groups[0].files.count)"
+        )
+        try expect(outcome.scan.groups[1].size == 900, "the small group's size is wrong")
+        try expect(
+            outcome.scan.groups[1].files.count == 2,
+            "expected 2 members in the small group, got \(outcome.scan.groups[1].files.count)"
+        )
+        // Fails if the sort stops going through PathOrder: Swift's `String <` puts "b.bin" first.
+        try expect(
+            outcome.scan.groups[1].files[0].hasSuffix(firstByBytes),
+            "the small group is not in byte order: "
+                + outcome.scan.groups[1].files.map { ($0 as NSString).lastPathComponent }
+                .joined(separator: ", ")
+        )
+        try expect(
+            secondByBytes < firstByBytes,
+            "the fixture no longer exercises the disagreement between byte and String order"
+        )
+        try expect(
+            !outcome.scan.groups.contains { $0.files.contains { $0.hasSuffix(".DS_Store") } },
+            ".DS_Store reached a group"
+        )
+        try expect(outcome.unreadable.isEmpty, "unreadable: \(outcome.unreadable)")
+
+        // A saved scan must reload to the same bytes: that is what the app does when the user opens it
+        // to review, minutes later.
+        let encoded = try JSONWriter.document(DuplicateScanCodec.encode(outcome.scan))
+        let reloaded = try DuplicateScanCodec.decode(JSONReader.parse(encoded))
+        try expect(
+            try JSONWriter.document(DuplicateScanCodec.encode(reloaded)) == encoded,
+            "the scan did not survive a save and reload"
+        )
+        try expect(reloaded == outcome.scan, "the reloaded scan is not equal to the original")
+
+        print(
+            "  2 groups over 4 concurrency widths, byte-identical; "
+                + "\(ByteSize.format(outcome.scan.redundantByteCountUpperBound)) redundant"
+        )
+    }
+
     // MARK: - menu
 
     /// Proves the hand-built menu has no duplicate keyboard shortcuts.
@@ -653,6 +816,12 @@ enum SelfTest {
 
     private static func expect(_ condition: Bool, _ message: String) throws {
         guard condition else { throw SelfTestFailure(message) }
+    }
+
+    /// Unwraps or fails with a message, so a nil never turns into a silent skip.
+    private static func expectSome<T>(_ value: T?, _ message: String) throws -> T {
+        guard let value else { throw SelfTestFailure(message) }
+        return value
     }
 
     private static func value(for flag: String, in arguments: [String]) -> String? {

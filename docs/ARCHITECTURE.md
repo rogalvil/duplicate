@@ -89,6 +89,12 @@ distintas y perdería una de sus dos decisiones — un archivo mandado a la Pape
 Y `String <` no es orden de code point, así que ordenar con él divergiría del `sorted()` sobre `Path`
 de Python, y dos herramientas reportarían el mismo scan en órdenes distintos.
 
+Un matiz que se midió después y conviene tener escrito: **la forma en que un nombre queda almacenado
+depende del volumen.** El disco de arranque convierte a NFD un nombre escrito como NFC; el externo
+case-sensitive preserva NFC. Por eso el corpus real tiene las dos formas (38 solo-NFD, 10 solo-NFC de
+71,580 rutas) y por eso un fixture en `/tmp` no puede contener un nombre NFC — esa aserción vive sobre
+strings en memoria, no sobre el filesystem.
+
 Como el orden de bytes UTF-8 *es* orden de code point, comparar los bytes crudos reproduce Python
 exactamente. Regla: **la identidad canónica de una ruta es la secuencia cruda de bytes UTF-8 que
 produjo el recorrido.** Nunca normalizar.
