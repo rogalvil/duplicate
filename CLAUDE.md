@@ -185,7 +185,7 @@ Dos reglas:
    proyecto anterior.
 
 Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
-`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`, `undo`.
+`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`, `undo`, `review`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -206,6 +206,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   está en el SDK y estaría *permitido*, pero se rechazó por mérito: el workload es un lookup puntual
   sobre clave compuesta, y SQLite traería WAL, shm y semántica de `busy_timeout`, o sea más
   superficie de corrupción, no menos.
+- **ICU quita los espacios *dentro* de una clase de caracteres bajo `allowCommentsAndWhitespace`; el
+  `VERBOSE` de Python no.** Por eso `[ _-]\\d+` se volvía `[_-]\\d+` y el port discrepaba del CLI justo
+  en los nombres que terminan en espacio y dígitos (`photo 1`, `photo copy 2`). Los espacios dentro de
+  clases van escritos `\\x20`. Reusar el texto del regex verbatim **no** era suficiente.
+- **Los dos motores sí coinciden en el espacio de `\\( ?copy\\)?`**: los dos lo quitan, así que el `?`
+  termina aplicando al paréntesis de apertura y un sufijo `copy` pelado matchea. Por eso `photo.copy`,
+  `copy` y hasta `xcopy` puntúan 1 en las dos herramientas. Sorprendente, pero compartido.
+- **Un grupo sin revisar NO se escribe en el archivo de decisiones.** El CLI escribe una entrada para
+  cada grupo con el default de la heurística, así que salir tras el grupo 1 de 50 registra decisiones
+  para 49 y aplicar actúa sobre todos. En una terminal eso pide un `q` deliberado; en una ventana,
+  salir es cerrar la ventana. La ausencia de la clave es el contrato, y las dos herramientas la
+  respetan.
 - **El journal es JSON Lines (`.jsonl`), no un array JSON.** No se puede hacer append a un `[…]`
   pretty-printed sin reescribirlo, y un crash a media escritura tiene que dejar legible todo lo
   anterior. Una línea truncada cuesta esa línea y nada más.
