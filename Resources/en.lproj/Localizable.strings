@@ -1,0 +1,13 @@
+/* Base string table. English is the development language.
+   Every key here must also exist in es.lproj/Localizable.strings; the --selftest --mode l10n
+   check fails when the two tables diverge. */
+
+/* Main menu */
+"menu.app.about" = "About Duplicate";
+"menu.app.hide" = "Hide Duplicate";
+"menu.app.hideOthers" = "Hide Others";
+"menu.app.showAll" = "Show All";
+"menu.app.quit" = "Quit Duplicate";
+
+/* Windows */
+"window.library.title" = "Scans";

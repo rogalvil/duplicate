@@ -1,0 +1,10 @@
+/* Localised Info.plist values. These override the English fallbacks compiled into
+   Contents/Info.plist when the system language is English. */
+
+"CFBundleDisplayName" = "Duplicate";
+
+"NSDesktopFolderUsageDescription" = "Duplicate reads your Desktop to find duplicate files. Nothing is moved to the Trash until you approve it.";
+"NSDocumentsFolderUsageDescription" = "Duplicate reads your Documents folder to find duplicate files. Nothing is moved to the Trash until you approve it.";
+"NSDownloadsFolderUsageDescription" = "Duplicate reads your Downloads folder to find duplicate files. Nothing is moved to the Trash until you approve it.";
+"NSRemovableVolumesUsageDescription" = "Duplicate reads external disks to find duplicate files. Nothing is moved to the Trash until you approve it.";
+"NSNetworkVolumesUsageDescription" = "Duplicate reads network volumes to find duplicate files. Nothing is moved to the Trash until you approve it.";

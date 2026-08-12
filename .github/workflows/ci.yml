@@ -1,0 +1,64 @@
+name: CI
+
+# On pull requests only, never on push. This repo is private and GitHub bills macOS runner
+# minutes at 10x, so the Free plan's 2,000 minutes are really ~200 minutes of wall clock.
+# That leaves room for pull requests, nowhere near enough for every push to every branch.
+#
+# Stacked bases are included on purpose. With `branches: [main]` alone, a pull request based
+# on another feature branch reports no checks at all, and retargeting it to main afterwards
+# fires an `edited` event that is not among the default trigger types. The combination let a
+# stacked branch reach main having never been tested on the previous project.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+
+# A force-push should not leave the superseded run consuming billable minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    # This name is the required status check in the branch ruleset. Renaming the job silently
+    # stops gating main, because the ruleset waits for a context that no longer reports.
+    name: Build, test and coverage
+    # Pinned to the minimum deployment target on purpose: if a change reaches for an API newer
+    # than macOS 15, CI fails here rather than at a user's launch. It is also what catches the
+    # Sendable divergence between SDKs that no local build can reproduce.
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcrun swift-format --version
+
+      - name: Check formatting
+        run: make lint
+
+      # Debug rather than release: swift test builds debug anyway, so this reuses the
+      # artifacts instead of paying for a second full compile. The explicit build is still
+      # needed because `swift test` does not build the executable target, so a broken
+      # AppDelegate would pass unnoticed.
+      - name: Build all targets
+        run: make build CONFIG=debug
+
+      - name: Test with coverage gate
+        run: make coverage
+
+      - name: Upload coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: coverage/summary.json
+          if-no-files-found: ignore
