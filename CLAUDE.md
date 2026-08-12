@@ -163,13 +163,17 @@ Dos reglas:
    exacto que lo hace fallar. Un arnés que pasa contra código roto no sirve de nada, y ya pasó en el
    proyecto anterior.
 
-Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`.
+Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
 modelo tipado** (`DuplicateScanCodec.decode` → `DuplicateScan` → `encode`), que es el camino que toma
 producción, y además verifica que el nombre del archivo coincida con el `scan_id` de adentro — si no,
-volver a guardar ese scan sobreescribiría otro o renombraría este en silencio. Corre contra el corpus real del usuario (226 documentos hoy), es de solo
+volver a guardar ese scan sobreescribiría otro o renombraría este en silencio.
+
+`digest` compara el hasher contra `shasum -a 256` en el tamaño de chunk de producción (1 MiB), no
+en el reducido que usan los tests. Importa porque un bug de frontera de chunk produce digests
+correctos para los tamaños que son múltiplo exacto del chunk y equivocados para el resto. Corre contra el corpus real del usuario (226 documentos hoy), es de solo
 lectura, y una falla es un diff con offset, no una discusión. Los tests unitarios cubren lo mismo con
 fixtures sintéticos, porque el corpus real tiene rutas privadas y un fixture commiteado es un archivo
 publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`.

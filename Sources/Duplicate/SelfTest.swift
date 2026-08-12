@@ -24,7 +24,8 @@ enum SelfTest {
 
         let modes: [String]
         switch mode {
-        case "all": modes = ["bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans"]
+        case "all":
+            modes = ["bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest"]
         default: modes = [mode]
         }
 
@@ -37,6 +38,7 @@ enum SelfTest {
                 case "menu": try checkMenu()
                 case "json-roundtrip": try checkJSONRoundTrip(arguments: arguments)
                 case "scans": try checkTypedScanRoundTrip(arguments: arguments)
+                case "digest": try checkDigestAgainstShasum(arguments: arguments)
                 default:
                     print("FAILED: unknown selftest mode '\(name)'")
                     return 1
@@ -366,6 +368,85 @@ enum SelfTest {
             print("  \(decoded) scans decoded and re-encoded byte-identically")
             print("  \(groups) groups, \(files) files, \(relative) scans with relative paths")
         }
+    }
+
+    // MARK: - digest
+
+    /// Proves the hasher agrees with `shasum -a 256` at the production chunk size.
+    ///
+    /// The unit tests shrink the chunk to 4 KiB so boundaries are cheap to straddle, and they compare
+    /// against a one-shot `CryptoKit` call. Neither of those is what ships: production reads 1 MiB at a
+    /// time through a reused page-aligned buffer, and the value that matters is the one `hashlib`
+    /// produces, because that is what is already written in the shared scan files.
+    ///
+    /// `shasum` is the same tool a user would reach for to check the app's arithmetic, which is why it
+    /// is the oracle here rather than a second copy of our own code.
+    ///
+    /// - Note: `--file <path>` hashes that file instead of the synthesized set.
+    ///
+    /// Proof of teeth: drop the last chunk in `fullDigest`'s read loop (break before the final
+    /// `update`) and the 1 MiB + 1 case fails while the small ones still pass.
+    private static func checkDigestAgainstShasum(arguments: [String]) throws {
+        let hasher = ContentHasher()
+
+        if let path = value(for: "--file", in: arguments) {
+            let ours = try hasher.fullDigest(atPath: path)
+            let theirs = try shasum(of: path)
+            try expect(
+                ours.digest.hexString == theirs,
+                "\(path): we say \(ours.digest.hexString), shasum says \(theirs)"
+            )
+            print("  \(ours.digest.hexString)  \(path) (\(ours.byteCount) bytes)")
+            return
+        }
+
+        let scratch = NSTemporaryDirectory() + "/duplicate-digest-\(getpid())"
+        try FileManager.default.createDirectory(atPath: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: scratch) }
+
+        // Straddling the real 1 MiB chunk, not a shrunken one. An empty file is included because it is
+        // the one case where the read loop exits before hashing anything.
+        let chunk = hasher.configuration.chunkBytes
+        let sizes = [0, 1, chunk - 1, chunk, chunk + 1, 2 * chunk, 3 * chunk + 7]
+        for size in sizes {
+            let path = scratch + "/f-\(size)"
+            let bytes = (0..<size).map { UInt8($0 % 251) }
+            try Data(bytes).write(to: URL(filePath: path))
+
+            let ours = try hasher.fullDigest(atPath: path)
+            let theirs = try shasum(of: path)
+            try expect(
+                ours.digest.hexString == theirs,
+                "size \(size): we say \(ours.digest.hexString), shasum says \(theirs)"
+            )
+            try expect(
+                ours.byteCount == Int64(size),
+                "size \(size): hashed \(ours.byteCount) bytes"
+            )
+        }
+        print("  \(sizes.count) sizes agree with shasum -a 256 at a \(chunk)-byte chunk")
+    }
+
+    /// Runs `shasum -a 256` and returns the hex digest.
+    private static func shasum(of path: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/shasum")
+        process.arguments = ["-a", "256", path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw SelfTestFailure("shasum exited \(process.terminationStatus) for \(path)")
+        }
+        guard
+            let first = String(decoding: data, as: UTF8.self)
+                .split(separator: " ", omittingEmptySubsequences: true).first
+        else {
+            throw SelfTestFailure("shasum produced no digest for \(path)")
+        }
+        return String(first)
     }
 
     // MARK: - menu
