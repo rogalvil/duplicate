@@ -261,6 +261,15 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Un pie con dos botones que suenan a "confirmar" es un botón de más.** "Guardar decisiones" al lado de
+  "Simular y aplicar" hacía preguntar si guardar era requisito de aplicar — y no lo es. Quedó un solo
+  botón primario; guardar pasa solo, antes de aplicar y al cerrar. Reportado como poco intuitivo desde el
+  uso real, y lo era.
+- **Cerrar la última ventana ahora cierra la app**, y un clic en el Dock o un `open` traen la biblioteca de
+  vuelta. La elección original —seguir viva sin ventanas— dejaba la app corriendo sin nada que hacer y sin
+  forma de recuperar una ventana salvo Salir; y `make run` usa `open`, que activa la instancia corriendo en
+  vez de lanzar otra, así que no aparecía nada hasta cerrarla a mano. Los dos se arreglan manejando el
+  evento de reopen.
 - **Un atajo de teclado no es una interfaz.** Simular y aplicar existía solo como ⌘⇧D y un ítem de menú,
   y nada en pantalla decía que una revisión se podía aplicar; revisar un escaneo solo se descubría por
   doble clic. Las dos acciones primarias de la app llevan botón: el de simular en el pie de la revisión,

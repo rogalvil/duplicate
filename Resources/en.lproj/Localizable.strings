@@ -204,7 +204,6 @@
 "undo.noJournal" = "This session has no record, so nothing can be put back.";
 "button.close" = "Close";
 
-/* Review footer buttons */
+/* Review footer */
 "review.button.simulate" = "Simulate and Apply...";
-"review.button.save" = "Save Decisions";
 "library.toolbar.review" = "Review";

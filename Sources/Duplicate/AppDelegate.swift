@@ -3,17 +3,45 @@ import DuplicateCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var libraryWindow: LibraryWindowController?
+    private let stateDirectory: StateDirectory
+
+    init(stateDirectory: StateDirectory = .current()) {
+        self.stateDirectory = stateDirectory
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let stateDirectory = StateDirectory.current()
         Log.app.info(
-            "state directory resolved to \(stateDirectory.duplicateRootPath, privacy: .public)"
+            "state directory resolved to \(self.stateDirectory.duplicateRootPath, privacy: .public)"
         )
+        showLibrary()
+    }
 
-        let controller = LibraryWindowController(stateDirectory: stateDirectory)
-        controller.showWindow(nil)
-        libraryWindow = controller
+    /// Opens the library, or raises the one already open.
+    @MainActor
+    private func showLibrary() {
+        if let libraryWindow {
+            libraryWindow.showWindow(nil)
+            libraryWindow.window?.makeKeyAndOrderFront(nil)
+        } else {
+            let controller = LibraryWindowController(stateDirectory: stateDirectory)
+            controller.showWindow(nil)
+            libraryWindow = controller
+        }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Brings a window back when the app is running without one.
+    ///
+    /// **Two real problems, one fix.** Clicking the Dock icon of a windowless app did nothing, so the only
+    /// way out was Quit; and `make run` uses `open`, which activates the running instance instead of
+    /// launching a new one -- so nothing appeared until the app was quit first. Both were reported from real
+    /// use. Handling the reopen event answers both.
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication, hasVisibleWindows: Bool
+    ) -> Bool {
+        if !hasVisibleWindows { showLibrary() }
+        return true
     }
 
     /// Starts a new scan, in the library window that owns the state directory.
@@ -31,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// app that moves thousands of files with one click.
     @MainActor
     @objc func undoLastSession(_ sender: Any?) {
-        let state = StateDirectory.current()
+        let state = stateDirectory
         guard let session = UndoCoordinator.latestSession(in: state) else {
             let alert = NSAlert()
             alert.messageText = Strings.string("undo.noSessions.title")
@@ -78,6 +106,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
+    // MARK: - Selftest hooks
+
+    var hasLibraryWindow: Bool { libraryWindow?.window != nil }
+
+    func closeLibraryForSelftest() {
+        libraryWindow?.window?.close()
+        libraryWindow = nil
+    }
+
     /// Shows the About panel with the build date and build number the Makefile stamped in.
     ///
     /// `@MainActor` explicitly, not inherited: an `@objc` menu action is called through the responder
@@ -87,9 +124,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AboutPanel.show()
     }
 
-    /// Closing the library window should not quit: this is a library-style app, and sessions,
-    /// history and review windows outlive it.
+    /// Closing every window quits.
+    ///
+    /// **Reversed from the original choice, because real use showed what it cost.** The app was staying
+    /// alive with no window and no way to get one back except quitting from the Dock -- there is nothing for
+    /// it to do without a window. An apply already in flight is protected separately, by
+    /// `applicationShouldTerminate` returning `.terminateLater`.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        false
+        true
     }
 }

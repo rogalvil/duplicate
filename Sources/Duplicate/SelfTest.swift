@@ -33,7 +33,7 @@ enum SelfTest {
             "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
-            "fdlimit", "scan-window", "apply-window",
+            "fdlimit", "scan-window", "apply-window", "lifecycle",
         ]
 
         let modes: [String]
@@ -75,6 +75,7 @@ enum SelfTest {
                 case "fdlimit": try checkDescriptorLimit()
                 case "scan-window": try await checkScanWindow()
                 case "apply-window": try await checkApplyWindow()
+                case "lifecycle": try checkLifecycle()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -2701,6 +2702,16 @@ enum SelfTest {
         // Teeth: have `simulateApply` skip `flow.advance(.dryRun,...)` and the apply below is refused.
         review.simulateForSelftest()
         let sheet = try expectSome(review.openApplySheet, "simulating opened no sheet")
+
+        // **Simulating saves the decisions, so the user never has to think about it.** A review that was
+        // acted on but never written would leave the app and the CLI disagreeing about what happened.
+        //
+        // Teeth: drop the `saveDecisions(nil)` from `simulateApply` and this fails.
+        let saved = try store.loadDecisions(scanID: scan.scanID)
+        try expect(
+            saved.decisions.count == 2,
+            "\(saved.decisions.count) decisions on disk after simulating, wanted 2"
+        )
         defer { sheet.window?.close() }
         try expect(sheet.canApply, "the sheet will not let a real plan be applied")
         for path in [dupA, dupB] {
@@ -2797,6 +2808,57 @@ enum SelfTest {
 
         print("  simulated, applied 1 of 2, refused the file that changed since the scan")
         print("  undo restored it byte-identically; a second undo did nothing")
+    }
+
+    // MARK: - lifecycle
+
+    /// Proves the app can be got back once its window is closed, and that it quits when they all are.
+    ///
+    /// **Two bugs reported from real use, and they had one cause.** The app kept running with no window and
+    /// no way to get one back except Quit from the Dock; and `make run` uses `open`, which activates the
+    /// running instance rather than launching a new one -- so nothing appeared until the app was quit first.
+    ///
+    /// Drives the real `NSApplicationDelegate` methods, against a state directory in `/tmp`.
+    ///
+    /// Proof of teeth: return `false` from `applicationShouldHandleReopen` without showing the library and
+    /// the second assertion fails; return `false` from
+    /// `applicationShouldTerminateAfterLastWindowClosed` and the third does.
+    @MainActor
+    private static func checkLifecycle() throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-lifecycle-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+
+        let delegate = AppDelegate(stateDirectory: state)
+        delegate.applicationDidFinishLaunching(
+            Notification(name: NSApplication.didFinishLaunchingNotification))
+        try expect(delegate.hasLibraryWindow, "launching opened no library window")
+
+        // Close it, the way a user closing the last window does.
+        delegate.closeLibraryForSelftest()
+        try expect(delegate.hasLibraryWindow == false, "the window did not close")
+
+        // **A Dock click, or `open`, has to bring it back.**
+        _ = delegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
+        try expect(
+            delegate.hasLibraryWindow,
+            "reopening a windowless app produced no window, which leaves Quit as the only way out"
+        )
+
+        // And with every window closed there is nothing for the app to do.
+        try expect(
+            delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp),
+            "the app stays alive with no window"
+        )
+
+        // Nothing is being applied, so quitting is allowed immediately.
+        try expect(
+            delegate.applicationShouldTerminate(NSApp) == .terminateNow,
+            "quitting is deferred with no apply in flight"
+        )
+
+        delegate.closeLibraryForSelftest()
+        print("  a windowless app reopens its library; the last window closing quits")
     }
 
     // MARK: - about
