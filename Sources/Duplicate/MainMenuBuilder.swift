@@ -8,6 +8,7 @@ import AppKit
 /// Only the application menu exists at this stage. File, Edit, View, Group, Sessions, Window and
 /// Help arrive with the features they drive; adding empty shells now would put items in the menu
 /// bar that do nothing.
+@MainActor
 enum MainMenuBuilder {
     static func build() -> NSMenu {
         let mainMenu = NSMenu()
@@ -22,11 +23,14 @@ enum MainMenuBuilder {
     private static func applicationMenu() -> NSMenu {
         let menu = NSMenu()
 
-        menu.addItem(
+        // Routed through AboutPanel rather than straight to the system selector, so the build date and
+        // the commit reach the panel. The system version shows only what Info.plist happens to carry.
+        let about = menu.addItem(
             withTitle: Strings.string("menu.app.about"),
-            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            action: #selector(AppDelegate.showAboutPanel(_:)),
             keyEquivalent: ""
         )
+        about.target = NSApp.delegate
         menu.addItem(.separator())
 
         menu.addItem(

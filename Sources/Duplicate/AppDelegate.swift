@@ -16,6 +16,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Shows the About panel with the build date and build number the Makefile stamped in.
+    ///
+    /// `@MainActor` explicitly, not inherited: an `@objc` menu action is called through the responder
+    /// chain, and Swift will not assume the caller is on the main actor without being told.
+    @MainActor
+    @objc func showAboutPanel(_ sender: Any?) {
+        AboutPanel.show()
+    }
+
     /// Closing the library window should not quit: this is a library-style app, and sessions,
     /// history and review windows outlive it.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

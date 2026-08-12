@@ -27,7 +27,7 @@ enum SelfTest {
         case "all":
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
-                "walk-permissions", "trash-exclusion", "scan",
+                "walk-permissions", "trash-exclusion", "scan", "about", "icon",
             ]
         default: modes = [mode]
         }
@@ -45,6 +45,8 @@ enum SelfTest {
                 case "walk-permissions": try checkWalkPermissions()
                 case "trash-exclusion": try checkTrashExclusion(arguments: arguments)
                 case "scan": try await checkEndToEndScan(arguments: arguments)
+                case "about": try checkAbout()
+                case "icon": try checkIcon()
                 default:
                     print("FAILED: unknown selftest mode '\(name)'")
                     return 1
@@ -777,6 +779,119 @@ enum SelfTest {
             "  2 groups over 4 concurrency widths, byte-identical; "
                 + "\(ByteSize.format(outcome.scan.redundantByteCountUpperBound)) redundant"
         )
+    }
+
+    // MARK: - about
+
+    /// Proves the About panel has a real build identity to show.
+    ///
+    /// This is the one chain that only an assembled bundle can exercise: Makefile variable ->
+    /// `sed` substitution -> `Info.plist` key -> `Bundle.main` read -> `AboutInfo` parse. `swift test`
+    /// has no bundle, so a broken link in it would ship.
+    ///
+    /// Proof of teeth: drop the `__BUILD_NUMBER__` substitution from the Makefile and this fails naming
+    /// the placeholder.
+    private static func checkAbout() throws {
+        let info = AboutInfo(infoDictionary: Bundle.main.infoDictionary ?? [:])
+
+        try expect(
+            !info.hasUnsubstitutedPlaceholder,
+            "the Info.plist still holds a __PLACEHOLDER__: version=\(info.version ?? "nil") "
+                + "build=\(info.buildNumber ?? "nil") date=\(info.buildDate ?? "nil") "
+                + "commit=\(info.commit ?? "nil")"
+        )
+        let version = try expectSome(info.resolvedVersion, "no version in the bundle")
+        let build = try expectSome(info.resolvedBuildNumber, "no build number in the bundle")
+        let date = try expectSome(info.displayBuildDate, "no build date in the bundle")
+        _ = try expectSome(info.resolvedCommit, "no commit in the bundle")
+
+        // The build number has to be a number, and it has to be the commit count. A marketing version
+        // leaking into CFBundleVersion is the failure this catches: it would make two builds of the same
+        // version indistinguishable to Launch Services and in crash reports.
+        try expect(
+            build.allSatisfy(\.isNumber),
+            "the build number is not numeric: \(build)"
+        )
+        try expect(version != build, "version and build number are the same value")
+        // The rendered date must have been parsed, not passed through raw.
+        try expect(
+            date.count == 16 && date.contains("-") && date.contains(":"),
+            "the build date was not parsed: \(date)"
+        )
+        try expect(info.isComplete, "the build identity is incomplete")
+
+        // The wording chain, without a screenshot: the panel is an AppKit window and cannot be inspected
+        // headlessly, but the text it would show can. This is what catches a format string whose %@ was
+        // lost in translation -- the line would render without the date and look fine.
+        _ = AboutPanel.credits(for: info)
+        let lines = AboutPanel.creditsLines
+        try expect(lines.count >= 2, "the About panel would show \(lines.count) credit lines")
+        try expect(
+            lines[0].contains(date),
+            "the build-date line does not contain the date: \(lines[0].debugDescription)"
+        )
+        try expect(
+            lines[0] != date,
+            "the build-date line is the bare value, so its localised label was lost"
+        )
+        try expect(
+            lines[1].contains(info.resolvedCommit ?? "?"),
+            "the commit line does not contain the commit: \(lines[1].debugDescription)"
+        )
+        for line in lines {
+            try expect(
+                !line.contains("%@") && !line.hasPrefix("about."),
+                "an About line is unsubstituted or untranslated: \(line.debugDescription)"
+            )
+        }
+
+        print("  version \(version) (build \(build)), built \(date)")
+        for line in lines { print("    \(line)") }
+        if info.isDirtyBuild {
+            print("  note: built from a modified working tree")
+        }
+    }
+
+    // MARK: - icon
+
+    /// Proves the icon shipped, and that it carries the small sizes that actually get used.
+    ///
+    /// The icon is where this app appears in the System Settings privacy lists, because reading folders
+    /// is what it does. An `.icns` missing its 16 pt representation falls back to a generic document
+    /// glyph there, and nothing in the build would complain.
+    ///
+    /// What this cannot check is whether the icon is *legible*: two overlapping squares that merge into
+    /// one blob at 16 pt would pass every assertion here. That is verified by looking at it --
+    /// `iconutil -c iconset Resources/AppIcon.icns` -- and the PR body says so.
+    ///
+    /// Proof of teeth: remove the `cp Resources/AppIcon.icns` line from the Makefile and this fails.
+    private static func checkIcon() throws {
+        let name = Bundle.main.infoDictionary?["CFBundleIconFile"] as? String
+        let declared = try expectSome(name, "Info.plist declares no CFBundleIconFile")
+        let url = try expectSome(
+            Bundle.main.url(forResource: declared, withExtension: "icns"),
+            "\(declared).icns is missing from the bundle's Resources"
+        )
+        let image = try expectSome(
+            NSImage(contentsOf: url),
+            "\(declared).icns did not decode as an image"
+        )
+        // Every size the icon was generated at should be present. 16 is the one that matters most and the
+        // one a hand-assembled iconset most often lacks.
+        let wanted: [CGFloat] = [16, 32, 128, 512]
+        let available = Set(image.representations.map(\.pixelsWide))
+        for size in wanted {
+            try expect(
+                available.contains(Int(size)) || available.contains(Int(size) * 2),
+                "no representation at \(Int(size))px; have \(available.sorted())"
+            )
+        }
+        try expect(
+            image.representations.count >= wanted.count,
+            "only \(image.representations.count) representations in the icon"
+        )
+        print(
+            "  \(declared).icns: \(available.sorted().map(String.init).joined(separator: ", "))px")
     }
 
     // MARK: - menu

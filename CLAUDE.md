@@ -184,7 +184,8 @@ Dos reglas:
    exacto que lo hace fallar. Un arnés que pasa contra código roto no sirve de nada, y ya pasó en el
    proyecto anterior.
 
-Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`.
+Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
+`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -205,6 +206,14 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   está en el SDK y estaría *permitido*, pero se rechazó por mérito: el workload es un lookup puntual
   sobre clave compuesta, y SQLite traería WAL, shm y semántica de `busy_timeout`, o sea más
   superficie de corrupción, no menos.
+- **`CFBundleVersion` es el número de build, no la versión de marketing.** El Makefile lo pone en
+  `git rev-list --count HEAD`: monotónico, nunca se reinicia, y distingue dos builds de 0.1.0 — que
+  es lo que le importa a Launch Services, a los crash reports y a quien lea un reporte de bug. El
+  app hermano usa la misma cadena para los dos campos; aquí no.
+- **El icono se dibuja con `scripts/make-app-icon.swift` y el `.icns` se commitea**, para que un
+  build normal no pague el render. Verificarlo es visual y no hay manera de evitarlo:
+  `iconutil -c iconset Resources/AppIcon.icns` y mirar el PNG de 16×16. Ningún número dice si dos
+  cuadrados encimados siguen leyéndose como dos a ese tamaño.
 - **`Resources/Info.plist` es una plantilla.** Cambiar `CFBundleIdentifier` invalida todos los
   permisos TCC ya otorgados.
 - **El nombre del job de CI es el status check requerido en el ruleset.** Renombrarlo deja de

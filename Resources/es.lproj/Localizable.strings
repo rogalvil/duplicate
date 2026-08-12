@@ -10,3 +10,10 @@
 
 /* Ventanas */
 "window.library.title" = "Escaneos";
+
+/* Panel Acerca de. El %@ se sustituye, así que tiene que sobrevivir a la traducción. */
+"about.builtOn" = "Compilado el %@";
+"about.commit" = "Commit %@";
+"about.unknown" = "desconocido";
+"about.dirtyBuild" = "Compilado con cambios sin guardar: este build no corresponde a ningún commit.";
+"about.placeholderWarning" = "Aviso: el build no sustituyó los placeholders de su Info.plist.";

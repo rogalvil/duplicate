@@ -28,8 +28,13 @@
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>__VERSION__</string>
+    <!--
+      The build number, not the marketing version: the Makefile sets it to the commit count, so it
+      increases with every commit and never resets. Two builds of 0.1.0 would otherwise be
+      indistinguishable to Launch Services and in crash reports.
+    -->
     <key>CFBundleVersion</key>
-    <string>__VERSION__</string>
+    <string>__BUILD_NUMBER__</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>LSMinimumSystemVersion</key>
