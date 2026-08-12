@@ -148,6 +148,7 @@ make selftest MODE=state-dir       # la resolución coincide con la del CLI
 make selftest MODE=l10n            # las dos tablas cubren las mismas claves
 make selftest MODE=menu            # ningún atajo duplicado
 make selftest MODE=json-roundtrip  # cada JSON del CLI se re-codifica byte a byte
+make selftest MODE=scans           # lo mismo, pasando por el modelo tipado
 make selftest MODE=json-roundtrip ARGS="--dir /otra/ruta"
 make selftest-all
 ```

@@ -230,6 +230,8 @@ Reversiones verificadas para este scaffolding:
 | quitar una sustitución `sed` del Makefile | `bundle`, nombrando el placeholder |
 | dar el mismo atajo a dos ítems de menú | `menu`, nombrando los dos títulos |
 | cambiar el indent del JSON de 2 a 4 | `json-roundtrip`, en los 226 documentos, "differs at byte 4" |
+| renombrar la clave `sha256` a `digest` en el codec | `scans`, "differs at byte 191" |
+| poner `created_at` antes de `root` al codificar | `scans`, "differs at byte 44" |
 
 ### Por qué los fixtures de JSON son sintéticos
 
