@@ -55,6 +55,20 @@ jobs:
       - name: Test with coverage gate
         run: make coverage
 
+      # Reusing the debug artifacts the step above already built, which is why this is affordable at
+      # all: `make selftest` normally depends on `make all`, and that means a second full compile in
+      # release. With CONFIG=debug it bundles and signs what is already there. Measured locally: 14.5 s
+      # for the build, 10.6 s for all 21 modes.
+      #
+      # Without this step the 21 selftests only ever ran on a developer's machine, so a break in the
+      # bundle assembly, the string tables, the menu shortcuts or what a window actually displays
+      # reached main unnoticed. Those are exactly the things `swift test` cannot see.
+      #
+      # Modes that need the shared state directory find none here and skip, printing why. A mode that
+      # passed silently without having done anything would be worse than no mode.
+      - name: Selftests
+        run: make selftest-all CONFIG=debug
+
       - name: Upload coverage summary
         if: always()
         uses: actions/upload-artifact@v4
