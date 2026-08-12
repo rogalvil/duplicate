@@ -232,6 +232,7 @@ Reversiones verificadas para este scaffolding:
 | cambiar el indent del JSON de 2 a 4 | `json-roundtrip`, en los 226 documentos, "differs at byte 4" |
 | renombrar la clave `sha256` a `digest` en el codec | `scans`, "differs at byte 191" |
 | poner `created_at` antes de `root` al codificar | `scans`, "differs at byte 44" |
+| dejar de hashear el último chunk parcial | `digest` en el tamaño 1; 14 de los tests de frontera |
 
 ### Por qué los fixtures de JSON son sintéticos
 
