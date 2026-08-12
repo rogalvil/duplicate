@@ -211,6 +211,10 @@ Acceso Total al Disco para ordenar Descargas es indistinguible de malware para u
 - Si el Makefile sustituyó los placeholders del `Info.plist` — no hay bundle bajo `swift test`.
 - Si los `.lproj` aterrizaron donde `Bundle.main` los busca.
 - Si el menú principal tiene atajos colisionados.
+- Que devolver `false` en el `errorHandler` de `FileManager.enumerator` detenga la enumeración.
+  Foundation lo documenta; medido en este SDK, **no pasa**. La afirmación estaba en el plan como
+  hecho y era falsa. Lo que el handler sí compra es poder reportar el hueco: sin él, la lista de
+  archivos es idéntica y la app no puede decir que no vio nada.
 - El estado real de TCC de la app. **Un selftest verde no dice nada sobre eso**: lanzada desde la
   terminal, macOS atribuye el acceso a la terminal y la app hereda sus permisos; lanzada por Launch
   Services la app es su propio proceso responsable. Los dos hechos son verdad y ninguno implica el

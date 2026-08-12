@@ -135,10 +135,17 @@ No re-descubrirlas:
 - **`git diff --quiet` ignora los archivos sin trackear**, así que un árbol lleno de fuentes nuevas
   reporta limpio y el build diría ser exactamente el commit nombrado. El Makefile usa
   `git status --porcelain`.
-- **El `errorHandler` de `FileManager.enumerator`: si devuelve `false`, la enumeración se detiene.**
-  Devolver `true` salta ese subárbol y sigue. Un port ingenuo devuelve `false`, escanea 3% de `$HOME`
-  y reporta "no se encontraron duplicados", que se ve exactamente igual que éxito. Es el detalle de
-  mayor consecuencia de toda la app y es invisible en code review.
+- **El `errorHandler` de `FileManager.enumerator` no hace lo que dice la documentación.** Foundation
+  documenta que devolver `false` detiene la enumeración. **Medido en este SDK, no la detiene**: un
+  EACCES sobre un subdirectorio da la misma lista de archivos con `true`, con `false`, y sin handler.
+  Se devuelve `true` porque es el contrato documentado y no cuesta nada, no porque se haya observado
+  que cambie algo.
+
+  Lo que sí compra el handler es lo único que la app puede reportar: con `errorHandler: nil` el
+  recorrido devuelve los mismos archivos y quien llama no se entera de nada — ni conteo, ni ruta, ni
+  señal. Ahí "no se encontraron duplicados" es indistinguible de "no pude entrar a 47 directorios
+  protegidos". Esto se descubrió porque el arnés **no falló** al invertir el retorno; la regla de
+  probar los dientes es lo que lo destapó.
 - **`swift-format` local puede diferir del de CI** (6.3 aquí, 6.0/6.1 en el runner `macos-15`). Si
   `make lint` pasa local y falla en CI, es eso; no reformatear a ciegas.
 - **Los imports de AVFoundation, ImageIO, CoreGraphics y Accelerate van con `@preconcurrency`.
