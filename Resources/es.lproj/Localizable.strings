@@ -17,3 +17,35 @@
 "about.unknown" = "desconocido";
 "about.dirtyBuild" = "Compilado con cambios sin guardar: este build no corresponde a ningún commit.";
 "about.placeholderWarning" = "Aviso: el build no sustituyó los placeholders de su Info.plist.";
+
+/* Biblioteca de escaneos */
+"library.column.root" = "Carpeta escaneada";
+"library.column.created" = "Escaneado";
+"library.column.groups" = "Grupos";
+"library.column.files" = "Archivos";
+"library.column.reclaimable" = "Recuperable";
+"library.column.state" = "Estado";
+"library.state.reviewed" = "Revisado";
+"library.state.relativePaths" = "Rutas relativas";
+"library.reclaimable.upperBound.tooltip" = "Es una cota superior: este escaneo no registró qué archivos comparten almacenamiento, así que borrarlos puede liberar menos.";
+"library.search.placeholder" = "Filtrar por carpeta o id de escaneo";
+"library.sort.newest" = "Más recientes primero";
+"library.sort.oldest" = "Más antiguos primero";
+"library.sort.mostGroups" = "Más grupos";
+"library.sort.mostReclaimable" = "Más recuperable";
+"library.toolbar.refresh" = "Actualizar";
+"library.toolbar.sort" = "Ordenar";
+"library.toolbar.search" = "Filtrar";
+/* %1$d escaneos, %2$d grupos, %3$d archivos, %4$@ un tamaño ya formateado. */
+"library.footer" = "%1$d escaneos - %2$d grupos - %3$d archivos - %4$@ recuperables";
+"library.footer.upperBound" = "%1$d escaneos - %2$d grupos - %3$d archivos - hasta %4$@ recuperables";
+/* %@ es el directorio de donde se leen los escaneos. */
+"library.empty" = "Todavía no hay escaneos.\n\nCorre rav duplicate scan <carpeta> y aparecerá aquí.\n\n%@";
+"library.empty.filtered" = "Ningún escaneo coincide con el filtro.";
+"library.action.revealFolder" = "Abrir la carpeta escaneada";
+"library.action.revealDocument" = "Mostrar el archivo del escaneo en Finder";
+"library.action.copyIdentifier" = "Copiar el id del escaneo";
+"library.relativePaths.title" = "Este escaneo registró rutas relativas";
+/* %@ es la raíz registrada. */
+"library.relativePaths.body" = "Su raíz es \"%@\", que depende de la carpeta desde donde se corrió el CLI. Esta app no puede resolverla, y adivinar apuntaría a la carpeta equivocada.";
+"button.ok" = "Aceptar";

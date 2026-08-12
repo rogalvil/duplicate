@@ -28,7 +28,7 @@ enum SelfTest {
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
                 "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
-                "trash", "undo", "review", "decisions", "gate",
+                "trash", "undo", "review", "decisions", "gate", "library",
             ]
         default: modes = [mode]
         }
@@ -53,6 +53,7 @@ enum SelfTest {
                 case "review": try await checkReviewTriState()
                 case "decisions": try checkRealDecisions(arguments: arguments)
                 case "gate": try checkApplyGate()
+                case "library": try await checkLibraryWindow()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -240,6 +241,79 @@ enum SelfTest {
             )
             print("  \(table): \(base.count) keys, \(audit.identical.count) identical in both")
         }
+        try checkKeysUsedInCode()
+    }
+
+    /// Proves the tables and the code agree, in both directions.
+    ///
+    /// The audit above compares the two tables against each other, which cannot catch either failure that
+    /// actually ships:
+    ///
+    /// - **A typo in a `Strings.string("...")` call.** Both tables agree, the key is in neither, and the UI
+    ///   displays `library.column.roo`. Nothing crashes and nothing looks wrong from inside the code.
+    /// - **A key nobody asks for.** Dead weight, and usually a rename left half-done -- which means the
+    ///   *other* half is a live call site pointing at a key that no longer exists.
+    ///
+    /// Two passes, because keys reach `Strings.string` two ways. Literal call sites are read directly. Keys
+    /// passed through a variable -- the column titles are, they live in a table of `Column` values -- are
+    /// covered by searching the sources for the key text instead, which does not care how it is passed.
+    ///
+    /// Scans the sources rather than the binary, so it needs the repository. Skips out loud when run from
+    /// somewhere else: a check that quietly passes when it did nothing is worse than no check.
+    ///
+    /// Proof of teeth: misspell a key in any `Strings.string` call and the first assertion names it; add a
+    /// key to both tables and use it nowhere and the second one does.
+    private static func checkKeysUsedInCode() throws {
+        let sources = "Sources/Duplicate"
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: sources) else {
+            print("  SKIPPED: the key scan needs the repository as the working directory")
+            return
+        }
+        guard let base = Strings.table(localization: "en") else {
+            throw SelfTestFailure("en.lproj/Localizable.strings is missing from the bundle")
+        }
+
+        var text = ""
+        for name in names.sorted() where name.hasSuffix(".swift") && name != "SelfTest.swift" {
+            text += (try? String(contentsOfFile: sources + "/" + name, encoding: .utf8)) ?? ""
+        }
+
+        // Pass one: every literal call site names a key that exists.
+        var literals: Set<String> = []
+        var rest = Substring(text)
+        while let call = rest.range(of: "Strings.string(\"") {
+            rest = rest[call.upperBound...]
+            guard let end = rest.firstIndex(of: "\"") else { break }
+            let literal = String(rest[..<end])
+            // An interpolated key comes out of a literal scan as its source text. Skipped here and
+            // enumerated below, because no literal scan can resolve it.
+            if !literal.contains("\\(") { literals.insert(literal) }
+            rest = rest[end...]
+        }
+        let unknown = literals.subtracting(base.keys).sorted()
+        try expect(
+            unknown.isEmpty,
+            "used in code, absent from the tables: \(unknown.joined(separator: ", "))"
+        )
+
+        // Pass two: every declared key is referenced somewhere, however it is passed.
+        let interpolated = Set(LibrarySort.allCases.map { "library.sort.\($0.rawValue)" })
+        let unreferenced = base.keys
+            .filter { !interpolated.contains($0) && !text.contains("\"\($0)\"") }
+            .sorted()
+        try expect(
+            unreferenced.isEmpty,
+            "declared and never referenced: \(unreferenced.joined(separator: ", "))"
+        )
+
+        // And every key really resolves, rather than falling back to its own name.
+        for key in base.keys.sorted() {
+            try expect(Strings.string(key) != key, "\(key) resolved to its own key")
+        }
+        print(
+            "  \(literals.count) literal call sites and \(base.count) declared keys agree, "
+                + "\(interpolated.count) built by interpolation"
+        )
     }
 
     // MARK: - json-roundtrip
@@ -1527,6 +1601,218 @@ enum SelfTest {
             return
         }
         throw SelfTestFailure("\(what) was allowed")
+    }
+
+    // MARK: - library
+
+    /// Drives the real library window against a synthesized state directory.
+    ///
+    /// A unit test cannot reach this: `Duplicate` is an executable target and SwiftPM will not let the test
+    /// target import it. So the window controller is built here, for real, and read back through the same
+    /// `tableView(_:viewFor:row:)` that draws it -- not through a second copy of the formatting rules,
+    /// which would pass while the window showed something else.
+    ///
+    /// What it asserts, in order: the rows come back newest first; a scan whose reclaimable figure is an
+    /// upper bound is labelled as one; a scan with a decisions file shows it; a scan with relative paths is
+    /// flagged rather than silently offered; sorting and filtering reach the table; the footer and the empty
+    /// state render sentences rather than key literals; and **a scan appearing on disk lands in the table
+    /// without anyone asking**, which is the whole point of the window.
+    ///
+    /// Writes only to a temp directory. The user's real state directory is never opened.
+    ///
+    /// Proof of teeth: in `reloadRows`, drop the `rows =` assignment and the row count fails; make
+    /// `startWatching` watch only `.scans` and the decisions half of the live-update assertion fails.
+    @MainActor
+    private static func checkLibraryWindow() async throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-library-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let store = ScanStore(state: state)
+
+        func group(_ seed: String, size: Int64, files: [String]) -> DuplicateGroup {
+            DuplicateGroup(
+                size: size,
+                digest: Digest32(hexString: String(repeating: seed, count: 64))!,
+                files: files
+            )
+        }
+
+        // Newest, with two groups and an inexact figure.
+        try store.save(
+            DuplicateScan(
+                scanID: "20260511-064716-685054",
+                root: "/Volumes/WD12TB/Fotos",
+                createdAt: "2026-05-11T06:47:16.685054Z",
+                groups: [
+                    group(
+                        "a", size: 2048,
+                        files: ["/Volumes/WD12TB/Fotos/a", "/Volumes/WD12TB/Fotos/b"]),
+                    group(
+                        "b", size: 1024,
+                        files: ["/Volumes/WD12TB/Fotos/c", "/Volumes/WD12TB/Fotos/d"]),
+                ]
+            )
+        )
+        // Older, already reviewed.
+        let reviewed = DuplicateScan(
+            scanID: "20260101-000000-000000",
+            root: "/Users/tester/Descargas",
+            createdAt: "2026-01-01T00:00:00.000000Z",
+            groups: [
+                group(
+                    "c", size: 512,
+                    files: ["/Users/tester/Descargas/x", "/Users/tester/Descargas/y"])
+            ]
+        )
+        try store.save(reviewed)
+        try store.save(
+            DecisionsDocument(
+                scanID: reviewed.scanID,
+                createdAt: "2026-01-01T00:10:00.000000Z",
+                decisions: [(reviewed.groups[0].key, ["/Users/tester/Descargas/x"])]
+            )
+        )
+        // Oldest, with relative paths, which cannot be acted on.
+        try store.save(
+            DuplicateScan(
+                scanID: "20250101-235959-999999",
+                root: "sub",
+                createdAt: "2025-01-01T23:59:59.999999Z",
+                groups: [group("d", size: 64, files: ["sub/a", "sub/b"])]
+            )
+        )
+
+        let controller = LibraryWindowController(stateDirectory: state)
+        defer { controller.close() }
+
+        try expect(
+            controller.displayedRowCount == 3, "\(controller.displayedRowCount) rows, wanted 3")
+        try expect(controller.watcherCount == 2, "\(controller.watcherCount) watchers, wanted 2")
+
+        // Newest first, and the root column shows the root.
+        try expect(
+            controller.displayedValue(row: 0, column: "root") == "/Volumes/WD12TB/Fotos",
+            "row 0 root was \(controller.displayedValue(row: 0, column: "root") ?? "nil")"
+        )
+        try expect(
+            controller.displayedValue(row: 2, column: "root") == "sub",
+            "row 2 root was \(controller.displayedValue(row: 2, column: "root") ?? "nil")"
+        )
+        try expect(controller.displayedValue(row: 0, column: "groups") == "2", "group count")
+        try expect(controller.displayedValue(row: 0, column: "files") == "4", "file count")
+
+        // 3072 bytes over two groups with no storage partition: an upper bound, and labelled as one.
+        let reclaim = controller.displayedValue(row: 0, column: "reclaim") ?? ""
+        try expect(
+            reclaim == "\u{2264} " + ByteSize.format(3072),
+            "reclaimable read \(reclaim), wanted a labelled upper bound"
+        )
+
+        // The date column is locale-aware, so the exact text is not asserted -- only that it parsed the
+        // identifier rather than falling back to the raw timestamp.
+        let created = controller.displayedValue(row: 0, column: "created") ?? ""
+        try expect(!created.isEmpty, "the created column is empty")
+        try expect(
+            created != "2026-05-11T06:47:16.685054Z",
+            "the created column fell back to the raw timestamp"
+        )
+
+        let reviewedState = controller.displayedValue(row: 1, column: "state") ?? ""
+        try expect(
+            reviewedState == Strings.string("library.state.reviewed"),
+            "the reviewed scan shows \(reviewedState)"
+        )
+        try expect(
+            controller.displayedValue(row: 2, column: "state")
+                == Strings.string("library.state.relativePaths"),
+            "the relative-path scan is not flagged"
+        )
+        try expect(
+            controller.displayedValue(row: 0, column: "state") == "", "an unreviewed scan is marked"
+        )
+
+        // The footer is a sentence, not a key.
+        try expect(
+            !controller.footerText.contains("library.footer"), "the footer shows a key literal")
+        try expect(controller.footerText.contains("3"), "the footer omits the scan count")
+
+        // Sorting and filtering reach the table.
+        controller.applyForSelftest(sort: .mostGroups, filter: "")
+        try expect(
+            controller.displayedValue(row: 0, column: "root") == "/Volumes/WD12TB/Fotos",
+            "sorting by group count did not reach the table"
+        )
+        controller.applyForSelftest(sort: .newest, filter: "descargas")
+        try expect(
+            controller.displayedRowCount == 1, "the filter matched \(controller.displayedRowCount)")
+        try expect(
+            controller.displayedValue(row: 0, column: "root") == "/Users/tester/Descargas",
+            "the filter kept the wrong row"
+        )
+        controller.applyForSelftest(sort: .newest, filter: "no such folder")
+        try expect(controller.displayedRowCount == 0, "an impossible filter matched something")
+        try expect(
+            controller.emptyStateText == Strings.string("library.empty.filtered"),
+            "the filtered empty state reads \(controller.emptyStateText ?? "nil")"
+        )
+        controller.applyForSelftest(sort: .newest, filter: "")
+
+        // **The point of the window**: a scan written by another process appears without being asked.
+        try store.save(
+            DuplicateScan(
+                scanID: "20260812-120000-000000",
+                root: "/Users/tester/Nuevo",
+                createdAt: "2026-08-12T12:00:00.000000Z",
+                groups: [
+                    group("e", size: 16, files: ["/Users/tester/Nuevo/a", "/Users/tester/Nuevo/b"])
+                ]
+            )
+        )
+        try await waitOnMainActor(
+            until: { controller.displayedRowCount == 4 },
+            what: "a new scan to reach the table"
+        )
+        try expect(
+            controller.displayedValue(row: 0, column: "root") == "/Users/tester/Nuevo",
+            "the new scan is not at the top"
+        )
+
+        // And a decisions file appearing beside a scan updates its state, which is the second watcher.
+        try store.save(
+            DecisionsDocument(
+                scanID: "20260812-120000-000000",
+                createdAt: "2026-08-12T12:01:00.000000Z",
+                decisions: [("16:" + String(repeating: "e", count: 64), ["/Users/tester/Nuevo/a"])]
+            )
+        )
+        try await waitOnMainActor(
+            until: {
+                controller.displayedValue(row: 0, column: "state")
+                    == Strings.string("library.state.reviewed")
+            },
+            what: "a decisions file to change the state column"
+        )
+
+        print("  4 scans listed, sorted, filtered; upper bound and review state labelled")
+        print("  a scan and a decisions file written by another writer both reached the table")
+    }
+
+    /// Spins the run loop until `condition` holds, or fails naming what it waited for.
+    ///
+    /// The watcher reports on its own queue and hops to the main actor, so the update cannot arrive while
+    /// this function blocks the main thread -- `Task.sleep` yields, which is what lets the hop land.
+    @MainActor
+    private static func waitOnMainActor(
+        until condition: @MainActor () -> Bool,
+        what: String,
+        deadline: Duration = .seconds(5)
+    ) async throws {
+        let start = ContinuousClock.now
+        while ContinuousClock.now - start < deadline {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        throw SelfTestFailure("timed out after \(deadline) waiting for \(what)")
     }
 
     // MARK: - about
