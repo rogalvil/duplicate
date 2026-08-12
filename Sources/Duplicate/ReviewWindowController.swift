@@ -54,6 +54,15 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
     private let undo = UndoManager()
 
+    private let previewPane = PreviewPane()
+    private let thumbnailer = QuickLookThumbnailer()
+    /// What the filesystem says about the current group, or `nil` until the check comes back.
+    private var presence: GroupPresence?
+    /// Bumped per group so a slow presence check that lands after the user moved on is dropped.
+    private var presenceGeneration = 0
+    /// Bumped per preview request, same reason.
+    private var previewGeneration = 0
+
     init(scan: DuplicateScan, stateDirectory: StateDirectory) {
         self.stateDirectory = stateDirectory
         let store = ScanStore(state: stateDirectory)
@@ -141,7 +150,18 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         tallyLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         tallyLabel.textColor = .secondaryLabelColor
 
-        let detail = NSStackView(views: [headerLabel, subheaderLabel, warningLabel, fileScroll])
+        // The preview sits beside the list rather than under it: a file name and a picture of the file
+        // belong on the same line of sight, and stacking them vertically halves the rows visible.
+        let inner = NSSplitView()
+        inner.isVertical = true
+        inner.dividerStyle = .thin
+        inner.addArrangedSubview(fileScroll)
+        inner.addArrangedSubview(previewPane)
+        inner.setHoldingPriority(.defaultLow, forSubviewAt: 0)
+        inner.translatesAutoresizingMaskIntoConstraints = false
+        previewPane.showPlaceholder()
+
+        let detail = NSStackView(views: [headerLabel, subheaderLabel, warningLabel, inner])
         detail.orientation = .vertical
         detail.alignment = .leading
         detail.spacing = 4
@@ -168,9 +188,9 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             split.bottomAnchor.constraint(equalTo: tallyLabel.topAnchor, constant: -6),
             tallyLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
             tallyLabel.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -8),
-            fileScroll.widthAnchor.constraint(
-                greaterThanOrEqualTo: detail.widthAnchor, constant: -28),
-            fileScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 200),
+            inner.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -28),
+            inner.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
+            previewPane.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
         ])
         window.contentView = content
         groupScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
@@ -203,8 +223,20 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             state.groupIndex + 1, state.groupCount, size, presentation.rows.count, freed
         )
 
-        // The one warning the CLI's own UX document specified and never implemented.
-        if presentation.keptCount == 0, presentation.decision != .discardAll {
+        // A group that is no longer a duplicate outranks every other warning: there is nothing to decide,
+        // and the checkboxes below are about files that are gone.
+        if let presence, !presence.isStillADuplicate {
+            warningLabel.stringValue = String(
+                format: Strings.string("review.warning.notADuplicate"),
+                presence.presentCount, presence.files.count
+            )
+        } else if let presence, presence.isStale {
+            warningLabel.stringValue = String(
+                format: Strings.string("review.warning.stale"),
+                presence.missingCount + presence.changedCount, presence.files.count
+            )
+            // The one warning the CLI's own UX document specified and never implemented.
+        } else if presentation.keptCount == 0, presentation.decision != .discardAll {
             warningLabel.stringValue = Strings.string("review.warning.keepNothing")
         } else if presentation.hasSharedStorage {
             warningLabel.stringValue = Strings.string("review.warning.sharedStorage")
@@ -228,13 +260,92 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     }
 
     private func selectGroup(_ index: Int) {
+        let changedGroup = index != state.groupIndex || presence == nil
         state.go(to: index)
         if groupTable.selectedRow != index, state.scan.groups.indices.contains(index) {
             groupTable.selectRowIndexes([index], byExtendingSelection: false)
             groupTable.scrollRowToVisible(index)
         }
+        if changedGroup {
+            // Dropped rather than kept: the previous group's answer says nothing about this one, and
+            // showing it would label these files with that group's state.
+            presence = nil
+            checkPresence()
+        }
         if !presentationRowsEmpty { fileTable.selectRowIndexes([0], byExtendingSelection: false) }
         refreshDetail()
+        refreshPreview()
+    }
+
+    /// Asks the filesystem what became of this group's files, off the main thread.
+    ///
+    /// **Off the main thread because a stat is not free.** A group on an external drive that has spun down
+    /// takes seconds for the first answer, and a window that freezes on arrow-down is unusable. The
+    /// generation guard drops an answer that lands after the user moved on.
+    private func checkPresence() {
+        guard let group = state.currentGroup else { return }
+        presenceGeneration += 1
+        let generation = presenceGeneration
+        Task.detached(priority: .userInitiated) {
+            let checked = GroupPresence.check(group: group)
+            await MainActor.run { [weak self] in
+                guard let self, generation == self.presenceGeneration else { return }
+                self.presence = checked
+                self.refreshDetail()
+                self.refreshPreview()
+            }
+        }
+    }
+
+    /// The thumbnail size to ask for, from the pane's width and the screen.
+    ///
+    /// One place, used by the window and by the selftest hook alike. Two callers computing it separately is
+    /// how a selftest ends up exercising a size production never asks for -- which is exactly what happened
+    /// the first time this was written: the hook asked for 128 px, the window asked for the pane's width,
+    /// and the cache ended up with one entry per size instead of one per group.
+    private func currentPixelSize() -> Int {
+        ThumbnailPolicy.pixelSize(
+            points: previewPane.thumbnailPoints,
+            scale: Double(window?.backingScaleFactor ?? 2)
+        )
+    }
+
+    /// Draws the file under the cursor, cached image first and a rendered one when it arrives.
+    private func refreshPreview() {
+        guard let group = state.currentGroup, let presentation else {
+            previewPane.showPlaceholder()
+            return
+        }
+        let row = fileTable.selectedRow
+        guard presentation.rows.indices.contains(row) else {
+            previewPane.showPlaceholder()
+            return
+        }
+        let path = presentation.rows[row].path
+        let filePresence =
+            presence?.files.first { $0.path == path }
+            ?? FilePresence(path: path, state: .present)
+        previewPane.show(presence: filePresence, size: group.size)
+
+        let pixelSize = currentPixelSize()
+        // A cached image is drawn in this same turn of the run loop, so revisiting a row never flickers.
+        if let cached = thumbnailer.cached(path: path, digest: group.digest, pixelSize: pixelSize) {
+            previewPane.show(image: cached)
+            return
+        }
+        previewPane.show(image: nil)
+        // Nothing to render for a file that is not there, and asking would just wait for a failure.
+        guard filePresence.state != .missing else { return }
+
+        previewGeneration += 1
+        let generation = previewGeneration
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let image = await self.thumbnailer.thumbnail(
+                path: path, digest: group.digest, pixelSize: pixelSize)
+            guard generation == self.previewGeneration else { return }
+            self.previewPane.show(image: image)
+        }
     }
 
     private var presentationRowsEmpty: Bool { (presentation?.rows.isEmpty ?? true) }
@@ -428,6 +539,41 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var groupRowCount: Int { groupTable.numberOfRows }
     var fileRowCount: Int { fileTable.numberOfRows }
     var canUndoReview: Bool { undo.canUndo }
+    var preview: PreviewPane { previewPane }
+    var groupPresence: GroupPresence? { presence }
+    var thumbnailCacheCount: Int { thumbnailer.cachedCount }
+    var thumbnailHits: Int { thumbnailer.hits }
+    var thumbnailMisses: Int { thumbnailer.misses }
+    var thumbnailCoalesced: Int { thumbnailer.coalesced }
+    var currentThumbnailPixels: Int { currentPixelSize() }
+
+    /// Lays the window out and empties the thumbnail cache.
+    ///
+    /// A pane whose width changes asks for a different pixel size, which is a different cache key -- correct
+    /// in production, and noise in a test that wants to prove one group needs one thumbnail. Settling the
+    /// layout first and clearing what was cached before it makes the count exact instead of approximate.
+    func settleLayoutForSelftest() {
+        window?.layoutIfNeeded()
+        thumbnailer.clearCache()
+    }
+
+    /// Waits for the presence check to land, so a selftest asserts on an answer rather than on a race.
+    func awaitPresenceForSelftest() async {
+        for _ in 0..<200 where presence == nil {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+    }
+
+    /// Renders the selected file's preview synchronously enough for a selftest to assert on it.
+    func loadPreviewForSelftest() async {
+        guard let group = state.currentGroup, let presentation,
+            presentation.rows.indices.contains(fileTable.selectedRow)
+        else { return }
+        let path = presentation.rows[fileTable.selectedRow].path
+        let image = await thumbnailer.thumbnail(
+            path: path, digest: group.digest, pixelSize: currentPixelSize())
+        previewPane.show(image: image)
+    }
     var hasUnsavedReviewChanges: Bool { hasUnsavedChanges }
 
     func selectFileForSelftest(_ row: Int) {
@@ -467,7 +613,12 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        guard let table = notification.object as? NSTableView, table === groupTable else { return }
+        guard let table = notification.object as? NSTableView else { return }
+        if table === fileTable {
+            refreshPreview()
+            return
+        }
+        guard table === groupTable else { return }
         let row = groupTable.selectedRow
         guard row >= 0, row != state.groupIndex else { return }
         selectGroup(row)
@@ -529,13 +680,23 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
             cell.textField?.textColor = item.isKept ? .labelColor : .secondaryLabelColor
         case "note":
             var notes: [String] = []
+            // The file's fate on disk goes first: "gone" outranks anything about naming.
+            let fileState = presence?.files.first { $0.path == item.path }?.state
+            switch fileState {
+            case .missing: notes.append(Strings.string("review.note.missing"))
+            case .sizeChanged: notes.append(Strings.string("review.note.changed"))
+            case .unreadable: notes.append(Strings.string("review.note.unreadable"))
+            case .notAFile: notes.append(Strings.string("review.note.notAFile"))
+            case .present, nil: break
+            }
             if item.sharesStorageWithKeeper {
                 notes.append(Strings.string("review.note.sameStorage"))
             }
             if item.looksLikeCopy { notes.append(Strings.string("review.note.copyName")) }
             cell.textField?.stringValue = notes.joined(separator: " \u{00B7} ")
-            cell.textField?.textColor =
-                item.sharesStorageWithKeeper ? .systemOrange : .secondaryLabelColor
+            let isWarning =
+                item.sharesStorageWithKeeper || (fileState.map { $0 != .present } ?? false)
+            cell.textField?.textColor = isWarning ? .systemOrange : .secondaryLabelColor
         default:
             cell.textField?.stringValue = ""
         }

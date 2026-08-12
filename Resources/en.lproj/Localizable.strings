@@ -109,3 +109,19 @@
 "button.cancel" = "Cancel";
 "library.action.review" = "Review This Scan";
 "library.relativePaths.reviewBody" = "Its root is \"%@\", which depends on the folder the CLI was run from. A review could not act on those paths.";
+
+/* Preview pane */
+"preview.empty" = "Select a file to preview it";
+"preview.state.missing" = "This file no longer exists. The scan is out of date for it.";
+/* %1$@ the size the scan recorded, %2$@ the size on disk now. */
+"preview.state.sizeChanged" = "This file changed since the scan: it was %1$@ and is now %2$@. It is no longer a duplicate.";
+"preview.state.unreadable" = "This file cannot be read. macOS may not have granted access to its folder.";
+"preview.state.notAFile" = "A folder or a symlink is here now, not the file the scan recorded.";
+"review.note.missing" = "gone";
+"review.note.changed" = "changed since the scan";
+"review.note.unreadable" = "cannot be read";
+"review.note.notAFile" = "not a file any more";
+/* %1$d files still here, %2$d the scan recorded. */
+"review.warning.notADuplicate" = "Only %1$d of the %2$d files this group recorded still exist, so there is nothing left to deduplicate here.";
+/* %1$d files gone or changed, %2$d the scan recorded. */
+"review.warning.stale" = "%1$d of the %2$d files in this group are gone or have changed since the scan.";

@@ -344,6 +344,54 @@ archivos mandados a la Papelera no son el mismo acto, y toda otra app de macOS l
 ⌘Z significa "lo que acabo de escribir". El deshacer de sesión vivirá en su propio menú, sin
 equivalente de teclado.
 
+### La vista previa, y la razón por la que la app existe
+
+En una terminal se decide entre dos rutas leyendo dos rutas. Aquí se mira la cosa. Eso es lo que el CLI
+no puede hacer y es la mitad del argumento para escribir la app.
+
+**El reparto sigue la regla del bootstrap.** `QLThumbnailGenerator` es XPC a `quicklookd`: puede ser
+lento, puede fallar, puede colgarse, y su salida es lo que decidió dibujar una extensión de terceros. No
+hay nada determinista que afirmar, así que la llamada vive en el ejecutable. Lo que sí es afirmable vive
+en Core: qué identifica un thumbnail (`ThumbnailKey`), de qué tamaño pedirlo (`ThumbnailPolicy`) y qué
+conservar (`LRUCache`).
+
+**La clave es el digest, no la ruta.** Los archivos de un grupo tienen contenido idéntico por
+construcción, así que ocho fotos necesitan un thumbnail. Keyear por ruta manda ocho viajes de XPC y
+guarda ocho copias del mismo bitmap para un grupo que el usuario mira una vez.
+
+**La extensión también va en la clave**, y eso no es precaución: el header de
+`QLThumbnailGenerator.Request` dice que el content type *"is derived from the file extension"*, y el
+content type elige el proveedor del thumbnail. Los mismos bytes llamados `a.pdf` y `a.dat` se dibujan
+distinto con toda razón. Raro en un grupo de duplicados; gratis hacerlo bien.
+
+**El plazo de 2 segundos es la parte que sostiene todo.** Una ventana que deja de responder porque una
+extensión de thumbnails de algún formato se trabó es peor que una que muestra un icono genérico. Cada
+petición corre contra un plazo; perder la carrera cancela la petición y cae al icono del archivo, que
+`NSWorkspace` saca de la base local y no puede colgarse. El icono se guarda bajo la misma clave: un
+archivo cuyo thumbnail no se puede hacer no va a empezar a funcionar en la siguiente selección, y volver
+a preguntar cuesta otros dos segundos de espera.
+
+### Lo que el panel dice cuando el archivo ya no está
+
+**El corpus hizo esto necesario, no bonito.** Los escaneos más viejos de esta máquina son de mayo, y de
+las 501 rutas de uno de ellos **473 ya no existen**. Un panel que dibujara un blanco para esas le estaría
+pidiendo al usuario decidir sobre archivos ya borrados. Y peor: un escaneo cuyo archivo *cambió* es un
+grupo que ya no es verdad, así que decidir quitar un "duplicado" de él quitaría algo que no es duplicado.
+
+`FilePresence` distingue cinco estados —presente, ausente, tamaño cambiado, ilegible, ya no es archivo—
+y `GroupPresence` agrega dos preguntas que la ventana necesita: si el grupo **sigue siendo** un duplicado
+(hacen falta **dos** sobrevivientes: con uno no hay nada que quitar ni que conservar, y ofrecerlo
+invitaría a borrar la única copia) y si está vencido.
+
+El chequeo va fuera del hilo principal, con guardia de generación, por la misma razón que la biblioteca:
+un `stat` sobre un disco externo que se durmió tarda segundos en la primera respuesta.
+
+**`attributesOfItem` no sigue symlinks** — medido, y lo contrario es la suposición fácil. Aquí es el
+comportamiento correcto: un symlink nunca es miembro de un escaneo porque `WalkFilter` los rechaza, así
+que uno parado en una ruta registrada significa que el archivo fue reemplazado. Llamar a eso "presente"
+sería activamente falso, porque `trashItem` sobre un symlink manda el enlace y deja los bytes donde
+están.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
