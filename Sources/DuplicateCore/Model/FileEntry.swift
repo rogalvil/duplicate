@@ -83,6 +83,25 @@ public struct FileEntry: Hashable, Sendable {
 
     /// Whether this file certainly has no hardlink siblings.
     public var isCertainlyUnlinked: Bool { linkCount == 1 }
+
+    /// The same entry with a different size, keeping every identity field.
+    ///
+    /// The hasher reads until end of file, so the length it saw can differ from the one the walk
+    /// recorded. Rebuilding the entry from scratch to correct the size silently drops the identity,
+    /// the generation and the modification time -- which makes the hash cache key nil and turns every
+    /// store into a no-op. That looks exactly like a cold machine rather than a bug, and it is what
+    /// the warm-scan test caught.
+    public func withSize(_ newSize: Int64) -> FileEntry {
+        FileEntry(
+            path: path,
+            size: newSize,
+            identity: identity,
+            contentIdentifier: contentIdentifier,
+            linkCount: linkCount,
+            generation: generation,
+            modifiedNanoseconds: modifiedNanoseconds
+        )
+    }
 }
 
 /// Hashes an opaque Foundation identifier into a comparable `UInt64`.

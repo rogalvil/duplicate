@@ -185,7 +185,7 @@ Dos reglas:
    proyecto anterior.
 
 Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
-`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`.
+`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -206,6 +206,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   está en el SDK y estaría *permitido*, pero se rechazó por mérito: el workload es un lookup puntual
   sobre clave compuesta, y SQLite traería WAL, shm y semántica de `busy_timeout`, o sea más
   superficie de corrupción, no menos.
+- **La caché de hashes vive en `~/Library/Caches`, nunca en el state dir compartido.** Son dos clases
+  de dato: un scan es formato de interop que el CLI lee y no se puede perder; la caché es dato
+  derivado que macOS puede purgar bajo presión de disco, que es la semántica que se quiere.
+- **La clave de la caché incluye `generation`, no solo mtime.** Verificado en APFS: avanza con un
+  append, con una reescritura del mismo largo, y con contenido distinto y mtime forzado atrás con
+  `utimes` — el caso `rsync -t` que una caché por mtime sirve rancio. `URL` cachea resource values,
+  así que hay que leerlo con un `URL` fresco o no se ve el cambio.
+- **Corregir el tamaño de un `FileEntry` reconstruyéndolo desde cero tira identidad, generation y
+  mtime.** Con eso la clave de caché sale nil, `store` no hace nada, y **cada escaneo se ve como una
+  máquina fría** en vez de como un bug. Usar `withSize`. Lo atrapó el test de escaneo caliente.
 - **`CFBundleVersion` es el número de build, no la versión de marketing.** El Makefile lo pone en
   `git rev-list --count HEAD`: monotónico, nunca se reinicia, y distingue dos builds de 0.1.0 — que
   es lo que le importa a Launch Services, a los crash reports y a quien lea un reporte de bug. El
