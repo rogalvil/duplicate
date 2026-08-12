@@ -11,3 +11,10 @@
 
 /* Windows */
 "window.library.title" = "Scans";
+
+/* About panel. %@ is substituted, so the placeholder must survive translation. */
+"about.builtOn" = "Built on %@";
+"about.commit" = "Commit %@";
+"about.unknown" = "unknown";
+"about.dirtyBuild" = "Built from a modified working tree: this build matches no commit.";
+"about.placeholderWarning" = "Warning: the build did not substitute its Info.plist placeholders.";

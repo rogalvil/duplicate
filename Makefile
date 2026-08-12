@@ -35,6 +35,11 @@ SIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null \
 # `git status --porcelain` rather than `git diff --quiet`, because the latter ignores untracked
 # files: a tree full of brand-new sources reports as clean, and a build made from it would claim to
 # be exactly the named commit.
+#
+# CFBundleVersion is the commit count, not the marketing version. It is monotonic, never resets, and
+# distinguishes two builds of 0.1.0 -- which matters to Launch Services, to crash reports, and to
+# anyone reading a bug report. Falls back to 0 outside a git checkout.
+BUILD_NUMBER := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
 BUILD_DATE   := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 GIT_COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null)$(shell test -z "$$(git status --porcelain 2>/dev/null)" || echo +)
 
@@ -57,6 +62,7 @@ bundle: build
 	@sed -e 's|__APP_NAME__|$(APP_NAME)|g' \
 	     -e 's|__BUNDLE_ID__|$(BUNDLE_ID)|g' \
 	     -e 's|__VERSION__|$(VERSION)|g' \
+	     -e 's|__BUILD_NUMBER__|$(BUILD_NUMBER)|g' \
 	     -e 's|__MIN_MACOS__|$(MIN_MACOS)|g' \
 	     -e 's|__BUILD_DATE__|$(BUILD_DATE)|g' \
 	     -e 's|__GIT_COMMIT__|$(GIT_COMMIT)|g' \
