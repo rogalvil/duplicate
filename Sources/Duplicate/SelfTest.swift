@@ -28,7 +28,7 @@ enum SelfTest {
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
                 "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
-                "trash",
+                "trash", "undo",
             ]
         default: modes = [mode]
         }
@@ -49,6 +49,7 @@ enum SelfTest {
                 case "cache": try await checkHashCache(arguments: arguments)
                 case "storage": try await checkStorageClasses(arguments: arguments)
                 case "trash": try checkTrashRoundTrip()
+                case "undo": try checkUndoCycle()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -1122,6 +1123,151 @@ enum SelfTest {
         print(
             "  read back byte-identical; verification refused a changed file; fallback renamed on collision"
         )
+    }
+
+    // MARK: - undo
+
+    /// Creates files, trashes them, journals it, undoes it, and asserts every file came back identical.
+    ///
+    /// The whole promise of the destructive path in one pass, against the real Trash and a real journal on
+    /// disk. Two assertions carry it:
+    ///
+    /// - **Every file is back at its original path with its original bytes.** Without this, "you can undo
+    ///   this" is a claim nobody checked.
+    /// - **An occupied original path is never overwritten.** A user who saved new work at one of those
+    ///   paths and then undid the session must not lose it. This is the worst bug the design permits, so it
+    ///   is asserted here rather than only in a unit test.
+    ///
+    /// Everything created is removed, including anything left in the Trash.
+    ///
+    /// Proof of teeth: remove the `fileExists` guard from `UndoRunner.run` and the second half fails with
+    /// the user's new file gone.
+    private static func checkUndoCycle() throws {
+        let manager = FileManager.default
+        let hasher = ContentHasher()
+        let sessionID = "20260511-070000-000001"
+
+        let scratch = NSTemporaryDirectory() + "/duplicate-undo-\(getpid())"
+        defer { try? manager.removeItem(atPath: scratch) }
+        try manager.createDirectory(atPath: scratch + "/tree", withIntermediateDirectories: true)
+
+        // A state directory of its own, so the real journal directory is never written to.
+        let state = StateDirectory(
+            environment: ["XDG_STATE_HOME": scratch + "/state"],
+            homePath: NSHomeDirectory()
+        )
+
+        // Four files, and a manifest of what they must look like afterwards.
+        var expected: [String: Digest32] = [:]
+        var entries: [JournalEntry] = []
+        var trashed: [String] = []
+        for index in 0..<4 {
+            let path = scratch + "/tree/file-\(index).bin"
+            let payload = Data((0..<(600 + index * 100)).map { UInt8(($0 + index) % 251) })
+            try payload.write(to: URL(filePath: path))
+            let digest = try hasher.fullDigest(atPath: path)
+            expected[path] = digest.digest
+
+            let outcome = try VerifyingDisposer(
+                wrapping: TrashDisposer(),
+                hasher: hasher,
+                expected: [path: digest.digest]
+            ).dispose(path: path)
+            trashed.append(outcome.resultingPath)
+            entries.append(
+                JournalEntry(
+                    originalPath: outcome.originalPath,
+                    resultingPath: outcome.resultingPath,
+                    mechanism: outcome.mechanism,
+                    byteCount: outcome.byteCount,
+                    digest: digest.digest,
+                    groupKey: "\(digest.byteCount):\(digest.digest.hexString)",
+                    scanID: "20260511-064716-685054",
+                    timestamp: "2026-05-11T06:47:16.685054Z"
+                )
+            )
+        }
+        defer { for path in trashed { try? manager.removeItem(atPath: path) } }
+
+        try expect(
+            try MoveJournal.append(entries, sessionID: sessionID, in: state) == 4,
+            "the journal did not record four entries"
+        )
+        for path in expected.keys {
+            try expect(!manager.fileExists(atPath: path), "\(path) was not removed")
+        }
+
+        // Reload from disk, which is what the app does when the user opens the history later.
+        let loaded = try MoveJournal.load(sessionID: sessionID, in: state)
+        try expect(loaded.isClean, "the journal did not reload cleanly: \(loaded.malformedLines)")
+        try expect(loaded.entries.count == 4, "reloaded \(loaded.entries.count) entries")
+
+        let plan = UndoPlanner.plan(
+            sessionID: sessionID,
+            entries: loaded.entries,
+            restoredPaths: loaded.restoredPaths,
+            environment: .live(hasher: hasher)
+        )
+        try expect(!plan.isNoOp, "the plan would restore nothing")
+        try expect(
+            plan.restorable.count == 4,
+            "\(plan.restorable.count) restorable, blocked: \(plan.obstacleCounts)"
+        )
+
+        let report = UndoRunner().run(plan)
+        try expect(report.failed.isEmpty, "failures: \(report.failed.map(\.reason))")
+        try expect(report.restored.count == 4, "restored \(report.restored.count)")
+
+        for (path, digest) in expected {
+            try expect(manager.fileExists(atPath: path), "\(path) did not come back")
+            let fresh = try hasher.fullDigest(atPath: path)
+            try expect(
+                fresh.digest == digest,
+                "\((path as NSString).lastPathComponent) came back with different bytes"
+            )
+        }
+
+        // Now the case that must never go wrong: undo again, with new work saved where a file used to be.
+        let occupied = scratch + "/tree/file-0.bin"
+        let newWork = Data("something the user wrote after the apply".utf8)
+        let second = try VerifyingDisposer(
+            wrapping: TrashDisposer(),
+            hasher: hasher,
+            expected: [occupied: expected[occupied]!]
+        ).dispose(path: occupied)
+        defer { try? manager.removeItem(atPath: second.resultingPath) }
+        try newWork.write(to: URL(filePath: occupied))
+
+        let conflictEntry = JournalEntry(
+            originalPath: second.originalPath,
+            resultingPath: second.resultingPath,
+            mechanism: second.mechanism,
+            byteCount: second.byteCount,
+            digest: expected[occupied]!,
+            groupKey: "x",
+            scanID: "20260511-064716-685054",
+            timestamp: "2026-05-11T06:47:16.685054Z"
+        )
+        let conflictPlan = UndoPlanner.plan(
+            sessionID: sessionID,
+            entries: [conflictEntry],
+            environment: .live(hasher: hasher)
+        )
+        try expect(
+            conflictPlan.obstacleCounts[.originalPathOccupied] == 1,
+            "expected an occupied-path obstacle, got \(conflictPlan.obstacleCounts)"
+        )
+        try expect(conflictPlan.isNoOp, "the planner offered to overwrite the user's file")
+        // And running it anyway changes nothing.
+        let refused = UndoRunner().run(conflictPlan)
+        try expect(refused.restored.isEmpty, "the runner restored over an occupied path")
+        try expect(
+            try Data(contentsOf: URL(filePath: occupied)) == newWork,
+            "the user's new file was overwritten"
+        )
+
+        print("  4 files trashed, journalled, restored byte-identical")
+        print("  a second undo over occupied work was refused, and the work survived")
     }
 
     // MARK: - about
