@@ -17,7 +17,14 @@ if CommandLine.arguments.contains("--selftest") {
     exit(status)
 }
 
-application.mainMenu = MainMenuBuilder.build()
+let mainMenu = MainMenuBuilder.build()
+application.mainMenu = mainMenu
+// Assigning windowsMenu is what makes macOS list open windows in it and add the standard separator.
+// Without it the Window menu is whatever was built and nothing more, and a user with three review
+// windows open has no way to reach the one behind.
+application.windowsMenu =
+    mainMenu.items.first { $0.submenu?.title == Strings.string("menu.window") }?
+    .submenu
 
 let delegate = AppDelegate()
 application.delegate = delegate

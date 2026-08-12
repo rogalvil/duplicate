@@ -50,3 +50,62 @@
 /* %@ is the recorded root. */
 "library.relativePaths.body" = "Its root is \"%@\", which depends on the folder the CLI was run from. This app cannot resolve it, and guessing would point at the wrong folder.";
 "button.ok" = "OK";
+
+/* Main menu, added with the review */
+"menu.file" = "File";
+"menu.file.saveDecisions" = "Save Decisions";
+"menu.file.close" = "Close";
+"menu.edit" = "Edit";
+"menu.edit.undo" = "Undo";
+"menu.edit.redo" = "Redo";
+"menu.edit.cut" = "Cut";
+"menu.edit.copy" = "Copy";
+"menu.edit.paste" = "Paste";
+"menu.edit.selectAll" = "Select All";
+"menu.group" = "Group";
+"menu.group.confirm" = "Confirm and Next";
+"menu.group.skip" = "Skip This Group";
+"menu.group.clearDecision" = "Clear the Decision";
+"menu.group.keepAll" = "Keep Every File";
+"menu.group.discardAll" = "Discard the Whole Group...";
+"menu.group.previous" = "Previous Group";
+"menu.group.next" = "Next Group";
+"menu.group.revealFile" = "Show in Finder";
+"menu.window" = "Window";
+"menu.window.minimize" = "Minimize";
+"menu.window.zoom" = "Zoom";
+"menu.window.bringAllToFront" = "Bring All to Front";
+
+/* Group review. %@ is the scan root, already shortened. */
+"review.window.title" = "Review - %@";
+"review.column.keep" = "Keep";
+"review.column.file" = "File";
+"review.column.note" = "Note";
+"review.header.noCommonParent" = "These files are in different folders";
+/* %1$d of %2$d groups, %3$@ each, %4$d files, %5$@ freed. */
+"review.subheader" = "Group %1$d of %2$d - %3$@ each - %4$d files - frees %5$@";
+"review.subheader.upperBound" = "Group %1$d of %2$d - %3$@ each - %4$d files - frees up to %5$@";
+/* %1$d group index, %2$@ size, %3$d file count. */
+"review.group.row" = "Group %1$d - %2$@ - %3$d files";
+"review.warning.preview" = "Nothing decided yet. The check mark is only a suggestion, and closing this window records nothing for this group.";
+"review.warning.keepNothing" = "A group has to keep at least one file. To remove every copy, use Group > Discard the Whole Group.";
+"review.warning.sharedStorage" = "One file shares its storage with the file you are keeping, so removing it would free nothing. It is not offered.";
+"review.warning.lastGroup" = "That was the last group.";
+/* %1$d decided, %2$d skipped, %3$d never seen, %4$@ freed. */
+"review.tally" = "%1$d decided - %2$d skipped - %3$d not looked at - %4$@ would be freed";
+"review.note.sameStorage" = "same storage as the keeper";
+"review.note.copyName" = "looks like a copy";
+"review.discardAll.title" = "Discard every copy in this group?";
+/* %1$d files, %2$@ total size. */
+"review.discardAll.body" = "All %1$d files would be moved to the Trash and %2$@ would be freed. Nothing is moved until you simulate and then apply.";
+"review.discardAll.confirm" = "Discard the Group";
+"review.saveFailed.title" = "The decisions could not be saved";
+"review.saveFailed.body" = "%@";
+"review.unsaved.title" = "Save this review?";
+/* %d is how many groups were decided. */
+"review.unsaved.body" = "You decided %d groups. Groups you did not look at are not recorded either way.";
+"review.unsaved.save" = "Save";
+"review.unsaved.discard" = "Discard";
+"button.cancel" = "Cancel";
+"library.action.review" = "Review This Scan";
+"library.relativePaths.reviewBody" = "Its root is \"%@\", which depends on the folder the CLI was run from. A review could not act on those paths.";

@@ -28,7 +28,7 @@ enum SelfTest {
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
                 "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
-                "trash", "undo", "review", "decisions", "gate", "library",
+                "trash", "undo", "review", "decisions", "gate", "library", "review-window",
             ]
         default: modes = [mode]
         }
@@ -54,6 +54,7 @@ enum SelfTest {
                 case "decisions": try checkRealDecisions(arguments: arguments)
                 case "gate": try checkApplyGate()
                 case "library": try await checkLibraryWindow()
+                case "review-window": try checkReviewWindow()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -1856,6 +1857,264 @@ enum SelfTest {
         throw SelfTestFailure("timed out after \(deadline) waiting for \(what)")
     }
 
+    // MARK: - review-window
+
+    /// Drives the real review window, and checks the three things it has to be honest about.
+    ///
+    /// Built for real against a state directory in `/tmp`, and read back through the same cell-building
+    /// code the window draws with. A unit test cannot reach any of this: `Duplicate` is an executable
+    /// target and the test target cannot import it.
+    ///
+    /// The assertions, in order of how much they matter:
+    ///
+    /// 1. **An unvisited group is not a decision.** The heuristic's mark is a preview, the warning says so,
+    ///    and saving writes nothing for it. This is the CLI's most dangerous defect, and in a window it is
+    ///    worse: quitting is closing a window.
+    /// 2. **A file sharing the keeper's storage is not offered.** Its checkbox is disabled and its note
+    ///    says why -- trashing it would free nothing, and a tool caught claiming otherwise is not believed
+    ///    about anything else.
+    /// 3. **Keeping nothing is refused, not treated as an exit.** The CLI's TUI reads that condition as
+    ///    "we are done" and quits the review.
+    ///
+    /// Plus: undo restores a decision, skip is neither decided nor unseen, and the saved file holds exactly
+    /// the decided groups.
+    ///
+    /// Writes only under `/tmp`. The user's own decisions are never opened.
+    ///
+    /// Proof of teeth: five separate breaks, each listed beside its assertion.
+    @MainActor
+    private static func checkReviewWindow() throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-review-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let store = ScanStore(state: state)
+
+        func digest(_ seed: String) -> Digest32 {
+            Digest32(hexString: String(repeating: seed, count: 64))!
+        }
+
+        // Group 0: two independent copies under one folder.
+        // Group 1: three files where the second is the keeper's own storage under another name.
+        // Group 2: two copies, one with a copy-looking name.
+        let scan = DuplicateScan(
+            scanID: "20260812-120000-000000",
+            root: "/r",
+            createdAt: "2026-08-12T12:00:00.000000Z",
+            groups: [
+                DuplicateGroup(
+                    size: 4096, digest: digest("a"),
+                    files: ["/r/fotos/a.jpg", "/r/fotos/sub/a.jpg"]
+                ),
+                DuplicateGroup(
+                    size: 2048, digest: digest("b"),
+                    files: ["/r/docs/b.pdf", "/r/docs/b-link.pdf", "/r/docs/otro/b.pdf"],
+                    storage: StoragePartition(
+                        clusters: [
+                            ["/r/docs/b.pdf", "/r/docs/b-link.pdf"], ["/r/docs/otro/b.pdf"],
+                        ],
+                        isExact: true
+                    )
+                ),
+                DuplicateGroup(
+                    size: 512, digest: digest("c"),
+                    files: ["/r/x/copia de c.txt", "/r/x/deep/c.txt"]
+                ),
+            ]
+        )
+        try store.save(scan)
+
+        let controller = ReviewWindowController(scan: scan, stateDirectory: state)
+        defer { controller.window?.close() }
+
+        try expect(controller.groupRowCount == 3, "\(controller.groupRowCount) groups listed")
+        try expect(controller.fileRowCount == 2, "\(controller.fileRowCount) files in group 1")
+
+        // 1. The common parent is hoisted, so the rows show only what differs.
+        // Teeth: return nil from PathElision.commonParent and the header shows the fallback sentence.
+        try expect(controller.headerText == "/r/fotos", "header reads \(controller.headerText)")
+        try expect(
+            controller.fileCellText(row: 1, column: "file") == "sub/a.jpg",
+            "row 1 reads \(controller.fileCellText(row: 1, column: "file") ?? "nil")"
+        )
+
+        // 2. **An unvisited group is a preview, not a decision.**
+        // Teeth: make `decisionsForSaving` emit every group and the saved key count below fails.
+        try expect(
+            controller.reviewState.decision(at: 0) == .undecided,
+            "opening the window decided group 1"
+        )
+        try expect(
+            controller.warningText == Strings.string("review.warning.preview"),
+            "the preview warning is missing: \(controller.warningText)"
+        )
+        try expect(
+            controller.currentPresentation?.reclaimableBytes == 0,
+            "an undecided group already claims to free bytes"
+        )
+        // The mark is shown all the same, or the user has nothing to react to. **Deeper wins**: the
+        // heuristic prefers `sub/a.jpg` over the one sitting loose in the folder above. That is the CLI's
+        // guess and surprising enough to be worth pinning here.
+        try expect(
+            controller.fileCellText(row: 1, column: "keep") == "on",
+            "the heuristic's preview is not on the deeper file"
+        )
+        try expect(
+            controller.fileCellText(row: 0, column: "keep") == "off",
+            "the shallower file is previewed as kept"
+        )
+
+        // 3. Toggling makes it a real decision.
+        controller.selectFileForSelftest(0)
+        controller.toggleForSelftest()
+        try expect(
+            controller.reviewState.decision(at: 0).isActionable, "toggling did not decide the group"
+        )
+        try expect(
+            controller.fileCellText(row: 0, column: "keep") == "on", "the toggle did not stick")
+        try expect(controller.hasUnsavedReviewChanges, "a decision left nothing to save")
+
+        // 4. Undo puts it back. `NSUndoManager` records nothing useful without the snapshot registration.
+        // Teeth: drop `undo.registerUndo` from `mutate` and this fails.
+        try expect(controller.canUndoReview, "nothing to undo after a decision")
+        controller.undoForSelftest()
+        try expect(
+            controller.reviewState.decision(at: 0) == .undecided,
+            "undo left the group decided"
+        )
+
+        // 5. **Keeping nothing is refused.** The preview keeps exactly one file; toggling that one off
+        // has to be refused rather than accepted as "remove everything".
+        // Teeth: let `toggleCursor` remove the last keeper and the group ends up with zero kept files.
+        try expect(
+            controller.currentPresentation?.keptCount == 1,
+            "the preview keeps \(controller.currentPresentation?.keptCount ?? -1) files"
+        )
+        controller.selectFileForSelftest(1)
+        controller.toggleForSelftest()
+        try expect(
+            controller.currentPresentation?.keptCount == 1,
+            "the review let the group end up keeping nothing"
+        )
+        try expect(
+            controller.reviewState.decision(at: 0) == .undecided,
+            "a refused toggle still recorded a decision"
+        )
+        // Keeping both, then dropping one, is allowed -- the refusal is about the last one, not any one.
+        controller.selectFileForSelftest(0)
+        controller.toggleForSelftest()
+        try expect(controller.currentPresentation?.keptCount == 2, "keeping both was refused")
+        controller.selectFileForSelftest(1)
+        controller.toggleForSelftest()
+        try expect(
+            controller.currentPresentation?.keptCount == 1, "dropping one of two was refused")
+
+        // 6. **A file sharing the keeper's storage is never offered.**
+        //
+        // The keeper is chosen explicitly here rather than left to the heuristic, because the point is the
+        // rule and not the guess: whichever file the user keeps, a second name for that same storage must
+        // not be offered. (The heuristic would pick the deepest file, which happens to be alone in its
+        // cluster and would prove nothing.)
+        //
+        // Teeth: build the Row with `sharesStorageWithKeeper: false` and the first assertions fail; return
+        // `files[1...]` from `removalCandidates` and the removable ones do.
+        controller.selectGroupForSelftest(1)
+        try expect(controller.fileRowCount == 3, "group 2 shows \(controller.fileRowCount) files")
+        controller.selectFileForSelftest(0)
+        controller.toggleForSelftest()
+        controller.selectFileForSelftest(2)
+        controller.toggleForSelftest()
+
+        let shared = try expectSome(controller.currentPresentation, "group 2 has no presentation")
+        try expect(shared.rows[0].isKept, "the chosen keeper is not kept")
+        try expect(shared.keptCount == 1, "\(shared.keptCount) files kept, wanted 1")
+        try expect(shared.rows[1].sharesStorageWithKeeper, "the hardlink is not recognised")
+        try expect(
+            shared.rows[1].isRemovable == false, "the keeper's own storage is offered for removal")
+        try expect(shared.rows[2].isRemovable, "the independent copy is not offered")
+        try expect(
+            controller.fileCellText(row: 1, column: "note")
+                == Strings.string("review.note.sameStorage"),
+            "the note reads \(controller.fileCellText(row: 1, column: "note") ?? "nil")"
+        )
+        // The checkbox is not a choice for a file that cannot be removed.
+        try expect(
+            controller.fileCellText(row: 1, column: "keep") == "off",
+            "the keeper's own storage is shown as kept"
+        )
+        // **Three files, two storage classes: keeping one frees one class, not two files.** Counting files
+        // would claim 4 KB here and `df` would disagree.
+        try expect(shared.distinctCopies == 2, "\(shared.distinctCopies) distinct copies, wanted 2")
+        try expect(
+            shared.reclaimableBytes == 2048,
+            "\(shared.reclaimableBytes) bytes claimed, wanted 2048"
+        )
+        try expect(shared.isReclaimExact, "a recorded partition is reported as inexact")
+
+        // 7. A copy-looking name is flagged, and the heuristic prefers the other one.
+        controller.selectGroupForSelftest(2)
+        let copyGroup = try expectSome(
+            controller.currentPresentation, "group 3 has no presentation")
+        try expect(copyGroup.rows[0].looksLikeCopy, "\"copia de c.txt\" is not flagged as a copy")
+        try expect(copyGroup.rows[1].isKept, "the heuristic kept the copy")
+
+        // 8. Skip is neither decided nor unseen.
+        controller.skipGroup(nil)
+        try expect(controller.reviewState.decision(at: 2) == .skipped, "skip did not record a skip")
+        let tally = controller.reviewState.tally
+        try expect(tally.skipped == 1, "\(tally.skipped) skipped, wanted 1")
+
+        // 9. **Saving writes only the decided groups.**
+        //
+        // Two of the three were decided; the third was skipped. A skip is not a decision, so it must be
+        // absent -- and so must a group nobody opened.
+        //
+        // Teeth: port the CLI's `decisions()` literally and this reads 3 instead of 2.
+        controller.saveDecisions(nil)
+        let document = try store.loadDecisions(scanID: scan.scanID)
+        try expect(
+            document.decisions.count == 2,
+            "\(document.decisions.count) decision keys saved, wanted 2"
+        )
+        let savedKeys = Set(document.decisions.map(\.key))
+        try expect(
+            savedKeys == Set([scan.groups[0].key, scan.groups[1].key]),
+            "the saved keys are not the two groups that were decided"
+        )
+        try expect(
+            !savedKeys.contains(scan.groups[2].key),
+            "the skipped group was written, which the CLI would then act on"
+        )
+        try expect(
+            document.decisions.allSatisfy { !$0.keptPaths.isEmpty },
+            "a saved decision keeps nothing, which the CLI would then ignore"
+        )
+        try expect(controller.hasUnsavedReviewChanges == false, "saving left the review dirty")
+
+        // 10. Reopening rehydrates from disk: the decisions come back, the skip does not.
+        //
+        // A persisted skip would be indistinguishable from a decision on the next visit, which is exactly
+        // the confusion the tri-state exists to remove.
+        let reopened = ReviewWindowController(scan: scan, stateDirectory: state)
+        defer { reopened.window?.close() }
+        try expect(
+            reopened.reviewState.decision(at: 0).isActionable, "a saved decision did not come back")
+        try expect(
+            reopened.reviewState.decision(at: 1).isActionable,
+            "the second saved decision did not come back"
+        )
+        try expect(
+            reopened.reviewState.decision(at: 2) == .undecided,
+            "a skip was persisted, which would make it look like a decision"
+        )
+        try expect(reopened.reviewState.tally.decided == 2, "the rehydrated tally is wrong")
+        try expect(reopened.reviewFlow.isAvailable(.dryRun), "a saved review cannot be simulated")
+        try expect(
+            reopened.reviewFlow.isAvailable(.apply) == false, "apply is offered with no dry run")
+
+        print("  3 groups: preview is not a decision, keep-nothing refused, undo restores")
+        print("  the keeper's own storage is not offered; 2 of 3 saved, the skip is not")
+    }
+
     // MARK: - about
 
     /// Proves the About panel has a real build identity to show.
@@ -1999,7 +2258,37 @@ enum SelfTest {
         let menu = MainMenuBuilder.build()
         try walk(menu, path: "")
         try expect(!seen.isEmpty, "the main menu has no keyboard shortcuts at all")
-        print("  \(seen.count) distinct shortcuts")
+
+        // A submenu with nothing in it is a title in the menu bar that opens onto nothing.
+        for item in menu.items {
+            let submenu = try expectSome(item.submenu, "a top-level item has no submenu")
+            try expect(
+                !submenu.items.isEmpty,
+                "the \(submenu.title.isEmpty ? "app" : submenu.title) menu is empty"
+            )
+        }
+
+        // Undo has to be reachable. `NSUndoManager` records perfectly and is invisible without a menu item
+        // carrying its selector, so a review with no working undo would look like a design choice.
+        let undoTitles = ["undo:", "redo:"]
+        var foundSelectors: Set<String> = []
+        for item in menu.items {
+            for child in item.submenu?.items ?? [] {
+                if let action = child.action { foundSelectors.insert(NSStringFromSelector(action)) }
+            }
+        }
+        for selector in undoTitles {
+            try expect(foundSelectors.contains(selector), "no menu item sends \(selector)")
+        }
+
+        // The review actions have to be on a menu, or they exist only in code.
+        for selector in [
+            "confirmGroup:", "skipGroup:", "discardEntireGroup:", "saveDecisions:",
+        ] {
+            try expect(foundSelectors.contains(selector), "no menu item sends \(selector)")
+        }
+
+        print("  \(seen.count) distinct shortcuts across \(menu.items.count) menus")
     }
 
     // MARK: - helpers

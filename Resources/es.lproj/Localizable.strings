@@ -49,3 +49,62 @@
 /* %@ es la raíz registrada. */
 "library.relativePaths.body" = "Su raíz es \"%@\", que depende de la carpeta desde donde se corrió el CLI. Esta app no puede resolverla, y adivinar apuntaría a la carpeta equivocada.";
 "button.ok" = "Aceptar";
+
+/* Menú principal, agregado con la revisión */
+"menu.file" = "Archivo";
+"menu.file.saveDecisions" = "Guardar decisiones";
+"menu.file.close" = "Cerrar";
+"menu.edit" = "Edición";
+"menu.edit.undo" = "Deshacer";
+"menu.edit.redo" = "Rehacer";
+"menu.edit.cut" = "Cortar";
+"menu.edit.copy" = "Copiar";
+"menu.edit.paste" = "Pegar";
+"menu.edit.selectAll" = "Seleccionar todo";
+"menu.group" = "Grupo";
+"menu.group.confirm" = "Confirmar y siguiente";
+"menu.group.skip" = "Saltar este grupo";
+"menu.group.clearDecision" = "Quitar la decisión";
+"menu.group.keepAll" = "Conservar todos los archivos";
+"menu.group.discardAll" = "Descartar el grupo completo...";
+"menu.group.previous" = "Grupo anterior";
+"menu.group.next" = "Grupo siguiente";
+"menu.group.revealFile" = "Mostrar en Finder";
+"menu.window" = "Ventana";
+"menu.window.minimize" = "Minimizar";
+"menu.window.zoom" = "Zoom";
+"menu.window.bringAllToFront" = "Traer todo al frente";
+
+/* Revisión de grupos. %@ es la raíz del escaneo, ya acortada. */
+"review.window.title" = "Revisión - %@";
+"review.column.keep" = "Conservar";
+"review.column.file" = "Archivo";
+"review.column.note" = "Nota";
+"review.header.noCommonParent" = "Estos archivos están en carpetas distintas";
+/* %1$d de %2$d grupos, %3$@ cada uno, %4$d archivos, %5$@ liberados. */
+"review.subheader" = "Grupo %1$d de %2$d - %3$@ cada uno - %4$d archivos - libera %5$@";
+"review.subheader.upperBound" = "Grupo %1$d de %2$d - %3$@ cada uno - %4$d archivos - libera hasta %5$@";
+/* %1$d índice del grupo, %2$@ tamaño, %3$d cuántos archivos. */
+"review.group.row" = "Grupo %1$d - %2$@ - %3$d archivos";
+"review.warning.preview" = "Todavía no hay nada decidido. La marca es solo una sugerencia, y cerrar esta ventana no registra nada para este grupo.";
+"review.warning.keepNothing" = "Un grupo tiene que conservar al menos un archivo. Para quitar todas las copias, usa Grupo > Descartar el grupo completo.";
+"review.warning.sharedStorage" = "Un archivo comparte su almacenamiento con el que estás conservando, así que quitarlo no liberaría nada. No se ofrece.";
+"review.warning.lastGroup" = "Ese era el último grupo.";
+/* %1$d decididos, %2$d saltados, %3$d nunca vistos, %4$@ liberados. */
+"review.tally" = "%1$d decididos - %2$d saltados - %3$d sin revisar - se liberarían %4$@";
+"review.note.sameStorage" = "mismo almacenamiento que el que se conserva";
+"review.note.copyName" = "parece una copia";
+"review.discardAll.title" = "¿Descartar todas las copias de este grupo?";
+/* %1$d archivos, %2$@ tamaño total. */
+"review.discardAll.body" = "Los %1$d archivos irían a la Papelera y se liberarían %2$@. Nada se mueve hasta que simules y luego apliques.";
+"review.discardAll.confirm" = "Descartar el grupo";
+"review.saveFailed.title" = "No se pudieron guardar las decisiones";
+"review.saveFailed.body" = "%@";
+"review.unsaved.title" = "¿Guardar esta revisión?";
+/* %d es cuántos grupos se decidieron. */
+"review.unsaved.body" = "Decidiste %d grupos. Los grupos que no revisaste no se registran ni a favor ni en contra.";
+"review.unsaved.save" = "Guardar";
+"review.unsaved.discard" = "Descartar";
+"button.cancel" = "Cancelar";
+"library.action.review" = "Revisar este escaneo";
+"library.relativePaths.reviewBody" = "Su raíz es \"%@\", que depende de la carpeta desde donde se corrió el CLI. Una revisión no podría accionar esas rutas.";

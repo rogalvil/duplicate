@@ -310,6 +310,40 @@ de una segunda copia de las reglas de formato pasaría mientras la ventana muest
 Incluye la afirmación que importa: se guarda un escaneo desde fuera y la fila aparece en la tabla sin
 que nadie la pida. Ese es el comportamiento que justifica la ventana entera.
 
+### La revisión: tres honestidades y un teclado
+
+La ventana de revisión existe para que tres cosas sean imposibles de hacer mal, cada una una forma de
+perder la confianza del usuario para siempre:
+
+1. **Un grupo que nadie vio no es una decisión.** La marca del heurístico se muestra atenuada como
+   *preview*, con una advertencia que lo dice, y cerrar la ventana no registra nada para ese grupo. El
+   CLI escribe una decisión para cada grupo incluido el que nadie abrió — salir tras el grupo 1 de 50
+   registra 49. En una terminal eso pide un `q` deliberado; en una ventana, salir es cerrar la ventana.
+2. **Un archivo que comparte almacenamiento con el que se conserva no se ofrece.** Su casilla está
+   deshabilitada y su nota dice por qué. Mandarlo a la Papelera liberaría cero, y a una herramienta
+   cachada exagerando espacio recuperado no se le cree nada más.
+3. **Conservar nada se rehúsa, no se trata como salida.** La TUI del CLI lee esa condición como "ya
+   terminamos" y sale de la revisión, así que Enter con nada marcado pierde la sesión.
+
+Las vistas-modelo viven en Core (`GroupPresentation`, `PathElision`) para que las reglas estén
+cubiertas por tests y no por mirar la pantalla. Core produce números, banderas y rutas; la ventana
+convierte `sharesStorageWithKeeper` en una frase, en el idioma que esté corriendo.
+
+**El izado del padre común se compara por componentes, no por bytes.** `/a/bc/x` y `/a/bd/y` comparten
+el prefijo de bytes `/a/b`, que no es una carpeta en la que esté ninguno de los dos: izarlo al
+encabezado pondría en pantalla una ruta que no existe. La respuesta es `/a`. Y la elisión se come el
+*medio*, no el final — la cola de una ruta es lo que la identifica.
+
+**Espacio y Return no son atajos de menú.** Un `keyEquivalent` es global y dispararía mientras el
+usuario escribe en el campo de búsqueda de la biblioteca. Viven en `ReviewTableView.keyDown`, donde solo
+significan algo porque una lista de archivos tiene el foco. Lo demás sí va al menú Grupo, que es lo que
+le da descubribilidad, traducción y el chequeo de colisiones de atajos.
+
+**⌘Z es deshacer de revisión y nunca de aplicación.** Deshacer una casilla y deshacer cuatro mil
+archivos mandados a la Papelera no son el mismo acto, y toda otra app de macOS le enseñó al usuario que
+⌘Z significa "lo que acabo de escribir". El deshacer de sesión vivirá en su propio menú, sin
+equivalente de teclado.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice

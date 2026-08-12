@@ -160,6 +160,10 @@ No re-descubrirlas:
   test que comparaba igualdad exacta pasaba local y fallaba en el runner. La afirmación que sí vale en
   las dos versiones es que Foundation **no agrega** el prefijo `/private`; comparar la cadena completa
   es afirmar una propiedad incidental. Tercera divergencia entre SDKs que solo CI puede atrapar.
+- **El closure de `UndoManager.registerUndo` no es `@MainActor` en el SDK 15.** Compila limpio local
+  (SDK 26) y es error duro en CI. Va con `MainActor.assumeIsolated`, que es una suposición sana:
+  `UndoManager` corre el bloque en el hilo que llamó a `undo()`, y el único que llama es el menú
+  Edición. **Cuarta divergencia entre SDKs que solo CI puede atrapar.**
 - **`swift-format` local puede diferir del de CI** (6.3 aquí, 6.0/6.1 en el runner `macos-15`). Si
   `make lint` pasa local y falla en CI, es eso; no reformatear a ciegas.
 - **Los imports de AVFoundation, ImageIO, CoreGraphics y Accelerate van con `@preconcurrency`.
@@ -186,7 +190,7 @@ Dos reglas:
 
 Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
 `walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`, `undo`,
-`review`, `decisions`, `gate`, `library`.
+`review`, `decisions`, `gate`, `library`, `review-window`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -253,6 +257,24 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Un atajo de menú es global.** Return o espacio como `keyEquivalent` dispararían mientras el usuario
+  escribe en el campo de búsqueda de la biblioteca. Esas dos teclas viven en `ReviewTableView.keyDown`,
+  donde solo significan algo porque una lista de archivos tiene el foco. Lo demás sí va al menú, que es
+  lo que le da descubribilidad, localización y el chequeo de colisiones del modo `menu`.
+- **`NSUndoManager` no llega al usuario sin un ítem de menú que mande `undo:`.** Registra
+  perfectamente y es invisible: una revisión sin deshacer se vería como una decisión de diseño. Por eso
+  existe el menú Edición, y por eso el modo `menu` afirma que alguien manda `undo:` y `redo:`.
+- **`validateMenuItem` en un `NSWindowController` no es un `override`.** Viene de
+  `NSMenuItemValidation`; escribir `override` es un error de compilación que se lee como si el método
+  estuviera mal.
+- **El keeper del heurístico es el archivo más profundo.** `depthScore` es la profundidad *negativa*,
+  así que `fotos/sub/a.jpg` le gana a `fotos/a.jpg`. Es contraintuitivo y es la decisión del CLI; un
+  arnés que asuma que gana el primero falla contra código correcto — ya pasó al escribir el modo
+  `review-window`.
+- **La revisión captura el estado completo para deshacer, no un delta.** `decisions` es un diccionario
+  de enums chicos sobre a lo más unos miles de grupos, así que un snapshot cuesta menos que la
+  contabilidad que un delta necesitaría — y un undo que restaura un snapshot no puede desincronizarse
+  de la operación de ida.
 - **`ScanStore.summaries()` decodifica cada grupo de cada escaneo para producir un puñado de
   conteos.** Medido en el corpus real: **119 escaneos, 21,594 grupos, 0.34 s** — y el watcher hace que
   la ventana lo vuelva a pagar en cada cambio. Va fuera del hilo principal, con un contador de
