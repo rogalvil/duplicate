@@ -189,7 +189,8 @@ Dos reglas:
    proyecto anterior.
 
 El catálogo completo —qué afirma cada modo, cómo se probó que falla, y qué toca en disco— está en
-[`docs/SELFTEST.md`](docs/SELFTEST.md). **CI no corre ninguno**, por costo; ahí está explicado.
+[`docs/SELFTEST.md`](docs/SELFTEST.md). **CI los corre todos** en cada PR, con `CONFIG=debug` y antes
+del paso de cobertura, que es lo que los hace costar 26 segundos en vez de un build completo.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -339,6 +340,9 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   permisos TCC ya otorgados.
 - **El nombre del job de CI es el status check requerido en el ruleset.** Renombrarlo deja de
   proteger `main` en silencio, porque el ruleset espera un contexto que ya no reporta.
+- **Los selftests van antes del paso de cobertura en CI.** `swift test --enable-code-coverage`
+  recompila el debug con instrumentación, así que correrlos después paga un tercer build completo. Y
+  van con `CONFIG=debug`: `make selftest` depende de `make all`, que compilaría en release.
 - **CI corre solo en pull requests**, nunca en push, por costo: los runners de macOS facturan 10× y
   el repo es privado. Cubre bases `main`, `feat/**` y `fix/**`, y el tipo de evento `edited`, porque
   sin eso un PR apilado no reporta checks y puede llegar a `main` sin haberse probado nunca.

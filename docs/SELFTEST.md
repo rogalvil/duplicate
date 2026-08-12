@@ -63,19 +63,48 @@ Importa porque el corpus del usuario tiene 119 escaneos que no se pueden perder.
   `walk-permissions` corriendo como root, y los tres de interop cuando no hay corpus. Cada salto
   imprime su razón: un modo que pasa en silencio sin haber hecho nada es peor que no tenerlo.
 
-## El hueco: CI no corre ninguno
+## CI los corre, y cómo se pagó
 
-`.github/workflows/ci.yml` corre `make lint`, `make build CONFIG=debug` y `make coverage`. **Ningún
-selftest.** Así que estos 21 modos solo se ejecutan cuando alguien los corre a mano en su máquina.
+`.github/workflows/ci.yml` corre los 21 modos en cada pull request, después de compilar y **antes** del
+paso de cobertura.
 
-Es una decisión de costo, no un olvido: `make selftest` depende de `make all`, que compila en release y
-firma, o sea un segundo compilado completo. El repo es privado y GitHub factura los runners de macOS a
-10×, así que los 2,000 minutos del plan gratis son ~200 minutos de reloj.
+El orden y la configuración son las dos razones por las que esto cuesta poco:
 
-Pero el precio es real y conviene nombrarlo: un cambio que rompa el armado del bundle, las tablas de
-localización, los atajos del menú o lo que una ventana muestra **llega a `main` sin que nadie se
-entere**. La única razón por la que el error de aislamiento de actor en el closure de `registerUndo` se
-atrapó fue el paso de *build*, no un selftest.
+- **`CONFIG=debug`.** `make selftest` depende de `make all`, que compila en release: un segundo build
+  completo. Con `CONFIG=debug` arma y firma lo que el paso de build ya dejó.
+- **Antes de la cobertura.** `swift test --enable-code-coverage` recompila el debug con
+  instrumentación, o sea que correr los selftests después pagaría un tercer build.
 
-Mitigación actual: `make selftest-all` antes de abrir cada PR, y su salida pegada en el cuerpo del PR.
-Eso depende de que quien lo abre lo haga.
+Medido: 14.5 s el build y **10.6 s los 21 modos** en local; en el runner el paso agregó **26 segundos**
+al total (1m06s → 1m32s). La razón por la que esto no estaba en CI era una suposición de que hacía
+falta compilar en release. No hacía falta.
+
+### Qué pasa en el runner
+
+**Los 21 pasan**, incluidos los que parecían dudosos y por eso se probaron antes de excluirlos:
+
+| Modo | Duda | Qué pasó de verdad |
+|---|---|---|
+| `trash`, `undo` | ¿`trashItem` funciona sin sesión de Finder? | sí, aterriza en `/Users/runner/.Trash` |
+| `menu`, `library`, `review-window` | ¿hay window server? | sí, `NSApplication` conecta y las ventanas se construyen |
+| `storage` | ¿el disco del runner es APFS con `clonefile`? | sí, distingue las cinco variantes |
+| `icon`, `about`, `bundle` | ¿el bundle se arma bien fuera de esta máquina? | sí |
+
+Cuatro saltan, todos por lo mismo — no hay directorio de estado compartido en un runner limpio:
+
+```
+SKIPPED: no JSON found (6 directories absent)
+SKIPPED: /Users/runner/.local/state/rav/duplicate/scans is not readable
+SKIPPED: /Users/runner/.local/state/rav/duplicate/decisions is not readable
+SKIPPED: no real corpus to time
+```
+
+Para no perder del todo la garantía de interoperabilidad, hay un paso extra que corre
+`json-roundtrip` contra los **fixtures commiteados**: seis formas de documento, byte a byte, por el
+camino que toma producción y no por la copia que tienen los tests unitarios.
+
+Lo que sigue sin cubrirse en CI: el round-trip **tipado** contra documentos reales (`scans` y
+`decisions`), porque los fixtures no tienen nombres que coincidan con su `scan_id` y esos modos
+—correctamente— fallan ante un documento que no es un escaneo. Los tests unitarios cubren el modelo
+tipado sobre esos mismos fixtures, así que el hueco real es solo "nadie verificó los 119 documentos de
+esta máquina en CI", que por definición solo se puede hacer aquí.
