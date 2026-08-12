@@ -18,6 +18,9 @@ final class LibraryWindowController: NSWindowController {
     private var filter: String = ""
 
     private var watchers: [DirectoryWatcher] = []
+    /// Review windows, keyed by scan id, so double-clicking the same row twice raises the window it
+    /// already opened instead of starting a second review of the same scan against the same file.
+    private var reviewWindows: [String: ReviewWindowController] = [:]
 
     /// Bumped per load so a slow read that lands after a newer one is dropped.
     ///
@@ -91,7 +94,7 @@ final class LibraryWindowController: NSWindowController {
         tableView.style = .inset
         tableView.rowHeight = 28
         tableView.target = self
-        tableView.doubleAction = #selector(revealScannedFolder(_:))
+        tableView.doubleAction = #selector(reviewScan(_:))
         tableView.menu = rowMenu()
 
         for column in Self.columns {
@@ -168,6 +171,12 @@ final class LibraryWindowController: NSWindowController {
 
     private func rowMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.addItem(
+            withTitle: Strings.string("library.action.review"),
+            action: #selector(reviewScan(_:)),
+            keyEquivalent: ""
+        )
+        menu.addItem(.separator())
         menu.addItem(
             withTitle: Strings.string("library.action.revealFolder"),
             action: #selector(revealScannedFolder(_:)),
@@ -313,6 +322,55 @@ final class LibraryWindowController: NSWindowController {
         }
     }
 
+    /// Opens a review of the selected scan, or raises the one already open for it.
+    ///
+    /// Two windows reviewing the same scan would both write `decisions/<scan_id>.json`, and the last one
+    /// to save would silently drop the other's work.
+    @objc private func reviewScan(_ sender: Any?) {
+        guard let summary = clickedSummary() else { return }
+        if let existing = reviewWindows[summary.scanID] {
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard !summary.hasRelativePaths else {
+            presentRelativePathWarning(summary, bodyKey: "library.relativePaths.reviewBody")
+            return
+        }
+        let store = ScanStore(state: stateDirectory)
+        let scan: DuplicateScan
+        do {
+            scan = try store.loadScan(id: summary.scanID)
+        } catch {
+            presentLoadFailure(summary, error: error)
+            return
+        }
+        let controller = ReviewWindowController(scan: scan, stateDirectory: stateDirectory)
+        reviewWindows[summary.scanID] = controller
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: controller.window,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reviewWindows[summary.scanID] = nil }
+        }
+        controller.showWindow(nil)
+    }
+
+    private func presentLoadFailure(_ summary: ScanStore.Summary, error: any Error) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = Strings.string("review.saveFailed.title")
+        alert.informativeText = String(
+            format: Strings.string("review.saveFailed.body"), String(describing: error))
+        alert.addButton(withTitle: Strings.string("button.ok"))
+        if let window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
     /// Opens the folder a scan covered.
     ///
     /// Refuses when the scan recorded relative paths -- the CLI resolves those against its working
@@ -321,7 +379,7 @@ final class LibraryWindowController: NSWindowController {
     @objc private func revealScannedFolder(_ sender: Any?) {
         guard let summary = clickedSummary() else { return }
         guard !summary.hasRelativePaths else {
-            presentRelativePathWarning(summary)
+            presentRelativePathWarning(summary, bodyKey: "library.relativePaths.body")
             return
         }
         Reveal.folder(at: summary.root)
@@ -348,12 +406,11 @@ final class LibraryWindowController: NSWindowController {
         return rows[index]
     }
 
-    private func presentRelativePathWarning(_ summary: ScanStore.Summary) {
+    private func presentRelativePathWarning(_ summary: ScanStore.Summary, bodyKey: String) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = Strings.string("library.relativePaths.title")
-        alert.informativeText = String(
-            format: Strings.string("library.relativePaths.body"), summary.root)
+        alert.informativeText = String(format: Strings.string(bodyKey), summary.root)
         alert.addButton(withTitle: Strings.string("button.ok"))
         if let window {
             alert.beginSheetModal(for: window)
