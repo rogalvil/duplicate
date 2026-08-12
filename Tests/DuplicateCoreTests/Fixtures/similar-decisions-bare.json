@@ -1,0 +1,4 @@
+{
+  "/Volumes/Disk/a.mp4||/Volumes/Disk/b.mp4": "keep_a",
+  "/Volumes/Disk/c.jpg||/Volumes/Disk/d.jpg": "keep_both"
+}

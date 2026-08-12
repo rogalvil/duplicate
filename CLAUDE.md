@@ -163,7 +163,13 @@ Dos reglas:
    exacto que lo hace fallar. Un arnés que pasa contra código roto no sirve de nada, y ya pasó en el
    proyecto anterior.
 
-Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`.
+Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`.
+
+`json-roundtrip` es el más fuerte: lee cada documento de los seis subdirectorios compartidos, lo
+re-codifica y compara bytes. Corre contra el corpus real del usuario (226 documentos hoy), es de solo
+lectura, y una falla es un diff con offset, no una discusión. Los tests unitarios cubren lo mismo con
+fixtures sintéticos, porque el corpus real tiene rutas privadas y un fixture commiteado es un archivo
+publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`.
 
 ## Qué no tocar sin plantearlo
 

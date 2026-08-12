@@ -1,0 +1,27 @@
+{
+  "scan_id": "20260511-064716-685054",
+  "root": "/Volumes/Disk/Tmp",
+  "created_at": "2026-05-11T06:47:16.685054Z",
+  "groups": [
+    {
+      "size": 496243319,
+      "sha256": "e562f2d3dcdff32ae80ad07fbda639183b3311f7bf252f9c7506a6760b9f9046",
+      "files": [
+        "/Volumes/Disk/Su\u00e1rez/clip.mp4",
+        "/Volumes/Disk/Sua\u0301rez/clip.mp4"
+      ]
+    },
+    {
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "files": [
+        "/Volumes/Disk/Tmp/\ud83d\ude00 emoji.txt",
+        "/Volumes/Disk/Tmp/\u4e2d\u6587.txt",
+        "/Volumes/Disk/Tmp/quote\".txt",
+        "/Volumes/Disk/Tmp/back\\slash.txt",
+        "/Volumes/Disk/Tmp/tab\there.txt",
+        "/Volumes/Disk/Tmp/slash/not/escaped.txt"
+      ]
+    }
+  ]
+}

@@ -229,6 +229,30 @@ Reversiones verificadas para este scaffolding:
 | tratar `XDG_STATE_HOME` vacío como puesto | `state-dir`, reportando que resolvió a `/rav` |
 | quitar una sustitución `sed` del Makefile | `bundle`, nombrando el placeholder |
 | dar el mismo atajo a dos ítems de menú | `menu`, nombrando los dos títulos |
+| cambiar el indent del JSON de 2 a 4 | `json-roundtrip`, en los 226 documentos, "differs at byte 4" |
+
+### Por qué los fixtures de JSON son sintéticos
+
+Los fixtures en `Tests/DuplicateCoreTests/Fixtures/` los genera
+`scripts/make-json-fixtures.py` con el mismo `json.dumps(obj, indent=2) + "\n"` que usa
+`save_scan` del CLI, así que son bytes que un Python real escribió — esa procedencia es el punto.
+
+Pero el contenido es sintético a propósito: el directorio de estado real del usuario tiene rutas
+privadas, y un fixture commiteado es un archivo publicado. La compatibilidad byte a byte es una
+propiedad del *formato*, así que rutas sintéticas que ejerciten cada regla de escape la prueban igual
+de bien. El corpus real se cubre en runtime, con `make selftest MODE=json-roundtrip`, que es de solo
+lectura.
+
+### Un parser propio, además del escritor
+
+**Descartado: usar `JSONSerialization` para leer.** Devuelve un `NSDictionary` sin orden y colapsa `1`
+y `1.0` en el mismo `NSNumber`, así que un re-encode nunca podría ser byte-idéntico — y entonces la
+prueba de compatibilidad contra archivos reales no existiría. `JSONReader` preserva el orden de claves
+y la distinción entero/flotante, que es exactamente lo que `json.loads` preserva.
+
+Es más estricto que Python en un punto, a propósito: rechaza los literales `NaN` e `Infinity`, que
+`json.loads` acepta. Una similitud no finita en un archivo de scan es un bug para sacar a la
+superficie, no un valor para arrastrar.
 
 ## CI y su costo
 
