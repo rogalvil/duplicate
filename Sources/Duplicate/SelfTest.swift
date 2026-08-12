@@ -1,6 +1,10 @@
 import AppKit
+// `@preconcurrency` on both, per the project rule: the macOS 15 SDK that CI compiles against lacks
+// `Sendable` annotations the local SDK has, and the failure only appears there.
+@preconcurrency import CoreGraphics
 import DuplicateCore
 import Foundation
+@preconcurrency import ImageIO
 
 /// Headless checks that assert, and exit non-zero when they fail.
 ///
@@ -27,7 +31,7 @@ enum SelfTest {
         let allModes = [
             "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
-            "trash", "undo", "review", "decisions", "gate", "library", "review-window",
+            "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
         ]
 
         let modes: [String]
@@ -64,7 +68,8 @@ enum SelfTest {
                 case "decisions": try checkRealDecisions(arguments: arguments)
                 case "gate": try checkApplyGate()
                 case "library": try await checkLibraryWindow()
-                case "review-window": try checkReviewWindow()
+                case "review-window": try await checkReviewWindow()
+                case "preview": try await checkPreview()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -1869,11 +1874,15 @@ enum SelfTest {
 
     // MARK: - review-window
 
-    /// Drives the real review window, and checks the three things it has to be honest about.
+    /// Drives the real review window, and checks what it has to be honest about.
     ///
-    /// Built for real against a state directory in `/tmp`, and read back through the same cell-building
-    /// code the window draws with. A unit test cannot reach any of this: `Duplicate` is an executable
-    /// target and the test target cannot import it.
+    /// Built for real against a state directory in `/tmp`, over a **real tree of real files**, and read back
+    /// through the same cell-building code the window draws with. A unit test cannot reach any of this:
+    /// `Duplicate` is an executable target and the test target cannot import it.
+    ///
+    /// Real files rather than invented paths, and that is not incidental: the window now checks the
+    /// filesystem, so a fixture of paths that do not exist would make it report a stale group -- correctly
+    /// -- and every assertion about the ordinary path would be racing that answer.
     ///
     /// The assertions, in order of how much they matter:
     ///
@@ -1886,49 +1895,58 @@ enum SelfTest {
     /// 3. **Keeping nothing is refused, not treated as an exit.** The CLI's TUI reads that condition as
     ///    "we are done" and quits the review.
     ///
-    /// Plus: undo restores a decision, skip is neither decided nor unseen, and the saved file holds exactly
-    /// the decided groups.
+    /// Plus: undo restores a decision, skip is neither decided nor unseen, the saved file holds exactly the
+    /// decided groups, and the preview pane names the file under the cursor.
     ///
     /// Writes only under `/tmp`. The user's own decisions are never opened.
     ///
     /// Proof of teeth: five separate breaks, each listed beside its assertion.
     @MainActor
-    private static func checkReviewWindow() throws {
+    private static func checkReviewWindow() async throws {
         let root = NSTemporaryDirectory() + "duplicate-selftest-review-\(UUID().uuidString)"
         defer { try? FileManager.default.removeItem(atPath: root) }
         let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
         let store = ScanStore(state: state)
 
+        let tree = root + "/tree"
+        func make(_ relative: String, bytes: Int) throws -> String {
+            let path = tree + "/" + relative
+            try FileManager.default.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true
+            )
+            try Data(repeating: 0x41, count: bytes).write(to: URL(filePath: path))
+            return path
+        }
         func digest(_ seed: String) -> Digest32 {
             Digest32(hexString: String(repeating: seed, count: 64))!
         }
+
+        let fotoA = try make("fotos/a.jpg", bytes: 4096)
+        let fotoB = try make("fotos/sub/a.jpg", bytes: 4096)
+        let docA = try make("docs/b.pdf", bytes: 2048)
+        let docLink = try make("docs/b-link.pdf", bytes: 2048)
+        let docOther = try make("docs/otro/b.pdf", bytes: 2048)
+        let copyA = try make("x/copia de c.txt", bytes: 512)
+        let copyB = try make("x/deep/c.txt", bytes: 512)
 
         // Group 0: two independent copies under one folder.
         // Group 1: three files where the second is the keeper's own storage under another name.
         // Group 2: two copies, one with a copy-looking name.
         let scan = DuplicateScan(
             scanID: "20260812-120000-000000",
-            root: "/r",
+            root: tree,
             createdAt: "2026-08-12T12:00:00.000000Z",
             groups: [
+                DuplicateGroup(size: 4096, digest: digest("a"), files: [fotoA, fotoB]),
                 DuplicateGroup(
-                    size: 4096, digest: digest("a"),
-                    files: ["/r/fotos/a.jpg", "/r/fotos/sub/a.jpg"]
-                ),
-                DuplicateGroup(
-                    size: 2048, digest: digest("b"),
-                    files: ["/r/docs/b.pdf", "/r/docs/b-link.pdf", "/r/docs/otro/b.pdf"],
+                    size: 2048,
+                    digest: digest("b"),
+                    files: [docA, docLink, docOther],
                     storage: StoragePartition(
-                        clusters: [
-                            ["/r/docs/b.pdf", "/r/docs/b-link.pdf"], ["/r/docs/otro/b.pdf"],
-                        ],
-                        isExact: true
-                    )
+                        clusters: [[docA, docLink], [docOther]], isExact: true)
                 ),
-                DuplicateGroup(
-                    size: 512, digest: digest("c"),
-                    files: ["/r/x/copia de c.txt", "/r/x/deep/c.txt"]
-                ),
+                DuplicateGroup(size: 512, digest: digest("c"), files: [copyA, copyB]),
             ]
         )
         try store.save(scan)
@@ -1936,12 +1954,20 @@ enum SelfTest {
         let controller = ReviewWindowController(scan: scan, stateDirectory: state)
         defer { controller.window?.close() }
 
+        // The window checks the filesystem off the main thread, so the assertions below wait for that
+        // answer rather than racing it: without this, the warning under test can be overwritten mid-run.
+        await controller.awaitPresenceForSelftest()
+        let onDisk = try expectSome(controller.groupPresence, "the presence check never landed")
+        try expect(onDisk.presentCount == 2, "\(onDisk.presentCount) of 2 files found on disk")
+        try expect(onDisk.isStale == false, "a freshly written tree reports as stale")
+
         try expect(controller.groupRowCount == 3, "\(controller.groupRowCount) groups listed")
         try expect(controller.fileRowCount == 2, "\(controller.fileRowCount) files in group 1")
 
         // 1. The common parent is hoisted, so the rows show only what differs.
         // Teeth: return nil from PathElision.commonParent and the header shows the fallback sentence.
-        try expect(controller.headerText == "/r/fotos", "header reads \(controller.headerText)")
+        try expect(
+            controller.headerText == tree + "/fotos", "header reads \(controller.headerText)")
         try expect(
             controller.fileCellText(row: 1, column: "file") == "sub/a.jpg",
             "row 1 reads \(controller.fileCellText(row: 1, column: "file") ?? "nil")"
@@ -1973,8 +1999,24 @@ enum SelfTest {
             "the shallower file is previewed as kept"
         )
 
-        // 3. Toggling makes it a real decision.
+        // The preview pane names the file under the cursor and reports nothing wrong with it.
+        // Teeth: drop the `refreshPreview()` call from `selectGroup` and the name comes back empty.
         controller.selectFileForSelftest(0)
+        try expect(
+            controller.preview.nameText == "a.jpg",
+            "the preview names \(controller.preview.nameText)"
+        )
+        try expect(
+            controller.preview.stateText.isEmpty,
+            "a file that is right there reports \(controller.preview.stateText)"
+        )
+        try expect(
+            controller.preview.detailText.contains("4.0 KB"),
+            "the preview detail reads \(controller.preview.detailText)"
+        )
+        try expect(controller.preview.isShowingPlaceholder == false, "the placeholder is still up")
+
+        // 3. Toggling makes it a real decision.
         controller.toggleForSelftest()
         try expect(
             controller.reviewState.decision(at: 0).isActionable, "toggling did not decide the group"
@@ -1992,8 +2034,8 @@ enum SelfTest {
             "undo left the group decided"
         )
 
-        // 5. **Keeping nothing is refused.** The preview keeps exactly one file; toggling that one off
-        // has to be refused rather than accepted as "remove everything".
+        // 5. **Keeping nothing is refused.** The preview keeps exactly one file; toggling that one off has
+        // to be refused rather than accepted as "remove everything".
         // Teeth: let `toggleCursor` remove the last keeper and the group ends up with zero kept files.
         try expect(
             controller.currentPresentation?.keptCount == 1,
@@ -2028,6 +2070,7 @@ enum SelfTest {
         // Teeth: build the Row with `sharesStorageWithKeeper: false` and the first assertions fail; return
         // `files[1...]` from `removalCandidates` and the removable ones do.
         controller.selectGroupForSelftest(1)
+        await controller.awaitPresenceForSelftest()
         try expect(controller.fileRowCount == 3, "group 2 shows \(controller.fileRowCount) files")
         controller.selectFileForSelftest(0)
         controller.toggleForSelftest()
@@ -2062,6 +2105,7 @@ enum SelfTest {
 
         // 7. A copy-looking name is flagged, and the heuristic prefers the other one.
         controller.selectGroupForSelftest(2)
+        await controller.awaitPresenceForSelftest()
         let copyGroup = try expectSome(
             controller.currentPresentation, "group 3 has no presentation")
         try expect(copyGroup.rows[0].looksLikeCopy, "\"copia de c.txt\" is not flagged as a copy")
@@ -2121,8 +2165,175 @@ enum SelfTest {
         try expect(
             reopened.reviewFlow.isAvailable(.apply) == false, "apply is offered with no dry run")
 
-        print("  3 groups: preview is not a decision, keep-nothing refused, undo restores")
+        print("  3 groups over a real tree: preview is not a decision, keep-nothing refused")
         print("  the keeper's own storage is not offered; 2 of 3 saved, the skip is not")
+    }
+
+    // MARK: - preview
+
+    /// Renders a real preview, and checks what the window says about a file that is no longer there.
+    ///
+    /// Two halves, both of which need a real filesystem and a real `quicklookd`:
+    ///
+    /// 1. **A PNG written here comes back as an image**, through `QLThumbnailGenerator` over XPC. That is
+    ///    not assertable in a unit test -- the output is whatever a thumbnail extension drew -- so what is
+    ///    asserted is that an image of a plausible size arrived, not what it looks like.
+    /// 2. **A file the scan listed and that no longer exists says so.** This is the case the real corpus is
+    ///    full of: the oldest scans here are from May and 473 of one scan's 501 paths are gone. A pane that
+    ///    drew a blank for those would be asking the user to decide about files that are already deleted.
+    ///
+    /// Plus the caching that makes a group of identical files cheap: eight files sharing one digest share
+    /// one thumbnail, so the second request is a hit and no second XPC call happens.
+    ///
+    /// Writes only under `/tmp`.
+    ///
+    /// Proof of teeth: four breaks, each named beside its assertion.
+    @MainActor
+    private static func checkPreview() async throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-preview-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let tree = root + "/tree"
+        try FileManager.default.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let store = ScanStore(state: state)
+
+        // A real PNG, drawn here rather than committed: a fixture image is a binary in the repository, and
+        // this also documents how to make one.
+        let width = 64
+        let height = 64
+        let context = try expectSome(
+            CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ),
+            "could not make a bitmap context"
+        )
+        context.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.9, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let drawn = try expectSome(context.makeImage(), "the context produced no image")
+        let pngPath = tree + "/blue.png"
+        let destination = try expectSome(
+            CGImageDestinationCreateWithURL(
+                URL(filePath: pngPath) as CFURL, "public.png" as CFString, 1, nil),
+            "could not make a PNG destination"
+        )
+        CGImageDestinationAddImage(destination, drawn, nil)
+        try expect(CGImageDestinationFinalize(destination), "the PNG was not written")
+
+        // A second file with the same bytes, so the group is a real duplicate group and the cache key is
+        // exercised the way it is in production.
+        let pngBytes = try Data(contentsOf: URL(filePath: pngPath))
+        let copyPath = tree + "/blue-copy.png"
+        try pngBytes.write(to: URL(filePath: copyPath))
+        let size = Int64(pngBytes.count)
+        // The real digest, because the thumbnail cache key is built from it: a made-up digest would still
+        // pass every assertion here while being wrong in production.
+        let realDigest = try ContentHasher().fullDigest(atPath: pngPath).digest
+
+        let scan = DuplicateScan(
+            scanID: "20260812-130000-000000",
+            root: tree,
+            createdAt: "2026-08-12T13:00:00.000000Z",
+            groups: [
+                DuplicateGroup(size: size, digest: realDigest, files: [copyPath, pngPath]),
+                // A group whose files are gone: the shape the real corpus is full of.
+                DuplicateGroup(
+                    size: 1234,
+                    digest: Digest32(hexString: String(repeating: "d", count: 64))!,
+                    files: [tree + "/gone-a.bin", tree + "/gone-b.bin"]
+                ),
+            ]
+        )
+        try store.save(scan)
+
+        let controller = ReviewWindowController(scan: scan, stateDirectory: state)
+        defer { controller.window?.close() }
+        await controller.awaitPresenceForSelftest()
+
+        // The pane's width decides the pixel size, and the width settles at layout. Settling first makes
+        // the cache count below exact rather than "one entry per size the pane happened to have".
+        controller.settleLayoutForSelftest()
+        try expect(
+            controller.currentThumbnailPixels >= ThumbnailPolicy.minimumPixels,
+            "the pane asks for \(controller.currentThumbnailPixels) pixels"
+        )
+
+        // 1. **A real preview arrives.**
+        // Teeth: return nil from `QuickLookThumbnailer.thumbnail` and this fails.
+        controller.selectFileForSelftest(0)
+        await controller.loadPreviewForSelftest()
+        try expect(controller.preview.hasImage, "no image was rendered for a real PNG")
+        try expect(
+            controller.preview.nameText == "blue-copy.png",
+            "the pane names \(controller.preview.nameText)"
+        )
+        try expect(
+            controller.preview.stateText.isEmpty,
+            "a file that is right there reports \(controller.preview.stateText)"
+        )
+
+        // 2. **The cache collapses a group to one thumbnail.**
+        //
+        // Asserted on the miss count, not on how many entries the cache holds. **The entry count is not
+        // stable and it took a flaky run to find out**: the pixel size comes from the pane's width, the
+        // width settles during layout, and a window that is never shown lays out at a time nobody controls.
+        // Three runs in six held two entries -- one per size the pane happened to have -- with correct code.
+        // The miss count is the property the digest key actually exists for, and it does not move.
+        //
+        // Teeth: key `ThumbnailKey` on the path instead of the digest and the miss count goes to 3.
+        let missesAfterFirst = controller.thumbnailMisses
+        controller.selectFileForSelftest(1)
+        await controller.loadPreviewForSelftest()
+        try expect(
+            controller.thumbnailMisses == missesAfterFirst,
+            "the second file of the group missed the cache: \(controller.thumbnailMisses) misses"
+        )
+        try expect(controller.thumbnailHits >= 1, "the cache never reported a hit")
+
+        // 3. **A group whose files are gone says so, and is not offered as a duplicate.**
+        // Teeth: make `FilePresence.check` always return `.present` and both assertions fail.
+        controller.selectGroupForSelftest(1)
+        await controller.awaitPresenceForSelftest()
+        let gone = try expectSome(controller.groupPresence, "the presence check never landed")
+        try expect(gone.missingCount == 2, "\(gone.missingCount) files reported missing, wanted 2")
+        try expect(
+            gone.isStillADuplicate == false, "a group with no surviving files is still offered")
+        try expect(
+            controller.warningText
+                == String(
+                    format: Strings.string("review.warning.notADuplicate"), 0, 2),
+            "the warning reads \(controller.warningText)"
+        )
+        controller.selectFileForSelftest(0)
+        try expect(
+            controller.preview.stateText == Strings.string("preview.state.missing"),
+            "the pane says \(controller.preview.stateText) about a file that is gone"
+        )
+        try expect(
+            controller.fileCellText(row: 0, column: "note")
+                == Strings.string("review.note.missing"),
+            "the note reads \(controller.fileCellText(row: 0, column: "note") ?? "nil")"
+        )
+
+        // 4. **A file whose length changed is reported as changed, not as fine.**
+        // Teeth: drop the size comparison from `FilePresence.check` and this reads as present.
+        try Data(repeating: 0x42, count: Int(size) + 7).write(to: URL(filePath: copyPath))
+        controller.selectGroupForSelftest(0)
+        await controller.awaitPresenceForSelftest()
+        let changed = try expectSome(controller.groupPresence, "the presence check never landed")
+        try expect(changed.changedCount == 1, "\(changed.changedCount) files changed, wanted 1")
+        try expect(
+            changed.isStillADuplicate == false,
+            "a group with one surviving file is still offered as a duplicate"
+        )
+
+        print(
+            "  a real PNG rendered through quicklookd; one thumbnail served both files of the group"
+        )
+        print(
+            "  a group whose files are gone is reported, and a changed length is not reported as fine"
+        )
     }
 
     // MARK: - about

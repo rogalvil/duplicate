@@ -257,6 +257,26 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **La clave de un thumbnail es el digest, no la ruta.** Los archivos de un grupo tienen contenido
+  idéntico por construcción, así que ocho fotos necesitan **un** thumbnail. Keyear por ruta manda ocho
+  viajes de XPC a `quicklookd` y guarda ocho copias del mismo bitmap.
+- **La extensión también va en la clave, y está documentado por Apple, no es precaución.**
+  `QLThumbnailGenerator.Request` dice que el content type *"is derived from the file extension"*, y el
+  content type elige el **proveedor** del thumbnail. Así que los mismos bytes llamados `a.pdf` y `a.dat`
+  se dibujan distinto con toda razón.
+- **`QLThumbnailGenerator` es XPC y puede colgarse.** Toda petición corre contra un plazo de 2 s; perder
+  la carrera cancela la petición y cae al icono del archivo, que `NSWorkspace` saca de la base local y no
+  se puede colgar. Una ventana que se congela porque una extensión de thumbnails se trabó es peor que una
+  que muestra un icono genérico.
+- **`attributesOfItem` NO sigue symlinks** — medido, y lo contrario es la suposición fácil. Aquí es el
+  comportamiento correcto: un symlink nunca es miembro de un escaneo, así que uno parado en una ruta
+  registrada significa que el archivo fue reemplazado. Y `trashItem` sobre un symlink manda el enlace y
+  deja los bytes, o sea espacio "liberado" que ningún `df` confirma.
+- **Contar entradas de una caché de thumbnails es inestable.** El tamaño en píxeles viene del ancho del
+  panel, el ancho se asienta durante el layout, y una ventana que nunca se muestra hace layout cuando le
+  toca. Tres de seis corridas guardaban dos entradas —una por tamaño— con código correcto. La propiedad
+  estable, y la que la clave por digest existe para dar, es que el **segundo archivo del grupo no falle**
+  la caché.
 - **Un atajo de menú es global.** Return o espacio como `keyEquivalent` dispararían mientras el usuario
   escribe en el campo de búsqueda de la biblioteca. Esas dos teclas viven en `ReviewTableView.keyDown`,
   donde solo significan algo porque una lista de archivos tiene el foco. Lo demás sí va al menú, que es

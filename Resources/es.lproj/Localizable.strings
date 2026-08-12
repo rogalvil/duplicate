@@ -108,3 +108,19 @@
 "button.cancel" = "Cancelar";
 "library.action.review" = "Revisar este escaneo";
 "library.relativePaths.reviewBody" = "Su raíz es \"%@\", que depende de la carpeta desde donde se corrió el CLI. Una revisión no podría accionar esas rutas.";
+
+/* Panel de vista previa */
+"preview.empty" = "Selecciona un archivo para verlo";
+"preview.state.missing" = "Este archivo ya no existe. El escaneo está vencido para él.";
+/* %1$@ el tamaño que registró el escaneo, %2$@ el tamaño en disco ahora. */
+"preview.state.sizeChanged" = "Este archivo cambió desde el escaneo: era %1$@ y ahora es %2$@. Ya no es un duplicado.";
+"preview.state.unreadable" = "Este archivo no se puede leer. macOS puede no haber dado acceso a su carpeta.";
+"preview.state.notAFile" = "Aquí hay una carpeta o un enlace, no el archivo que registró el escaneo.";
+"review.note.missing" = "ya no está";
+"review.note.changed" = "cambió desde el escaneo";
+"review.note.unreadable" = "no se puede leer";
+"review.note.notAFile" = "ya no es un archivo";
+/* %1$d archivos que siguen ahí, %2$d los que registró el escaneo. */
+"review.warning.notADuplicate" = "Solo %1$d de los %2$d archivos que registró este grupo siguen existiendo, así que ya no hay nada que deduplicar aquí.";
+/* %1$d archivos ausentes o cambiados, %2$d los que registró el escaneo. */
+"review.warning.stale" = "%1$d de los %2$d archivos de este grupo ya no están o cambiaron desde el escaneo.";
