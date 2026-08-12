@@ -139,6 +139,11 @@ cero, listas vacías.
 
 ## Selftest: volver verificable lo que parece no serlo
 
+El catálogo de los 21 modos está en [`docs/SELFTEST.md`](docs/SELFTEST.md), con qué afirma cada uno,
+el cambio exacto con el que se probó que falla, y qué toca en disco. **Ojo con lo último**: el
+directorio de estado tiene 119 escaneos reales del usuario, y ningún modo escribe ahí. Los tres de
+interoperabilidad lo leen y nada más.
+
 `swift test` no tiene bundle. No puede ver si el Makefile sustituyó los placeholders, si los `.lproj`
 aterrizaron donde `Bundle.main` los busca, ni si el menú tiene atajos colisionados.
 

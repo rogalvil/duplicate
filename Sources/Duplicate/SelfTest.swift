@@ -22,14 +22,24 @@ enum SelfTest {
     static func run(arguments: [String]) async -> Int32 {
         let mode = value(for: "--mode", in: arguments) ?? "all"
 
+        // The catalogue, in the order `--mode all` runs them: cheap and structural first, so a broken
+        // bundle fails in a second instead of after a Trash round-trip.
+        let allModes = [
+            "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
+            "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
+            "trash", "undo", "review", "decisions", "gate", "library", "review-window",
+        ]
+
         let modes: [String]
         switch mode {
         case "all":
-            modes = [
-                "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
-                "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
-                "trash", "undo", "review", "decisions", "gate", "library", "review-window",
-            ]
+            modes = allModes
+        case let name where !allModes.contains(name):
+            // Naming the alternatives, because the usual way to get here is a typo and an error that
+            // only says "unknown" makes the reader go read the source.
+            print("FAILED: unknown selftest mode '\(name)'")
+            print("  available: \(allModes.joined(separator: ", "))")
+            return 1
         default: modes = [mode]
         }
 
