@@ -257,6 +257,12 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Un atajo de teclado no es una interfaz.** Simular y aplicar existía solo como ⌘⇧D y un ítem de menú,
+  y nada en pantalla decía que una revisión se podía aplicar; revisar un escaneo solo se descubría por
+  doble clic. Las dos acciones primarias de la app llevan botón: el de simular en el pie de la revisión,
+  junto al conteo que ya atrae la vista, y el de revisar en la toolbar de la biblioteca. Los atajos siguen
+  en los menús, que es donde un atajo se vuelve descubrible **después** de saber que existe. Lo reportó el
+  uso real.
 - **Todo lo que mueve archivos tiene que refrescar la presencia, y eso incluye deshacer.** El primer
   cableado solo lo hacía tras aplicar, así que la ventana seguía diciendo "este archivo ya no existe"
   sobre un archivo que acababa de volver. Lo encontró el uso real, no un test.

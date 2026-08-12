@@ -10,7 +10,7 @@ import DuplicateCore
 /// timestamp, and `CFBundleDocumentTypes` would invite opening one by double-click and drag the whole
 /// `NSDocument` architecture in for nothing.
 @MainActor
-final class LibraryWindowController: NSWindowController {
+final class LibraryWindowController: NSWindowController, NSToolbarItemValidation {
     private let stateDirectory: StateDirectory
     private var library: ScanLibrary
     private var rows: [ScanStore.Summary] = []
@@ -327,6 +327,15 @@ final class LibraryWindowController: NSWindowController {
         panel.showWindow(nil)
     }
 
+    /// Greys out the Review item when no row is selected.
+    ///
+    /// `NSToolbarItemValidation` rather than `validateMenuItem`: a toolbar item asks its target through this,
+    /// and without it the button stays enabled and does nothing when nothing is selected.
+    func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
+        guard item.action == #selector(reviewScan(_:)) else { return true }
+        return tableView.selectedRow >= 0 || tableView.clickedRow >= 0
+    }
+
     /// Tells every open review to re-read the disk.
     ///
     /// The Sessions menu can undo a session while a review of that scan is open, and that review's rows are
@@ -632,9 +641,13 @@ extension LibraryWindowController: NSToolbarDelegate {
     private static let sortItem = NSToolbarItem.Identifier("sort")
     private static let refreshItem = NSToolbarItem.Identifier("refresh")
     private static let newScanItem = NSToolbarItem.Identifier("newScan")
+    private static let reviewItem = NSToolbarItem.Identifier("review")
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.newScanItem, Self.refreshItem, Self.sortItem, .flexibleSpace, .init("search")]
+        [
+            Self.newScanItem, Self.reviewItem, Self.refreshItem, Self.sortItem, .flexibleSpace,
+            .init("search"),
+        ]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -655,6 +668,19 @@ extension LibraryWindowController: NSToolbarDelegate {
                 systemSymbolName: "plus", accessibilityDescription: item.label)
             item.target = self
             item.action = #selector(beginScan(_:))
+            return item
+        case Self.reviewItem:
+            // The other primary action of the app, and it was reachable only by double-clicking a row --
+            // which nothing on screen said. Same complaint as the review's missing Simulate button.
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = Strings.string("library.toolbar.review")
+            item.toolTip = item.label
+            item.image = NSImage(
+                systemSymbolName: "checklist", accessibilityDescription: item.label)
+            item.target = self
+            item.action = #selector(reviewScan(_:))
+            // Greyed out with no row selected, rather than opening nothing.
+            item.autovalidates = true
             return item
         case Self.refreshItem:
             let item = NSToolbarItem(itemIdentifier: identifier)

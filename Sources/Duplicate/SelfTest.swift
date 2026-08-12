@@ -2639,6 +2639,11 @@ enum SelfTest {
         )
         try expect(
             review.reviewFlow.isAvailable(.apply) == false, "apply is offered before any dry run")
+        // And the button is off until something is decided, so it cannot open a sheet with nothing in it.
+        try expect(
+            review.canSimulateFromButton == false,
+            "the footer button offers to simulate an untouched review"
+        )
 
         // Decide both groups, keeping the file named `keep.txt` in each.
         //
@@ -2672,6 +2677,18 @@ enum SelfTest {
                 "group \(index + 1) is still undecided after confirming"
             )
         }
+
+        // **The button, not just the shortcut.** A keyboard shortcut nobody can discover is not an
+        // interface -- reported from real use, which is why this is asserted and not only wired.
+        //
+        // Teeth: drop the `simulateButton.isEnabled` line from `refreshDetail` and the first check fails,
+        // because the button starts disabled and never turns on.
+        try expect(
+            review.canSimulateFromButton, "the footer button is disabled with two groups decided")
+        try expect(
+            review.simulateButtonTitle == Strings.string("review.button.simulate"),
+            "the button reads \(review.simulateButtonTitle)"
+        )
 
         let plan = ApplyPlan.from(review.reviewState)
         try expect(plan.fileCount == 2, "\(plan.fileCount) files planned, wanted 2")
