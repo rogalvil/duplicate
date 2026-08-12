@@ -25,7 +25,11 @@ let package = Package(
 
         .testTarget(
             name: "DuplicateCoreTests",
-            dependencies: ["DuplicateCore"]
+            dependencies: ["DuplicateCore"],
+            // Read through #filePath, not Bundle.module. They are interop fixtures written by
+            // Python's json.dumps and only ever compared byte for byte; copying them into a
+            // resource bundle would add a build step and change nothing.
+            exclude: ["Fixtures"]
         ),
     ]
 )

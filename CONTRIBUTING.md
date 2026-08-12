@@ -143,12 +143,19 @@ cero, listas vacías.
 aterrizaron donde `Bundle.main` los busca, ni si el menú tiene atajos colisionados.
 
 ```bash
-make selftest MODE=bundle      # ningún __PLACEHOLDER__ sobrevivió
-make selftest MODE=state-dir   # la resolución coincide con la del CLI
-make selftest MODE=l10n        # las dos tablas cubren las mismas claves
-make selftest MODE=menu        # ningún atajo duplicado
+make selftest MODE=bundle          # ningún __PLACEHOLDER__ sobrevivió
+make selftest MODE=state-dir       # la resolución coincide con la del CLI
+make selftest MODE=l10n            # las dos tablas cubren las mismas claves
+make selftest MODE=menu            # ningún atajo duplicado
+make selftest MODE=json-roundtrip  # cada JSON del CLI se re-codifica byte a byte
+make selftest MODE=json-roundtrip ARGS="--dir /otra/ruta"
 make selftest-all
 ```
+
+`json-roundtrip` corre contra el corpus real en
+`$XDG_STATE_HOME/rav/duplicate/`. Es de solo lectura: no escribe, no mueve, no borra. Si la máquina
+nunca corrió el CLI, imprime `SKIPPED` con el conteo de directorios ausentes en vez de un OK
+silencioso.
 
 Dos reglas que lo hacen valer:
 

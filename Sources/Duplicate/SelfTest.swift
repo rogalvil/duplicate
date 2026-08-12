@@ -24,7 +24,7 @@ enum SelfTest {
 
         let modes: [String]
         switch mode {
-        case "all": modes = ["bundle", "state-dir", "l10n", "menu"]
+        case "all": modes = ["bundle", "state-dir", "l10n", "menu", "json-roundtrip"]
         default: modes = [mode]
         }
 
@@ -35,6 +35,7 @@ enum SelfTest {
                 case "state-dir": try checkStateDirectory()
                 case "l10n": try checkLocalization()
                 case "menu": try checkMenu()
+                case "json-roundtrip": try checkJSONRoundTrip(arguments: arguments)
                 default:
                     print("FAILED: unknown selftest mode '\(name)'")
                     return 1
@@ -219,6 +220,77 @@ enum SelfTest {
                 "\(table): only in es.lproj: \(audit.orphaned.joined(separator: ", "))"
             )
             print("  \(table): \(base.count) keys, \(audit.identical.count) identical in both")
+        }
+    }
+
+    // MARK: - json-roundtrip
+
+    /// Proves byte-for-byte JSON compatibility against files the CLI really wrote.
+    ///
+    /// The unit tests cover this with synthetic fixtures, because the user's real state directory
+    /// holds private paths and a committed fixture is a published file. This mode covers the real
+    /// corpus instead: it reads every JSON document in the six shared subdirectories, re-encodes it,
+    /// and compares the bytes. Read-only -- nothing is written, moved or deleted.
+    ///
+    /// Pass `--dir <path>` to point it somewhere else. Reports and passes when there is nothing to
+    /// read, since a machine that has never run the CLI is not a failing machine -- but it says so
+    /// rather than printing a silent OK.
+    ///
+    /// Proof of teeth: change the indent in JSONWriter from 2 to 4 and every file fails at byte 2.
+    private static func checkJSONRoundTrip(arguments: [String]) throws {
+        let state = StateDirectory.current()
+        let roots: [String] =
+            if let override = value(for: "--dir", in: arguments) {
+                [override]
+            } else {
+                StateDirectory.Slot.allCases.filter(\.isSharedWithCLI).map(state.path(for:))
+            }
+
+        var checked = 0
+        var failures: [String] = []
+        var skippedDirectories = 0
+
+        for root in roots {
+            guard let names = try? FileManager.default.contentsOfDirectory(atPath: root) else {
+                skippedDirectories += 1
+                continue
+            }
+            for name in names.sorted() where name.hasSuffix(".json") {
+                let path = root + "/" + name
+                let original: Data
+                do {
+                    original = try Data(contentsOf: URL(filePath: path))
+                } catch {
+                    failures.append("\(name): unreadable: \(error.localizedDescription)")
+                    continue
+                }
+                do {
+                    let reencoded = try JSONWriter.document(JSONReader.parse(original))
+                    checked += 1
+                    guard reencoded != original else { continue }
+                    let offset =
+                        zip(original, reencoded).enumerated()
+                        .first { $0.element.0 != $0.element.1 }?.offset
+                    failures.append(
+                        "\(name): differs at byte \(offset.map(String.init) ?? "the end"); "
+                            + "\(original.count) bytes in, \(reencoded.count) out"
+                    )
+                } catch {
+                    failures.append("\(name): \(error)")
+                }
+            }
+        }
+
+        guard failures.isEmpty else {
+            throw SelfTestFailure(
+                "\(failures.count) of \(checked + failures.count) documents did not round-trip:\n    "
+                    + failures.prefix(10).joined(separator: "\n    ")
+            )
+        }
+        if checked == 0 {
+            print("  SKIPPED: no JSON found (\(skippedDirectories) directories absent)")
+        } else {
+            print("  \(checked) documents re-encoded byte-identically")
         }
     }
 
