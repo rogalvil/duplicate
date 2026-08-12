@@ -16,10 +16,18 @@ struct RealPathTests {
 
         #expect(resolved != temporary, "this Mac's temp directory is not behind a symlink")
         #expect(resolved.hasPrefix("/private/var"))
-        #expect(
-            URL(filePath: temporary).resolvingSymlinksInPath().path(percentEncoded: false)
-                == temporary)
-        #expect((temporary as NSString).resolvingSymlinksInPath == temporary)
+
+        // The claim is specifically that Foundation does not *add* the /private prefix -- not that it
+        // returns the input untouched. That distinction matters: an earlier version of this test asserted
+        // exact equality and passed locally on macOS 26 while failing CI on macOS 15, where
+        // `resolvingSymlinksInPath` appends a trailing slash. Both OS versions agree on the part that
+        // decides the design, so that is what is asserted.
+        let viaURL = URL(filePath: temporary).resolvingSymlinksInPath().path(percentEncoded: false)
+        let viaString = (temporary as NSString).resolvingSymlinksInPath
+        #expect(!viaURL.hasPrefix("/private"), "URL resolved to \(viaURL)")
+        #expect(!viaString.hasPrefix("/private"), "NSString resolved to \(viaString)")
+        #expect(RealPath.trimmingTrailingSlashes(viaURL) == temporary)
+        #expect(RealPath.trimmingTrailingSlashes(viaString) == temporary)
     }
 
     @Test("Returns nil for a path that does not exist")

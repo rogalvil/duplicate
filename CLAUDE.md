@@ -146,6 +146,10 @@ No re-descubrirlas:
   señal. Ahí "no se encontraron duplicados" es indistinguible de "no pude entrar a 47 directorios
   protegidos". Esto se descubrió porque el arnés **no falló** al invertir el retorno; la regla de
   probar los dientes es lo que lo destapó.
+- **`resolvingSymlinksInPath` agrega slash final en macOS 15 y no en macOS 26.** Lo destapó CI: un
+  test que comparaba igualdad exacta pasaba local y fallaba en el runner. La afirmación que sí vale en
+  las dos versiones es que Foundation **no agrega** el prefijo `/private`; comparar la cadena completa
+  es afirmar una propiedad incidental. Tercera divergencia entre SDKs que solo CI puede atrapar.
 - **`swift-format` local puede diferir del de CI** (6.3 aquí, 6.0/6.1 en el runner `macos-15`). Si
   `make lint` pasa local y falla en CI, es eso; no reformatear a ciegas.
 - **Los imports de AVFoundation, ImageIO, CoreGraphics y Accelerate van con `@preconcurrency`.
