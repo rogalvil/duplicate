@@ -262,6 +262,8 @@ Reversiones verificadas para este scaffolding:
 | cambiar el indent del JSON de 2 a 4 | `json-roundtrip`, en los 226 documentos, "differs at byte 4" |
 | renombrar la clave `sha256` a `digest` en el codec | `scans`, "differs at byte 191" |
 | poner `created_at` antes de `root` al codificar | `scans`, "differs at byte 44" |
+| caer al preview para los grupos sin decidir | `review`, "an untouched review already had 50 decisions" |
+| que `skip` reescriba el keep set al índice 0 | `review`, "a skip added a decision: 2" |
 | quitar el guard de `fileExists` en `UndoRunner` | el test `refusesLateOccupant`; el archivo nuevo del usuario desaparece |
 | reescribir la línea del journal en vez de agregar `undone_at` | el test `restorationIsAppended` |
 | ignorar `resultingItemURL` y devolver la ruta original | `trash`, "nothing at the reported destination" |

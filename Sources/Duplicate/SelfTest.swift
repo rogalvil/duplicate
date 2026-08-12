@@ -28,7 +28,7 @@ enum SelfTest {
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
                 "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
-                "trash", "undo",
+                "trash", "undo", "review",
             ]
         default: modes = [mode]
         }
@@ -50,6 +50,7 @@ enum SelfTest {
                 case "storage": try await checkStorageClasses(arguments: arguments)
                 case "trash": try checkTrashRoundTrip()
                 case "undo": try checkUndoCycle()
+                case "review": try await checkReviewTriState()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -1268,6 +1269,116 @@ enum SelfTest {
 
         print("  4 files trashed, journalled, restored byte-identical")
         print("  a second undo over occupied work was refused, and the work survived")
+    }
+
+    // MARK: - review
+
+    /// Proves a partly reviewed scan saves only what was reviewed.
+    ///
+    /// This is the fix for the most dangerous defect the port inherited. The CLI's `decisions()` writes an
+    /// entry for **every** group, including ones the user never opened, filled in with the heuristic's guess
+    /// (`src/rav/core/duplicate_review.py:152-157`). Quit after group 1 of 50 and the file records decisions
+    /// for 49 groups; apply then acts on all of them. In a terminal that needs a deliberate `q`. In a window,
+    /// quitting is closing a window.
+    ///
+    /// The assertion is a count: review one group of fifty, and the saved document has exactly one key. It
+    /// also checks the other direction -- that a document written this way is still readable by the CLI's
+    /// rules, because absence is the contract both tools rely on.
+    ///
+    /// Proof of teeth: make `decisionsForSaving` fall back to `effectiveKeep` for undecided groups -- the
+    /// CLI's behaviour -- and the count jumps to fifty.
+    private static func checkReviewTriState() async throws {
+        let manager = FileManager.default
+        let scratch = NSTemporaryDirectory() + "/duplicate-review-\(getpid())"
+        defer { try? manager.removeItem(atPath: scratch) }
+        try manager.createDirectory(atPath: scratch + "/tree", withIntermediateDirectories: true)
+
+        // Fifty groups of two, from a real scan so the group keys are real content identities.
+        for index in 0..<50 {
+            let payload = Data(repeating: UInt8(index % 251), count: 400 + index)
+            try manager.createDirectory(
+                atPath: scratch + "/tree/g\(index)",
+                withIntermediateDirectories: true
+            )
+            for name in ["a.bin", "b.bin"] {
+                try payload.write(to: URL(filePath: scratch + "/tree/g\(index)/" + name))
+            }
+        }
+
+        let instant = ScanIdentifier.Instant(
+            year: 2026, month: 5, day: 11, hour: 7, minute: 0, second: 0, microsecond: 1
+        )
+        let outcome = try await DuplicateFinder().find(
+            root: scratch + "/tree",
+            instant: instant,
+            configuration: .init(concurrency: 4)
+        )
+        try expect(
+            outcome.scan.groups.count == 50,
+            "expected 50 groups, got \(outcome.scan.groups.count)"
+        )
+
+        var state = ExactReviewState(scan: outcome.scan, root: scratch + "/tree")
+        try expect(
+            state.decisionsForSaving.isEmpty,
+            "an untouched review already had \(state.decisionsForSaving.count) decisions"
+        )
+        try expect(state.removalPlan.isEmpty, "an untouched review already had a removal plan")
+
+        // Review exactly one group, then stop -- the shape of closing a window.
+        let confirmed = state.confirm()
+        try expect(confirmed == .advanced, "confirming the first group returned \(confirmed)")
+
+        let saved = state.decisionsForSaving
+        try expect(
+            saved.count == 1,
+            "reviewed 1 of 50 groups but saved \(saved.count) decisions"
+        )
+        let tally = state.tally
+        try expect(
+            tally == (decided: 1, skipped: 0, undecided: 49),
+            "tally is \(tally)"
+        )
+        try expect(
+            state.removalPlan.count == 1,
+            "the removal plan covers \(state.removalPlan.count) groups"
+        )
+
+        // And the document that gets written holds one key, in the shape the CLI reads.
+        let document = DecisionsCodec.document(from: state, instant: instant)
+        let data = try JSONWriter.document(DecisionsCodec.encode(document))
+        let reloaded = try DecisionsCodec.decode(JSONReader.parse(data))
+        try expect(
+            reloaded.decisions.count == 1,
+            "the saved document holds \(reloaded.decisions.count) keys")
+        try expect(
+            try JSONWriter.document(DecisionsCodec.encode(reloaded)) == data,
+            "the decisions document did not survive a round trip"
+        )
+
+        // Reopening it restores the one decision and leaves the other 49 undecided.
+        let reopened = ExactReviewState(
+            scan: outcome.scan,
+            root: scratch + "/tree",
+            priorDecisions: reloaded.byKey
+        )
+        try expect(
+            reopened.tally == (decided: 1, skipped: 0, undecided: 49),
+            "after reopening, the tally is \(reopened.tally)"
+        )
+
+        // Skipping is recorded as neither, so the UI can tell "you skipped these" from "you never looked".
+        var skipping = state
+        let skipped = skipping.skip()
+        try expect(skipped == .advanced, "skip returned \(skipped)")
+        try expect(
+            skipping.decisionsForSaving.count == 1,
+            "a skip added a decision: \(skipping.decisionsForSaving.count)"
+        )
+        try expect(skipping.tally == (decided: 1, skipped: 1, undecided: 48), "\(skipping.tally)")
+
+        print("  reviewed 1 of 50 groups; saved exactly 1 decision, 49 left undecided")
+        print("  a skip is recorded as neither decided nor unseen")
     }
 
     // MARK: - about
