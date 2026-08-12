@@ -50,6 +50,13 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     private let headerLabel = NSTextField(labelWithString: "")
     private let subheaderLabel = NSTextField(labelWithString: "")
     private let tallyLabel = NSTextField(labelWithString: "")
+    /// The primary action, in the footer where the tally already draws the eye.
+    ///
+    /// **Added because a keyboard shortcut is not an interface.** ⌘⇧D still works and still lives in the
+    /// Group menu -- that is where a shortcut becomes discoverable *after* you know it exists -- but nothing
+    /// on screen said the review could be applied at all.
+    private let simulateButton = NSButton()
+    private let saveButton = NSButton()
     private let warningLabel = NSTextField(labelWithString: "")
 
     private let undo = UndoManager()
@@ -178,17 +185,41 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         split.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
         split.translatesAutoresizingMaskIntoConstraints = false
 
+        saveButton.title = Strings.string("review.button.save")
+        saveButton.bezelStyle = .rounded
+        saveButton.target = self
+        saveButton.action = #selector(saveDecisions(_:))
+
+        simulateButton.title = Strings.string("review.button.simulate")
+        simulateButton.bezelStyle = .rounded
+        // The primary action of the window, drawn as one with a large control size.
+        //
+        // **No `.glass` behind an `#available`.** That was the first attempt and CI rejected it: `#available`
+        // guards *runtime* availability, not whether the symbol exists in the SDK being compiled against,
+        // and `.glass` is absent from the macOS 15 SDK the runner uses. A newer-SDK symbol cannot be reached
+        // this way at all -- fifth divergence between SDKs that only CI catches.
+        simulateButton.controlSize = .large
+        simulateButton.target = self
+        simulateButton.action = #selector(simulateApply(_:))
+
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        let footer = NSStackView(views: [tallyLabel, spacer, saveButton, simulateButton])
+        footer.orientation = .horizontal
+        footer.spacing = 10
+        footer.translatesAutoresizingMaskIntoConstraints = false
+
         let content = NSView()
         content.addSubview(split)
-        content.addSubview(tallyLabel)
-        tallyLabel.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(footer)
         NSLayoutConstraint.activate([
             split.topAnchor.constraint(equalTo: content.topAnchor),
             split.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             split.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            split.bottomAnchor.constraint(equalTo: tallyLabel.topAnchor, constant: -6),
-            tallyLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
-            tallyLabel.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -8),
+            split.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -6),
+            footer.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
+            footer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
+            footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -10),
             inner.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -28),
             inner.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
             previewPane.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
@@ -253,6 +284,12 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             tally.decided, tally.skipped, tally.undecided,
             ByteSize.format(state.plannedReclaimBytes)
         )
+        // The buttons say the same thing the menu items do, from one source: nothing decided means nothing
+        // to simulate and nothing to save.
+        let hasDecisions = !state.decisionsForSaving.isEmpty
+        simulateButton.isEnabled = hasDecisions
+        saveButton.isEnabled = hasDecisions && hasUnsavedChanges
+
         fileTable.reloadData()
         groupTable.reloadData(
             forRowIndexes: IndexSet(integersIn: 0..<state.groupCount),
@@ -605,6 +642,8 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var fileRowCount: Int { fileTable.numberOfRows }
     var canUndoReview: Bool { undo.canUndo }
     var openApplySheet: ApplySheetController? { applySheet }
+    var canSimulateFromButton: Bool { simulateButton.isEnabled }
+    var simulateButtonTitle: String { simulateButton.title }
     /// Whether this review's apply sheet is moving files right now.
     var isApplying: Bool { applySheet?.isApplying ?? false }
     func simulateForSelftest() { simulateApply(nil) }

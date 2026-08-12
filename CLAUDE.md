@@ -160,6 +160,10 @@ No re-descubrirlas:
   test que comparaba igualdad exacta pasaba local y fallaba en el runner. La afirmación que sí vale en
   las dos versiones es que Foundation **no agrega** el prefijo `/private`; comparar la cadena completa
   es afirmar una propiedad incidental. Tercera divergencia entre SDKs que solo CI puede atrapar.
+- **`#available` no protege la *existencia* de un símbolo en el SDK, solo su disponibilidad en runtime.**
+  Poner `NSButton.BezelStyle.glass` detrás de `if #available(macOS 26.0, *)` compila local (SDK 26) y es
+  error duro en CI (SDK 15), porque el símbolo no está ahí para compilar. Un símbolo de un SDK más nuevo no
+  se alcanza así. **Quinta divergencia entre SDKs que solo CI atrapa.**
 - **El closure de `UndoManager.registerUndo` no es `@MainActor` en el SDK 15.** Compila limpio local
   (SDK 26) y es error duro en CI. Va con `MainActor.assumeIsolated`, que es una suposición sana:
   `UndoManager` corre el bloque en el hilo que llamó a `undo()`, y el único que llama es el menú
@@ -257,6 +261,12 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Un atajo de teclado no es una interfaz.** Simular y aplicar existía solo como ⌘⇧D y un ítem de menú,
+  y nada en pantalla decía que una revisión se podía aplicar; revisar un escaneo solo se descubría por
+  doble clic. Las dos acciones primarias de la app llevan botón: el de simular en el pie de la revisión,
+  junto al conteo que ya atrae la vista, y el de revisar en la toolbar de la biblioteca. Los atajos siguen
+  en los menús, que es donde un atajo se vuelve descubrible **después** de saber que existe. Lo reportó el
+  uso real.
 - **Todo lo que mueve archivos tiene que refrescar la presencia, y eso incluye deshacer.** El primer
   cableado solo lo hacía tras aplicar, así que la ventana seguía diciendo "este archivo ya no existe"
   sobre un archivo que acababa de volver. Lo encontró el uso real, no un test.

@@ -202,3 +202,8 @@
 "undo.nothingToDo" = "Nada de esta sesión se puede devolver. La Papelera pudo haberse vaciado.";
 "undo.noJournal" = "Esta sesión no tiene registro, así que no se puede devolver nada.";
 "button.close" = "Cerrar";
+
+/* Botones del pie de la revisión */
+"review.button.simulate" = "Simular y aplicar...";
+"review.button.save" = "Guardar decisiones";
+"library.toolbar.review" = "Revisar";
