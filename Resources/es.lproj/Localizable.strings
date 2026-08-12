@@ -1,0 +1,12 @@
+/* Tabla de cadenas en español. Cada clave de en.lproj/Localizable.strings tiene que existir
+   aquí también; el modo --selftest --mode l10n falla cuando las dos tablas divergen. */
+
+/* Menú principal */
+"menu.app.about" = "Acerca de Duplicados";
+"menu.app.hide" = "Ocultar Duplicados";
+"menu.app.hideOthers" = "Ocultar otras";
+"menu.app.showAll" = "Mostrar todo";
+"menu.app.quit" = "Salir de Duplicados";
+
+/* Ventanas */
+"window.library.title" = "Escaneos";

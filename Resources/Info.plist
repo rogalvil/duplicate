@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template. The Makefile substitutes the __PLACEHOLDER__ values when it assembles the
+  bundle, keeping the identity defined in exactly one place (the Makefile variables).
+
+  Changing CFBundleIdentifier invalidates every TCC grant already given to this app.
+
+  The usage-description keys below are load-bearing: walking a folder tree IS this app, so
+  they are the first prompts a user ever sees. Their localised text lives in
+  en.lproj/InfoPlist.strings and es.lproj/InfoPlist.strings; the values here are the English
+  fallback for a system whose language is neither.
+
+  There is deliberately no NSAppleEventsUsageDescription: reveal-in-Finder and open-with go
+  through NSWorkspace, not Apple events, precisely to avoid that key and its extra prompt.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>__APP_NAME__</string>
+    <key>CFBundleDisplayName</key>
+    <string>__APP_NAME__</string>
+    <key>CFBundleExecutable</key>
+    <string>__APP_NAME__</string>
+    <key>CFBundleIdentifier</key>
+    <string>__BUNDLE_ID__</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>__MIN_MACOS__</string>
+
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+
+    <!--
+      English is the development language; Spanish ships beside it. Declaring both here is what
+      makes the app follow the system language order instead of always falling back to English.
+    -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>es</string>
+    </array>
+
+    <!--
+      No LSUIElement. This is a windowed app: it needs a Dock icon, an app switcher entry and a
+      main menu, unlike the menu bar app this scaffolding came from.
+    -->
+
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Duplicate reads your Desktop to find duplicate files. Nothing is moved to the Trash until you approve it.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Duplicate reads your Documents folder to find duplicate files. Nothing is moved to the Trash until you approve it.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Duplicate reads your Downloads folder to find duplicate files. Nothing is moved to the Trash until you approve it.</string>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>Duplicate reads external disks to find duplicate files. Nothing is moved to the Trash until you approve it.</string>
+    <key>NSNetworkVolumesUsageDescription</key>
+    <string>Duplicate reads network volumes to find duplicate files. Nothing is moved to the Trash until you approve it.</string>
+
+    <!--
+      Stamped by the Makefile so the About panel can report which build is running. Not standard
+      keys, hence the prefix; macOS ignores them.
+    -->
+    <key>DUPBuildDate</key>
+    <string>__BUILD_DATE__</string>
+    <key>DUPGitCommit</key>
+    <string>__GIT_COMMIT__</string>
+
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 Rogelio Alvarado Vilchis. MIT License.</string>
+</dict>
+</plist>

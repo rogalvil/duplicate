@@ -1,0 +1,13 @@
+/* Valores localizados del Info.plist. Reemplazan los fallbacks en inglés compilados en
+   Contents/Info.plist cuando el idioma del sistema es español.
+
+   El nombre visible cambia a "Duplicados": el identificador del bundle y el ejecutable siguen
+   siendo "Duplicate", porque los identificadores van en inglés. */
+
+"CFBundleDisplayName" = "Duplicados";
+
+"NSDesktopFolderUsageDescription" = "Duplicados lee tu Escritorio para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
+"NSDocumentsFolderUsageDescription" = "Duplicados lee tu carpeta Documentos para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
+"NSDownloadsFolderUsageDescription" = "Duplicados lee tu carpeta Descargas para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
+"NSRemovableVolumesUsageDescription" = "Duplicados lee discos externos para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
+"NSNetworkVolumesUsageDescription" = "Duplicados lee volúmenes de red para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
