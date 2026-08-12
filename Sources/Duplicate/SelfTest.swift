@@ -24,7 +24,7 @@ enum SelfTest {
 
         let modes: [String]
         switch mode {
-        case "all": modes = ["bundle", "state-dir", "l10n", "menu", "json-roundtrip"]
+        case "all": modes = ["bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans"]
         default: modes = [mode]
         }
 
@@ -36,6 +36,7 @@ enum SelfTest {
                 case "l10n": try checkLocalization()
                 case "menu": try checkMenu()
                 case "json-roundtrip": try checkJSONRoundTrip(arguments: arguments)
+                case "scans": try checkTypedScanRoundTrip(arguments: arguments)
                 default:
                     print("FAILED: unknown selftest mode '\(name)'")
                     return 1
@@ -291,6 +292,79 @@ enum SelfTest {
             print("  SKIPPED: no JSON found (\(skippedDirectories) directories absent)")
         } else {
             print("  \(checked) documents re-encoded byte-identically")
+        }
+    }
+
+    // MARK: - scans
+
+    /// Proves every real scan decodes into the typed model and re-encodes byte-identically.
+    ///
+    /// `json-roundtrip` proves the generic tree survives. This proves the path production actually
+    /// takes -- `DuplicateScanCodec.decode` into `DuplicateScan` and back -- which is where a wrong
+    /// key name, a reordered field, or an over-eager numeric coercion would show up. It also reports
+    /// how many scans carry relative paths, because those cannot be acted on and the UI has to ask
+    /// the user to resolve them.
+    ///
+    /// Read-only. Nothing is written, moved or deleted.
+    ///
+    /// Proof of teeth: rename the `sha256` key in the codec to `digest` and every scan with at least
+    /// one group fails.
+    private static func checkTypedScanRoundTrip(arguments: [String]) throws {
+        let state = StateDirectory.current()
+        let root = value(for: "--dir", in: arguments) ?? state.path(for: .scans)
+
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: root) else {
+            print("  SKIPPED: \(root) is not readable")
+            return
+        }
+
+        var decoded = 0
+        var groups = 0
+        var files = 0
+        var relative = 0
+        var failures: [String] = []
+
+        for name in names.sorted() where name.hasSuffix(".json") {
+            let path = root + "/" + name
+            do {
+                let original = try Data(contentsOf: URL(filePath: path))
+                let scan = try DuplicateScanCodec.decode(JSONReader.parse(original))
+                let reencoded = try JSONWriter.document(DuplicateScanCodec.encode(scan))
+                guard reencoded == original else {
+                    let offset =
+                        zip(original, reencoded).enumerated()
+                        .first { $0.element.0 != $0.element.1 }?.offset
+                    failures.append(
+                        "\(name): differs at byte \(offset.map(String.init) ?? "the end")"
+                    )
+                    continue
+                }
+                // The filename and the field inside must agree, or re-saving this scan would either
+                // overwrite a different one or silently rename this one.
+                guard name == scan.scanID + ".json" else {
+                    failures.append("\(name): holds scan_id \(scan.scanID)")
+                    continue
+                }
+                decoded += 1
+                groups += scan.groups.count
+                files += scan.fileCount
+                if scan.hasRelativePaths { relative += 1 }
+            } catch {
+                failures.append("\(name): \(error)")
+            }
+        }
+
+        guard failures.isEmpty else {
+            throw SelfTestFailure(
+                "\(failures.count) of \(decoded + failures.count) scans failed:\n    "
+                    + failures.prefix(10).joined(separator: "\n    ")
+            )
+        }
+        if decoded == 0 {
+            print("  SKIPPED: no scans in \(root)")
+        } else {
+            print("  \(decoded) scans decoded and re-encoded byte-identically")
+            print("  \(groups) groups, \(files) files, \(relative) scans with relative paths")
         }
     }
 
