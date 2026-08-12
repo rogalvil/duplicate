@@ -21,9 +21,13 @@ import Foundation
 /// plus it has no way to control key order at all.
 public enum JSONWriter {
     /// The `json.dumps(value, indent=2)` equivalent, with no trailing newline.
-    public static func encode(_ value: JSONValue) throws -> String {
+    ///
+    /// - Parameter indent: spaces per level, or `nil` for one compact line. `nil` reproduces
+    ///   `json.dumps(value)` with its default separators (`", "` and `": "`), which is what a JSON Lines
+    ///   record needs -- the shared scan format always uses 2.
+    public static func encode(_ value: JSONValue, indent: Int? = 2) throws -> String {
         var output = ""
-        try append(value, depth: 0, into: &output)
+        try append(value, depth: 0, indent: indent, into: &output)
         return output
     }
 
@@ -35,9 +39,19 @@ public enum JSONWriter {
         Data((try encode(value) + "\n").utf8)
     }
 
+    /// One compact line plus a newline: a JSON Lines record.
+    public static func line(_ value: JSONValue) throws -> String {
+        try encode(value, indent: nil) + "\n"
+    }
+
     // MARK: - Serialisation
 
-    private static func append(_ value: JSONValue, depth: Int, into output: inout String) throws {
+    private static func append(
+        _ value: JSONValue,
+        depth: Int,
+        indent: Int?,
+        into output: inout String
+    ) throws {
         switch value {
         case .null:
             output += "null"
@@ -60,29 +74,49 @@ public enum JSONWriter {
                 output += "[]"
                 return
             }
-            let inner = String(repeating: " ", count: (depth + 1) * 2)
+            guard let indent else {
+                output += "["
+                for (index, element) in elements.enumerated() {
+                    if index > 0 { output += ", " }
+                    try append(element, depth: depth, indent: nil, into: &output)
+                }
+                output += "]"
+                return
+            }
+            let inner = String(repeating: " ", count: (depth + 1) * indent)
             output += "[\n"
             for (index, element) in elements.enumerated() {
                 output += inner
-                try append(element, depth: depth + 1, into: &output)
+                try append(element, depth: depth + 1, indent: indent, into: &output)
                 output += index == elements.count - 1 ? "\n" : ",\n"
             }
-            output += String(repeating: " ", count: depth * 2) + "]"
+            output += String(repeating: " ", count: depth * indent) + "]"
         case .object(let members):
             if members.isEmpty {
                 output += "{}"
                 return
             }
-            let inner = String(repeating: " ", count: (depth + 1) * 2)
+            guard let indent else {
+                output += "{"
+                for (index, member) in members.enumerated() {
+                    if index > 0 { output += ", " }
+                    appendEscaped(member.key, into: &output)
+                    output += ": "
+                    try append(member.value, depth: depth, indent: nil, into: &output)
+                }
+                output += "}"
+                return
+            }
+            let inner = String(repeating: " ", count: (depth + 1) * indent)
             output += "{\n"
             for (index, member) in members.enumerated() {
                 output += inner
                 appendEscaped(member.key, into: &output)
                 output += ": "
-                try append(member.value, depth: depth + 1, into: &output)
+                try append(member.value, depth: depth + 1, indent: indent, into: &output)
                 output += index == members.count - 1 ? "\n" : ",\n"
             }
-            output += String(repeating: " ", count: depth * 2) + "}"
+            output += String(repeating: " ", count: depth * indent) + "}"
         }
     }
 

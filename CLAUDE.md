@@ -185,7 +185,7 @@ Dos reglas:
    proyecto anterior.
 
 Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
-`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`.
+`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`, `undo`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -206,6 +206,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   está en el SDK y estaría *permitido*, pero se rechazó por mérito: el workload es un lookup puntual
   sobre clave compuesta, y SQLite traería WAL, shm y semántica de `busy_timeout`, o sea más
   superficie de corrupción, no menos.
+- **El journal es JSON Lines (`.jsonl`), no un array JSON.** No se puede hacer append a un `[…]`
+  pretty-printed sin reescribirlo, y un crash a media escritura tiene que dejar legible todo lo
+  anterior. Una línea truncada cuesta esa línea y nada más.
+- **Un `undone_at` se agrega, no reescribe la línea original.** Así el journal sigue siendo un log
+  veraz de lo que pasó en orden, en vez de un resumen mutable del estado actual — y un rewrite que
+  falle a la mitad perdería todo.
+- **Una ruta original ocupada nunca se sobrescribe.** Contenido byte-idéntico cuenta como *ya
+  restaurado* (pudo haberlo devuelto el propio Finder, que la app no puede ver); cualquier otra cosa
+  se bloquea. El runner **vuelve a chequear** justo antes de mover, porque el plan pudo mostrarse al
+  usuario minutos antes.
 - **`FileManager.trashItem` funciona en todos los volúmenes de esta máquina.** Medido: boot y `$HOME`
   aterrizan en `~/.Trash`, WD12TB y SED4TB en `<volumen>/.Trashes/501`. Era el riesgo más grande del
   plan (que el externo fuera exFAT y no pudiera), y está descartado. La cuarentena es fallback de
