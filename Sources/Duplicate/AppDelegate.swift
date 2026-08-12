@@ -108,8 +108,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Selftest hooks
 
+    // `@MainActor` explicitly on both, not inherited: on the macOS 15 SDK that CI compiles against,
+    // `NSWindowController.window` is not inferred as main-actor-isolated the way it is locally, so these are
+    // hard errors there and clean here. Same family as the other SDK divergences.
+    @MainActor
     var hasLibraryWindow: Bool { libraryWindow?.window != nil }
 
+    @MainActor
     func closeLibraryForSelftest() {
         libraryWindow?.window?.close()
         libraryWindow = nil
