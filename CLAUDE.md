@@ -185,7 +185,7 @@ Dos reglas:
    proyecto anterior.
 
 Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
-`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`.
+`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -206,6 +206,14 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   está en el SDK y estaría *permitido*, pero se rechazó por mérito: el workload es un lookup puntual
   sobre clave compuesta, y SQLite traería WAL, shm y semántica de `busy_timeout`, o sea más
   superficie de corrupción, no menos.
+- **`FileManager.trashItem` funciona en todos los volúmenes de esta máquina.** Medido: boot y `$HOME`
+  aterrizan en `~/.Trash`, WD12TB y SED4TB en `<volumen>/.Trashes/501`. Era el riesgo más grande del
+  plan (que el externo fuera exFAT y no pudiera), y está descartado. La cuarentena es fallback de
+  verdad, para montajes de red y volúmenes read-only.
+- **Si `trashItem` no devuelve `resultingItemURL`, el movimiento se considera fallido.** Sin destino no
+  se puede deshacer, y reportar éxito sería una promesa que el journal no puede cumplir.
+- **`~/.Trash` no se puede *listar* desde la shell (TCC), pero `fileExists` sí funciona ahí.** Eso es
+  lo que permite verificar por ruta que un test no dejó basura; un `ls` da "Operation not permitted".
 - **Copiar un archivo en APFS produce un clon, no una copia.** Medido: `FileManager.copyItem` y `cp`
   pasan por `clonefile`, así que el archivo copiado conserva su propio inodo pero **comparte el
   `contentIdentifier` del origen** — y borrarlo no libera nada. Solo una escritura fresca de los
