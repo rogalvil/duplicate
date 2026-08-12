@@ -52,22 +52,36 @@ jobs:
       - name: Build all targets
         run: make build CONFIG=debug
 
-      - name: Test with coverage gate
-        run: make coverage
-
-      # Reusing the debug artifacts the step above already built, which is why this is affordable at
-      # all: `make selftest` normally depends on `make all`, and that means a second full compile in
-      # release. With CONFIG=debug it bundles and signs what is already there. Measured locally: 14.5 s
-      # for the build, 10.6 s for all 21 modes.
+      # Before the coverage step on purpose: `swift test --enable-code-coverage` compiles the debug
+      # products with instrumentation, which invalidates them, so running the selftests afterwards pays
+      # a third full compile. This way they reuse what the build step just made.
       #
-      # Without this step the 21 selftests only ever ran on a developer's machine, so a break in the
-      # bundle assembly, the string tables, the menu shortcuts or what a window actually displays
-      # reached main unnoticed. Those are exactly the things `swift test` cannot see.
+      # CONFIG=debug is the other half of why this is affordable. `make selftest` normally depends on
+      # `make all`, which compiles in release -- a second full build. Measured locally: 14.5 s for the
+      # build, 10.6 s for all 21 modes.
       #
-      # Modes that need the shared state directory find none here and skip, printing why. A mode that
-      # passed silently without having done anything would be worse than no mode.
+      # Without this step the 21 modes only ever ran on a developer's machine, so a break in the bundle
+      # assembly, the string tables, the menu shortcuts or what a window actually displays reached main
+      # unnoticed. Those are exactly the things `swift test` cannot see.
+      #
+      # Verified on the runner: all 21 pass here, including the ones that touch the real Trash, the
+      # window server and APFS cloning. The four that need the shared state directory find none and skip
+      # printing why -- a mode that passed silently without having done anything would be worse than no
+      # mode at all.
       - name: Selftests
         run: make selftest-all CONFIG=debug
+
+      # The interop guarantee is the one thing the runner cannot check above: there is no state
+      # directory here, so the three modes that read real documents skip. The committed fixtures cover
+      # the same six document shapes, and this runs them through the shipping code path rather than
+      # through the unit tests' own copy of it.
+      - name: Interop against the committed fixtures
+        run: |
+          make selftest CONFIG=debug MODE=json-roundtrip \
+            ARGS="--dir Tests/DuplicateCoreTests/Fixtures"
+
+      - name: Test with coverage gate
+        run: make coverage
 
       - name: Upload coverage summary
         if: always()
