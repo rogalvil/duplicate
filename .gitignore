@@ -1,0 +1,24 @@
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# Build output
+build/
+*.app
+DerivedData/
+
+# Coverage
+*.profdata
+*.profraw
+coverage/
+
+# Local benchmark and selftest scratch
+bench/
+
+# macOS
+.DS_Store
+
+# Editors
+*.xcuserstate
+xcuserdata/
