@@ -18,19 +18,30 @@ public struct ScanLibrary: Sendable {
     /// Every readable scan, as of the last refresh.
     public private(set) var summaries: [ScanStore.Summary]
 
-    public init(store: ScanStore) {
+    /// - Parameter loadNow: reads the directory immediately. Pass `false` to start empty and fill in with
+    ///   ``adopt(_:)`` from a background task -- **measured on the real corpus, reading 119 scans takes
+    ///   0.34 s**, which is a visible stall if it happens on the main thread, and the watcher makes the
+    ///   window pay it again on every change.
+    public init(store: ScanStore, loadNow: Bool = true) {
         self.store = store
-        self.summaries = store.summaries()
+        self.summaries = loadNow ? store.summaries() : []
     }
 
-    /// Re-reads the directory.
+    /// Re-reads the directory on the calling thread.
     ///
     /// - Returns: `true` when the set of scans changed, so a caller can skip reloading a table for a
     ///   change that does not concern it -- a decisions file being re-saved fires the watcher but leaves
     ///   every row identical.
     @discardableResult
     public mutating func refresh() -> Bool {
-        let fresh = store.summaries()
+        adopt(store.summaries())
+    }
+
+    /// Takes summaries somebody else read, off whatever thread they read them on.
+    ///
+    /// - Returns: `true` when they differ from what is held.
+    @discardableResult
+    public mutating func adopt(_ fresh: [ScanStore.Summary]) -> Bool {
         guard fresh != summaries else { return false }
         summaries = fresh
         return true

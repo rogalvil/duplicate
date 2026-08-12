@@ -253,6 +253,15 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **`ScanStore.summaries()` decodifica cada grupo de cada escaneo para producir un puñado de
+  conteos.** Medido en el corpus real: **119 escaneos, 21,594 grupos, 0.34 s** — y el watcher hace que
+  la ventana lo vuelva a pagar en cada cambio. Va fuera del hilo principal, con un contador de
+  generación que descarta una lectura que aterriza después de una más nueva. La corrección de fondo
+  (un decodificador que no materialice las 71,580 rutas para contarlas) sigue pendiente, y el número
+  se imprime en `--selftest --mode library` para que una regresión se vea.
+- **El estado vacío se oculta hasta que la primera lectura termina.** Con la carga en background,
+  mostrar "todavía no hay escaneos" durante un tercio de segundo antes de que lleguen 119 filas se lee
+  como un bug.
 - **Un watch de directorio ve las *entradas*, no su contenido.** Medido con
   `DispatchSource.makeFileSystemObjectSource`: crear o borrar una entrada dispara `.write`; **cambiar
   el contenido de un archivo existente no dispara nada**. Una escritura `.atomic` dispara **dos**

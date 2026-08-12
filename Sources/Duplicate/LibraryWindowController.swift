@@ -19,6 +19,15 @@ final class LibraryWindowController: NSWindowController {
 
     private var watchers: [DirectoryWatcher] = []
 
+    /// Bumped per load so a slow read that lands after a newer one is dropped.
+    ///
+    /// A burst of watcher fires starts several reads, and they can finish out of order -- the older one
+    /// would then overwrite the newer with a stale list.
+    private var loadGeneration = 0
+    /// Whether a read has finished. Until it has, the empty state stays hidden: flashing "no scans yet"
+    /// for a third of a second before 119 rows arrive reads as a bug.
+    private var hasLoadedOnce = false
+
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private let searchField = NSSearchField()
@@ -40,7 +49,10 @@ final class LibraryWindowController: NSWindowController {
 
     init(stateDirectory: StateDirectory) {
         self.stateDirectory = stateDirectory
-        self.library = ScanLibrary(store: ScanStore(state: stateDirectory))
+        // Deliberately empty: the read happens off the main thread. Measured on the real corpus,
+        // decoding 119 scans takes 0.34 s, and a window that stalls before it draws is a window that
+        // feels broken.
+        self.library = ScanLibrary(store: ScanStore(state: stateDirectory), loadNow: false)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 520),
@@ -58,6 +70,7 @@ final class LibraryWindowController: NSWindowController {
         buildContent()
         buildToolbar()
         reloadRows()
+        loadFromDisk()
         startWatching()
     }
 
@@ -208,7 +221,7 @@ final class LibraryWindowController: NSWindowController {
     }
 
     private func updateEmptyState() {
-        emptyState.isHidden = !rows.isEmpty
+        emptyState.isHidden = !rows.isEmpty || !hasLoadedOnce
         guard rows.isEmpty else { return }
         emptyState.stringValue =
             library.summaries.isEmpty
@@ -234,10 +247,10 @@ final class LibraryWindowController: NSWindowController {
             // does too.
             _ = try? stateDirectory.create(slot)
             let watcher = DirectoryWatcher(path: stateDirectory.path(for: slot)) { [weak self] in
-                // The callback arrives on the watcher's own queue; every line below touches AppKit.
+                // The callback arrives on the watcher's own queue. Hopping to the main actor only to
+                // schedule the read, never to perform it.
                 Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    if self.library.refresh() { self.reloadRows() }
+                    self?.loadFromDisk()
                 }
             }
             if watcher.start() {
@@ -268,8 +281,36 @@ final class LibraryWindowController: NSWindowController {
     }
 
     @objc private func refreshNow(_ sender: Any?) {
-        library.refresh()
-        reloadRows()
+        loadFromDisk()
+    }
+
+    /// Reads the state directory off the main thread and adopts the result.
+    ///
+    /// `ScanStore.summaries()` decodes every group of every scan -- 21,594 groups and 71,580 paths on this
+    /// user's corpus -- to produce a handful of counts. That is 0.34 s of work, measured, and it happens
+    /// again on every watcher fire. On the main thread it would stall the window on open and stutter it
+    /// whenever the CLI writes anything.
+    ///
+    /// The generation guard drops a read that lands after a newer one: a burst of watcher fires starts
+    /// several, and finishing out of order would leave the older list on screen.
+    private func loadFromDisk() {
+        loadGeneration += 1
+        let generation = loadGeneration
+        let store = ScanStore(state: stateDirectory)
+        Task.detached(priority: .userInitiated) {
+            let fresh = store.summaries()
+            await MainActor.run { [weak self] in
+                guard let self, generation == self.loadGeneration else { return }
+                let changed = self.library.adopt(fresh)
+                self.hasLoadedOnce = true
+                if changed {
+                    self.reloadRows()
+                } else {
+                    // Nothing moved, but the first read still has to reveal the empty state.
+                    self.updateEmptyState()
+                }
+            }
+        }
     }
 
     /// Opens the folder a scan covered.
@@ -343,6 +384,7 @@ final class LibraryWindowController: NSWindowController {
     var footerText: String { footer.stringValue }
     var emptyStateText: String? { emptyState.isHidden ? nil : emptyState.stringValue }
     var watcherCount: Int { watchers.count }
+    var hasFinishedFirstLoad: Bool { hasLoadedOnce }
 
     /// Drives the sort control and the search field the way a click would.
     func applyForSelftest(sort: LibrarySort, filter: String) {
