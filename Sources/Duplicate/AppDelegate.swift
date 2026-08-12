@@ -16,6 +16,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Starts a new scan, in the library window that owns the state directory.
+    ///
+    /// On the delegate rather than the window so ⌘N works with no window focused, which is the state the
+    /// app is in right after launch on a machine with no scans yet.
+    @MainActor
+    @objc func newScan(_ sender: Any?) {
+        libraryWindow?.beginScan()
+    }
+
     /// Shows the About panel with the build date and build number the Makefile stamped in.
     ///
     /// `@MainActor` explicitly, not inherited: an `@objc` menu action is called through the responder

@@ -21,6 +21,7 @@ final class LibraryWindowController: NSWindowController {
     /// Review windows, keyed by scan id, so double-clicking the same row twice raises the window it
     /// already opened instead of starting a second review of the same scan against the same file.
     private var reviewWindows: [String: ReviewWindowController] = [:]
+    private var scanPanel: ScanPanelController?
 
     /// Bumped per load so a slow read that lands after a newer one is dropped.
     ///
@@ -30,6 +31,8 @@ final class LibraryWindowController: NSWindowController {
     /// Whether a read has finished. Until it has, the empty state stays hidden: flashing "no scans yet"
     /// for a third of a second before 119 rows arrive reads as a bug.
     private var hasLoadedOnce = false
+    /// A scan to select as soon as it shows up in the list.
+    private var pendingSelection: String?
 
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
@@ -212,7 +215,13 @@ final class LibraryWindowController: NSWindowController {
         rows = library.rows(sortedBy: sort, filter: filter)
         tableView.reloadData()
 
-        if let selected, let index = rows.firstIndex(where: { $0.scanID == selected }) {
+        if let wanted = pendingSelection,
+            let index = rows.firstIndex(where: { $0.scanID == wanted })
+        {
+            pendingSelection = nil
+            tableView.selectRowIndexes([index], byExtendingSelection: false)
+            tableView.scrollRowToVisible(index)
+        } else if let selected, let index = rows.firstIndex(where: { $0.scanID == selected }) {
             tableView.selectRowIndexes([index], byExtendingSelection: false)
         }
         updateFooter()
@@ -291,6 +300,41 @@ final class LibraryWindowController: NSWindowController {
 
     @objc private func refreshNow(_ sender: Any?) {
         loadFromDisk()
+    }
+
+    /// Opens the scan window, or raises the one already open.
+    ///
+    /// One at a time on purpose: two concurrent scans would contend for the same hash cache and the same
+    /// bounded read concurrency, and the second would make the first slower for no gain.
+    @objc func beginScan(_ sender: Any? = nil) {
+        if let existing = scanPanel {
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+        let panel = ScanPanelController(stateDirectory: stateDirectory)
+        panel.onFinished = { [weak self] scan in
+            // The watcher would find it anyway; this selects it so the user lands on what they just made.
+            self?.loadFromDisk()
+            self?.select(scanID: scan.scanID)
+        }
+        scanPanel = panel
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: panel.window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scanPanel = nil }
+        }
+        panel.showWindow(nil)
+    }
+
+    /// Selects a row by scan id once it appears, since the list is read asynchronously.
+    private func select(scanID: String) {
+        if let index = rows.firstIndex(where: { $0.scanID == scanID }) {
+            tableView.selectRowIndexes([index], byExtendingSelection: false)
+            tableView.scrollRowToVisible(index)
+            return
+        }
+        pendingSelection = scanID
     }
 
     /// Reads the state directory off the main thread and adopts the result.
@@ -571,9 +615,10 @@ extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
 extension LibraryWindowController: NSToolbarDelegate {
     private static let sortItem = NSToolbarItem.Identifier("sort")
     private static let refreshItem = NSToolbarItem.Identifier("refresh")
+    private static let newScanItem = NSToolbarItem.Identifier("newScan")
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.refreshItem, Self.sortItem, .flexibleSpace, .init("search")]
+        [Self.newScanItem, Self.refreshItem, Self.sortItem, .flexibleSpace, .init("search")]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -586,6 +631,15 @@ extension LibraryWindowController: NSToolbarDelegate {
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         switch identifier {
+        case Self.newScanItem:
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = Strings.string("library.toolbar.newScan")
+            item.toolTip = item.label
+            item.image = NSImage(
+                systemSymbolName: "plus", accessibilityDescription: item.label)
+            item.target = self
+            item.action = #selector(beginScan(_:))
+            return item
         case Self.refreshItem:
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = Strings.string("library.toolbar.refresh")

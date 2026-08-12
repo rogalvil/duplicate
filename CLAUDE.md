@@ -257,6 +257,25 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Launch Services arranca la app con `RLIMIT_NOFILE` blando en 256.** Quedarse sin descriptores no
+  truena: sale como archivo ilegible, se cuenta como candidato saltado, y **el escaneo encuentra menos
+  de lo que debía** — una falla que se ve como una respuesta más chica, no como un error. `main.swift`
+  lo sube a 4096 antes de que nada abra un archivo.
+- **Desde una terminal el límite blando ya viene en millones** (medido: 1048576), así que un arnés que
+  solo mire el valor actual pasa exista o no el `setrlimit`. El modo `fdlimit` **baja el límite a 256 él
+  mismo**, llama a la misma función que llama el arranque, y verifica que volvió a subir. Bajar siempre
+  se puede; subir está acotado por el límite duro, que no se toca.
+- **Guardar es lo último que pasa en un escaneo, y una falla al guardar se reporta, no se lanza.** Un
+  escaneo de 800,000 archivos que terminó bien no se puede tirar porque el directorio de estado estaba
+  de solo lectura: quien llama todavía puede revisarlo en memoria. Lanzar convertiría un problema
+  recuperable en veinte minutos perdidos.
+- **Un escaneo cancelado no escribe nada**, porque el save va después de que el finder regresa. Los
+  appends de la caché de hashes **sí se conservan**: son hechos verdaderos, y tirarlos haría pagar el
+  precio completo otra vez.
+- **`ScanSession.run` toma un `Date` y resuelve el instante adentro.** Una versión anterior daba un
+  identificador por un método y tomaba un instante por otro, lo que dejaba deduplicar uno y guardar bajo
+  el otro — el identificador decide el nombre del archivo y el instante decide lo que va estampado
+  adentro, y tienen que salir del mismo valor.
 - **La clave de un thumbnail es el digest, no la ruta.** Los archivos de un grupo tienen contenido
   idéntico por construcción, así que ocho fotos necesitan **un** thumbnail. Keyear por ruta manda ocho
   viajes de XPC a `quicklookd` y guarda ocho copias del mismo bitmap.

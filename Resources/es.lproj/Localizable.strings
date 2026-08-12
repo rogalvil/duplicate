@@ -124,3 +124,37 @@
 "review.warning.notADuplicate" = "Solo %1$d de los %2$d archivos que registró este grupo siguen existiendo, así que ya no hay nada que deduplicar aquí.";
 /* %1$d archivos ausentes o cambiados, %2$d los que registró el escaneo. */
 "review.warning.stale" = "%1$d de los %2$d archivos de este grupo ya no están o cambiaron desde el escaneo.";
+
+/* Ventana de escaneo */
+"scan.window.title" = "Nuevo escaneo";
+"scan.noRoot" = "No hay carpeta elegida";
+"scan.badRoot" = "Esa carpeta no se puede escanear";
+"scan.chooseFolder" = "Elegir carpeta...";
+"scan.chooseFolder.prompt" = "Escanear";
+"scan.option.hidden" = "Incluir archivos ocultos (el CLI lo hace; una carpeta de .DS_Store idénticos entierra los hallazgos reales)";
+"scan.option.packages" = "Entrar a paquetes como .app y .photoslibrary (sacarles un archivo los corrompe)";
+"scan.option.cache" = "Usar la caché de hashes (un segundo escaneo de la misma carpeta es mucho más rápido)";
+"scan.option.minimumSize" = "Ignorar archivos menores a";
+"scan.start" = "Empezar";
+"scan.stopping" = "Deteniendo...";
+"scan.phase.idle" = "Listo";
+"scan.phase.indexing" = "Listando archivos";
+"scan.phase.probing" = "Comparando candidatos";
+"scan.phase.hashing" = "Leyendo contenidos";
+"scan.phase.grouping" = "Agrupando";
+"scan.phase.finished" = "Terminado";
+/* %d archivos vistos. */
+"scan.counts.files" = "%d archivos";
+/* %1$d de %2$d hasheados. */
+"scan.counts.hashed" = "%1$d de %2$d hasheados";
+/* %d servidos por la caché. */
+"scan.counts.cached" = "%d de la caché";
+/* %d segundos transcurridos. */
+"scan.counts.elapsed" = "%ds";
+"scan.failed.title" = "El escaneo no pudo terminar";
+"scan.inaccessible.title" = "Algunas carpetas no se pudieron leer";
+/* %d carpetas a las que no se pudo entrar. */
+"scan.inaccessible.body" = "Se saltaron %d carpetas porque macOS no dio acceso. Nada de lo que hay dentro se escaneó, así que este resultado está incompleto. Un permiso otorgado ahora no aplica a una app que ya está corriendo: hay que relanzarla.";
+"scan.inaccessible.openSettings" = "Abrir Privacidad";
+"menu.file.newScan" = "Nuevo escaneo...";
+"library.toolbar.newScan" = "Nuevo escaneo";

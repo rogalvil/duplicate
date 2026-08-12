@@ -392,6 +392,82 @@ que uno parado en una ruta registrada significa que el archivo fue reemplazado. 
 sería activamente falso, porque `trashItem` sobre un symlink manda el enlace y deja los bytes donde
 están.
 
+### Escanear desde la app, y las dos cosas que eso obliga
+
+`ScanSession` es la costura que faltaba. `DuplicateFinder` produce un escaneo y `ScanStore` escribe uno,
+pero decidir **cuál** identificador, **cuáles** exclusiones, **si** usar la caché compartida y **cuándo**
+el documento llega a disco son decisiones con consecuencias, y estaban repartidas entre un test y un
+selftest en vez de vivir en algún lado.
+
+En Core porque todas son valores, y porque la ventana no puede ser el lugar que las sabe: un escaneo
+lanzado desde una ventana y uno lanzado desde una futura línea de comandos tienen que producir el mismo
+documento.
+
+**Guardar es lo último que pasa, y una falla al guardar se reporta en vez de lanzarse.** Un escaneo de
+800,000 archivos que terminó bien no se puede tirar porque el directorio de estado estaba de solo
+lectura: quien llama todavía puede revisarlo en memoria y el reporte dice que no está en disco. Lanzar
+convertiría un problema recuperable en veinte minutos perdidos.
+
+**Un escaneo cancelado no escribe nada**, porque el save va después de que el finder regresa — y el
+finder revisa la cancelación en cuatro puntos. Los appends de la caché de hashes **sí se conservan**, a
+propósito: son hechos verdaderos, y tirarlos haría pagar el precio completo en el siguiente intento.
+
+**El `Date` entra y el instante se resuelve adentro.** Una versión anterior daba un identificador por un
+método y tomaba un instante por otro, lo que dejaba deduplicar uno y guardar bajo el otro: el
+identificador decide el nombre del archivo, el instante decide lo que va estampado adentro, y tienen que
+salir del mismo valor.
+
+### El progreso se jala, no se empuja
+
+Los hooks del CLI disparan una vez por archivo. A 800,000 archivos, un update empujado serían 800,000
+saltos de actor para redibujar una etiqueta que nadie puede leer más de diez veces por segundo.
+
+El escáner cuenta con atómicos y la ventana lee un `snapshot()` en un `Timer` a **10 Hz**. Diez lecturas
+por segundo en vez de 800,000 empujones. El timer se agrega en modo `.common`, porque sin eso un escaneo
+que termina con un menú abierto deja de actualizarse.
+
+Dígitos monoespaciados en los contadores: un numeral proporcional actualizándose diez veces por segundo
+salta de lado.
+
+### El límite de descriptores, y por qué el arnés lo baja él mismo
+
+**Launch Services arranca una app con `RLIMIT_NOFILE` blando en 256.** Un escaneo tiene un descriptor por
+hash concurrente más el del recorrido, y junto a la caché de hashes, la conexión XPC de Quick Look y lo
+que Foundation guarde, 256 no es un margen cómodo. Quedarse sin descriptores **no truena**: sale como
+archivo ilegible, se cuenta como candidato saltado, y el escaneo encuentra menos de lo que debía.
+
+Y ahí está la trampa del arnés: **desde una terminal el límite blando ya viene en millones** —medido,
+1048576— así que un modo que solo mirara el valor actual pasaría exista o no el `setrlimit`. El modo
+`fdlimit` baja el límite a 256 él mismo, llama a la misma función que llama el arranque, y verifica que
+volvió a subir. Bajar siempre se puede; subir está acotado por el límite duro, que no se toca.
+
+### Lo medido en el corpus real, y lo que dice del diseño
+
+Cuatro escaneos completos por el motor de la app, de solo lectura, con el binario corriendo directo
+(sin el costo de `make`):
+
+| Corpus | Archivos | Bytes | Frío | Caliente | Grupos | Recuperable |
+|---|---|---|---|---|---|---|
+| `~/me/code` (SSD interno) | 10,506 | 664 MB | **0.11 s** | — | 6 | 6.1 KB |
+| `_____check` (USB externo) | 1,138 | 2 GB | **0.93 s** | — | 11 | 6.3 MB |
+| `JulianaPalvin` (USB externo) | 696 | 245 GB | **0.61 s** | — | 0 | 0 |
+| `OF` (USB externo) | 15,242 | 806 GB | **130.2 s** | **7.1 s** (18.3×) | 12 | 3.1 GB |
+
+**La fila de 245 GB es la que explica el diseño.** Tardó 0.61 s porque ningún par de archivos comparte
+tamaño, así que el bucketing los elimina todos y **no se leyó un solo byte de contenido**. El mismo
+efecto en `~/me/code`: 10,506 archivos, 244 candidatos.
+
+**La fila de 806 GB es el caso donde sí hay trabajo**, y es donde la caché de hashes se paga: 986
+candidatos, 130.2 s en frío contra 7.1 s en caliente, **18.3×**. (Una medición anterior sobre otro
+directorio dio 33.5×; el factor depende de cuántos candidatos haya y de qué tan grandes sean, así que
+citar uno solo sería citar el que conviene.)
+
+**Una conclusión falsa que casi publiqué**: corrí el mismo directorio dos veces por el modo `storage` y
+el segundo pase dio 128.6 s contra 131.8 s, o sea "la caché no sirve". No era eso: `storage --dir` corre
+con la `Configuration` por default, que trae `cache: nil`, así que **las dos corridas fueron frías**. El
+modo `cache` es el único que la enciende. La lección es del arnés, no del código: un modo que no dice
+qué configuración usa invita a leer su número como si midiera otra cosa.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice

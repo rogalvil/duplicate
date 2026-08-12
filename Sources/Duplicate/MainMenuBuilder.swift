@@ -69,6 +69,13 @@ enum MainMenuBuilder {
 
     private static func fileMenu() -> NSMenu {
         let menu = NSMenu(title: Strings.string("menu.file"))
+        let newScan = menu.addItem(
+            withTitle: Strings.string("menu.file.newScan"),
+            action: #selector(AppDelegate.newScan(_:)),
+            keyEquivalent: "n"
+        )
+        newScan.target = NSApp.delegate
+        menu.addItem(.separator())
         menu.addItem(
             withTitle: Strings.string("menu.file.saveDecisions"),
             action: #selector(ReviewWindowController.saveDecisions(_:)),

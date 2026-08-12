@@ -11,18 +11,17 @@ deshacer.
 
 | | Estado |
 |---|---|
-| Detección de archivos exactos (SHA-256, caché, clones de APFS) | **lista**, con tests, sin botón que la lance |
-| Papelera + journal + deshacer | **listo**, con tests, sin botón |
-| Biblioteca de escaneos, con actualización en vivo | **funciona en la app** |
-| Revisión de grupos, con decisiones que se guardan | **funciona en la app** |
-| Lanzar un escaneo desde la app | **no existe todavía** — los escaneos se hacen con el CLI |
+| Escaneo de duplicados exactos desde la app, con progreso y cancelación | **funciona** |
+| Biblioteca de escaneos, con actualización en vivo | **funciona** |
+| Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
+| Papelera + journal + deshacer | **listo**, con tests, sin botón todavía |
 | Simular y aplicar desde la app | **no existe todavía** |
-| Vista previa con Quick Look | **no existe todavía** |
 | Detector de carpetas | **no existe todavía** |
 | Detector perceptual de imagen y video | **no existe todavía** |
 
-O sea: hoy la app **lista y revisa** escaneos, y el escaneo se sigue haciendo con `rav duplicate
-scan`. Nada se mueve todavía desde la app.
+O sea: hoy la app **escanea, lista y revisa** sin necesitar el CLI. Lo que todavía no hace es **mover
+nada**: el código destructivo está listo y probado, pero no hay botón que lo dispare, así que las
+decisiones se aplican con `rav duplicate` por ahora.
 
 ## Requisitos
 
@@ -100,12 +99,12 @@ son los escaneos y decisiones del usuario, no de la app.
 ## Cómo se usa hoy
 
 ```bash
-# 1. escanear, con el CLI (la app todavía no lanza escaneos)
-rav duplicate scan ~/Downloads
-
-# 2. abrir la app: el escaneo ya está en la lista, sin apretar nada
-open -a Duplicate
+open -a Duplicate     # ⌘N, elegir carpeta, Empezar
 ```
+
+El escaneo corre en la app con progreso —archivos vistos, hasheados, bytes leídos, aciertos de caché,
+segundos— y se puede cancelar; un escaneo cancelado no deja documento. Un escaneo hecho con
+`rav duplicate scan` también aparece en la lista sin apretar nada.
 
 Doble clic en un escaneo abre su revisión. En la revisión:
 
@@ -209,7 +208,7 @@ make help       # lista todos los targets
 ```
 
 Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.md). El catálogo de los
-22 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
+24 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ## Si algo no funciona
@@ -238,8 +237,17 @@ Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.m
   así que nada se vuelve ilegible.
 - El video se muestreará con `AVAssetImageGenerator` en vez de ffmpeg. `.mkv` y `.avi` pueden no
   abrirse; el corpus real de este usuario es `.mp4` y `.mov`.
-- **No hay benchmarks publicados.** La única medición de rendimiento que existe es la de la caché de
-  hashes: en datos reales de un USB externo, 133.199 s en frío contra 3.978 s en caliente (33.5×).
+- **Los benchmarks son de un solo corpus, esta máquina.** Medido sobre datos reales:
+
+  | Corpus | Archivos | Bytes | Frío | Caliente |
+  |---|---|---|---|---|
+  | `~/me/code` (SSD) | 10,506 | 664 MB | 0.11 s | — |
+  | carpeta en USB externo | 696 | 245 GB | 0.61 s | — |
+  | carpeta en USB externo | 15,242 | 806 GB | 130.2 s | 7.1 s (18.3×) |
+
+  La de 245 GB tarda menos de un segundo porque ningún par de archivos comparte tamaño: el bucketing
+  los descarta y no se lee un byte de contenido. La de 806 GB es donde sí hay trabajo. Nada de esto
+  dice cómo se porta en un disco que gira, ni en un montaje de red.
 
 ## Arquitectura
 
