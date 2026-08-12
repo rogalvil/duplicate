@@ -160,6 +160,10 @@ No re-descubrirlas:
   test que comparaba igualdad exacta pasaba local y fallaba en el runner. La afirmación que sí vale en
   las dos versiones es que Foundation **no agrega** el prefijo `/private`; comparar la cadena completa
   es afirmar una propiedad incidental. Tercera divergencia entre SDKs que solo CI puede atrapar.
+- **El closure de `UndoManager.registerUndo` no es `@MainActor` en el SDK 15.** Compila limpio local
+  (SDK 26) y es error duro en CI. Va con `MainActor.assumeIsolated`, que es una suposición sana:
+  `UndoManager` corre el bloque en el hilo que llamó a `undo()`, y el único que llama es el menú
+  Edición. **Cuarta divergencia entre SDKs que solo CI puede atrapar.**
 - **`swift-format` local puede diferir del de CI** (6.3 aquí, 6.0/6.1 en el runner `macos-15`). Si
   `make lint` pasa local y falla en CI, es eso; no reformatear a ciegas.
 - **Los imports de AVFoundation, ImageIO, CoreGraphics y Accelerate van con `@preconcurrency`.

@@ -249,8 +249,12 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     private func mutate(_ body: (inout ExactReviewState) -> Void) {
         let before = state
         body(&state)
+        // `MainActor.assumeIsolated`, and it is not decoration: on the macOS 15 SDK that CI compiles
+        // against, `registerUndo`'s closure is not `@MainActor`, so this is a hard error there and compiles
+        // clean locally. The assumption is sound -- `UndoManager` runs the block on whichever thread called
+        // `undo()`, and the only caller is the Edit menu, which is the main thread.
         undo.registerUndo(withTarget: self) { controller in
-            controller.mutate { $0 = before }
+            MainActor.assumeIsolated { controller.mutate { $0 = before } }
         }
         flow.decisionsChanged(hasAny: !state.decisionsForSaving.isEmpty)
         selectGroup(state.groupIndex)

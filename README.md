@@ -7,9 +7,127 @@ Es el puerto de `rav duplicate`, el subcomando del CLI personal en Python, a una
 con vista previa antes de borrar, escaneo concurrente con caché, y algo que el CLI nunca tuvo:
 deshacer.
 
-**Estado: en construcción.** Ahora mismo hay scaffolding, localización y la resolución del
-directorio de estado compartido. La detección todavía no existe. Lo que sí funciona está listado
-abajo; lo que no, no está.
+**Estado: en construcción, y la lista de abajo es literal.** No hay que deducir qué falta.
+
+| | Estado |
+|---|---|
+| Detección de archivos exactos (SHA-256, caché, clones de APFS) | **lista**, con tests, sin botón que la lance |
+| Papelera + journal + deshacer | **listo**, con tests, sin botón |
+| Biblioteca de escaneos, con actualización en vivo | **funciona en la app** |
+| Revisión de grupos, con decisiones que se guardan | **funciona en la app** |
+| Lanzar un escaneo desde la app | **no existe todavía** — los escaneos se hacen con el CLI |
+| Simular y aplicar desde la app | **no existe todavía** |
+| Vista previa con Quick Look | **no existe todavía** |
+| Detector de carpetas | **no existe todavía** |
+| Detector perceptual de imagen y video | **no existe todavía** |
+
+O sea: hoy la app **lista y revisa** escaneos, y el escaneo se sigue haciendo con `rav duplicate
+scan`. Nada se mueve todavía desde la app.
+
+## Requisitos
+
+- **macOS 15 o superior.** No es negociable: el proyecto usa `Atomic` y `Mutex` de
+  `Synchronization`, que existen desde macOS 15.
+- **Command Line Tools de Xcode** (o Xcode). `xcode-select --install` si `xcrun` no responde.
+- Swift 6, que viene con las Command Line Tools de esa versión.
+- Nada más. Cero dependencias externas es requisito del proyecto, así que no hay `brew install` de
+  nada, ni SwiftPM resolviendo paquetes de red.
+
+Para que la interoperabilidad tenga sentido hace falta también el CLI
+(`/Users/roger/me/code/cli`), pero la app funciona sin él: lee el directorio de estado, no el CLI.
+
+## Instalación
+
+```bash
+git clone git@github.com:rogalvil/duplicate.git
+cd duplicate
+
+./scripts/make-signing-cert.sh   # una sola vez, ver abajo
+make install                     # compila, firma y copia a /Applications
+open -a Duplicate
+```
+
+`make install` copia el bundle firmado a `/Applications`, así que sobrevive a un `make clean`. Para
+ponerlo en otro lado:
+
+```bash
+make install INSTALL_DIR=~/Applications
+```
+
+Si solo se quiere probar sin instalar:
+
+```bash
+make run        # lo lanza por Launch Services desde build/
+make run-debug  # lo corre en primer plano, con stdout y crashes visibles
+```
+
+### El certificado de firma no es opcional en la práctica
+
+La app se firma con un certificado self-signed local llamado `Duplicate Dev`. Si no existe, `make`
+firma **ad-hoc**, y entonces macOS trata cada rebuild como una app distinta: los permisos de acceso a
+carpetas que ya concediste se olvidan y los vuelve a pedir cada vez.
+
+```bash
+./scripts/make-signing-cert.sh
+```
+
+Se corre una vez por máquina. El detalle, y las dos trampas si lo automatizas por tu cuenta, están en
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+### Primer arranque
+
+La app **no** está notarizada ni firmada con un Developer ID de Apple. Es una app local compilada en
+la máquina donde corre, así que la primera vez macOS puede negarse a abrirla con un diálogo que dice
+que no se puede verificar el desarrollador. Se resuelve con clic derecho → Abrir, o en Ajustes del
+Sistema → Privacidad y Seguridad → Abrir de todos modos.
+
+Al escanear una carpeta protegida, macOS pide permiso una vez por carpeta (Escritorio, Documentos,
+Descargas, discos externos). **No pide, ni pedirá, Acceso Total al Disco**: no hay API para solicitarlo
+—solo un interruptor manual— los duplicados dentro de `~/Library` son casi siempre cachés donde quitar
+un "duplicado" rompe una app, y una app que pide Acceso Total al Disco para ordenar Descargas es
+indistinguible de malware para un usuario cuidadoso. `~/Library` se excluye por default.
+
+### Desinstalar
+
+```bash
+make uninstall              # quita la copia de /Applications
+rm -rf ~/Library/Caches/com.rogalvil.duplicate    # la caché de hashes, dato derivado
+```
+
+El directorio de estado (`~/.local/state/rav/duplicate/`) **no se toca**: es compartido con el CLI y
+son los escaneos y decisiones del usuario, no de la app.
+
+## Cómo se usa hoy
+
+```bash
+# 1. escanear, con el CLI (la app todavía no lanza escaneos)
+rav duplicate scan ~/Downloads
+
+# 2. abrir la app: el escaneo ya está en la lista, sin apretar nada
+open -a Duplicate
+```
+
+Doble clic en un escaneo abre su revisión. En la revisión:
+
+| Tecla | Qué hace |
+|---|---|
+| `espacio` | conserva o descarta el archivo bajo el cursor |
+| `Enter` | confirma el grupo y avanza |
+| `↑` `↓` | mueve el cursor |
+| `⌘⏎` | confirma y avanza, desde el menú |
+| `⌘⇧K` | salta el grupo sin decidir |
+| `⌘[` `⌘]` | grupo anterior y siguiente |
+| `⌘R` | muestra el archivo en Finder |
+| `⌘Z` | deshace la última decisión |
+| `⌘S` | guarda las decisiones |
+
+Las decisiones se guardan en `decisions/<scan_id>.json`, que es el mismo archivo que lee
+`rav duplicate decisions <scan_id>`. **Solo se escriben los grupos que decidiste**: los que saltaste y
+los que nunca abriste no aparecen, ni a favor ni en contra.
+
+**⌘Z es deshacer de revisión, nunca de aplicación.** Deshacer una casilla y deshacer cuatro mil
+archivos mandados a la Papelera no son el mismo acto; el deshacer de sesión tendrá su propio menú y no
+tendrá atajo.
 
 ## Qué hará
 
@@ -37,8 +155,11 @@ $XDG_STATE_HOME/rav/duplicate/      (o ~/.local/state/rav/duplicate/)
 ```
 
 Un escaneo hecho en la terminal se revisa en la app, y al revés. Los formatos de scan y decisiones
-son byte-compatibles en las dos direcciones — hay un modo de selftest que lo verifica contra los
+son byte-compatibles en las dos direcciones — hay modos de selftest que lo verifican contra los
 archivos reales del usuario, comparando bytes.
+
+El contrato exacto —qué campos, en qué orden, con qué escapes, y qué hace Foundation mal— está en
+[`docs/INTEROP.md`](docs/INTEROP.md).
 
 **La acción destructiva sí difiere, y conviene saberlo:** el CLI mueve a una carpeta de cuarentena
 con `shutil.move`; la app manda a la Papelera real con `FileManager.trashItem` y registra cada
@@ -54,35 +175,52 @@ No son accidentes. Cada una arregla algo o evita un riesgo, y cada una cambia lo
 - **Los hardlinks se colapsan.** Dos hardlinks son un archivo; "borrar" uno no libera nada, así que
   proponerlo es mentir sobre el espacio recuperado.
 - **Los clones de APFS se marcan como ya deduplicados**, no como duplicados a borrar. En volúmenes
-  que no son APFS la cifra de espacio recuperable es una cota superior, y la app lo dice.
+  que no son APFS la cifra de espacio recuperable es una cota superior, y la app lo dice —con un `≤`
+  delante del número, no redondeándola a un número confiado.
 - **Los paquetes (`.app`, `.photoslibrary`, `.fcpbundle`) no se recorren por default.** Sacar un
   archivo de dentro de un bundle lo corrompe en silencio.
 - **Las raíces de Papelera y cuarentena se excluyen del recorrido.** El CLI no las excluye, así que
   correr `rav duplicate ~` dos veces re-descubre lo que la primera corrida acaba de poner en
   cuarentena.
 - **Los grupos sin revisar no se deciden solos.** El CLI escribe una decisión por default para cada
-  grupo, incluidos los que nunca viste; esta app solo escribe los que decidiste, y al aplicar dice
+  grupo, incluidos los que nunca viste; esta app solo escribe los que decidiste, y al aplicar dirá
   cuántos quedaron sin revisar.
+- **Un archivo que comparte almacenamiento con el que conservas no se ofrece para borrar.** Su casilla
+  está deshabilitada y la nota dice por qué.
+- **"Descartar el grupo completo" descarta el grupo completo.** El CLI llama a eso "Mover todos" y
+  luego lo salta al aplicar porque su lista de conservados queda vacía: una acción destructiva
+  etiquetada que en silencio no hace nada.
 
 ## Idiomas
 
 Interfaz en inglés y español, según el idioma del sistema. No hay más idiomas y no está previsto
-agregarlos.
+agregarlos. La salida del selftest es siempre en inglés: es diagnóstico para quien desarrolla, no UI.
 
-## Cómo correrlo
+## Desarrollo
 
 ```bash
 make            # compila, arma y firma build/Duplicate.app
 make run        # lo lanza por Launch Services
 make test       # suite de DuplicateCore
 make coverage   # tests + piso de cobertura del 80% sobre Core
+make lint       # swift-format estricto, sin reescribir
 make selftest-all
 make help       # lista todos los targets
 ```
 
-La primera vez conviene correr `./scripts/make-signing-cert.sh`. Sin un certificado estable, macOS
-vuelve a pedir permiso para cada carpeta después de cada rebuild. Está explicado en
+Cómo trabajar en el repo, qué exige un PR y por qué el selftest existe:
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Si algo no funciona
+
+| Síntoma | Causa |
+|---|---|
+| macOS pide permiso de carpetas después de cada rebuild | falta el certificado: `./scripts/make-signing-cert.sh` |
+| "No se puede abrir porque Apple no puede comprobar…" | no está notarizada, a propósito. Clic derecho → Abrir |
+| La app no lista un escaneo que el CLI acaba de hacer | ¿`XDG_STATE_HOME` distinto entre los dos? `make selftest MODE=state-dir` imprime a dónde resolvió la app |
+| Un escaneo sale marcado "rutas relativas" y no se puede revisar | se hizo con `rav duplicate scan .`; la app arranca con `/` como directorio de trabajo y no puede resolverlas |
+| `make lint` pasa local y falla en CI | `swift-format` local es más nuevo que el del runner. No reformatear a ciegas |
+| El escaneo se ve lento en un disco externo | a propósito: dos lectores concurrentes como tope. Más lectores en un disco que gira convierten lecturas secuenciales en tormenta de seeks |
 
 ## Lo que no está verificado
 
@@ -90,12 +228,17 @@ vuelve a pedir permiso para cada carpeta después de cada rebuild. Está explica
   macOS atribuye el acceso a archivos a la terminal, y la app hereda los permisos de ella. Lanzada
   por Launch Services, la app es su propio proceso responsable. Los dos hechos son verdad y ninguno
   implica el otro.
-- El pHash de imágenes **no** es bit-idéntico al de `imagehash.phash` del CLI. La forma del pipeline
+- **El "Devolver" de Finder no se ha probado a mano.** `trashItem` sí está verificado en los cuatro
+  volúmenes de esta máquina, y el journal permite deshacer desde la app; que Finder devuelva el
+  archivo a su sitio es lo que falta comprobar.
+- El pHash de imágenes **no** será bit-idéntico al de `imagehash.phash` del CLI. La forma del pipeline
   se reproduce, pero el resample de Pillow no es el de ImageIO, así que pares justo en el borde del
   umbral pueden aparecer en una herramienta y no en la otra. El formato compartido no guarda hashes,
   así que nada se vuelve ilegible.
-- El video se muestrea con `AVAssetImageGenerator` en vez de ffmpeg. `.mkv` y `.avi` pueden no
+- El video se muestreará con `AVAssetImageGenerator` en vez de ffmpeg. `.mkv` y `.avi` pueden no
   abrirse; el corpus real de este usuario es `.mp4` y `.mov`.
+- **No hay benchmarks publicados.** La única medición de rendimiento que existe es la de la caché de
+  hashes: en datos reales de un USB externo, 133.199 s en frío contra 3.978 s en caliente (33.5×).
 
 ## Arquitectura
 
