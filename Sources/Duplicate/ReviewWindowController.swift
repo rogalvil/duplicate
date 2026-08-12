@@ -192,11 +192,13 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
         simulateButton.title = Strings.string("review.button.simulate")
         simulateButton.bezelStyle = .rounded
-        // The primary action of the window, drawn as one.
+        // The primary action of the window, drawn as one with a large control size.
+        //
+        // **No `.glass` behind an `#available`.** That was the first attempt and CI rejected it: `#available`
+        // guards *runtime* availability, not whether the symbol exists in the SDK being compiled against,
+        // and `.glass` is absent from the macOS 15 SDK the runner uses. A newer-SDK symbol cannot be reached
+        // this way at all -- fifth divergence between SDKs that only CI catches.
         simulateButton.controlSize = .large
-        if #available(macOS 26.0, *) {
-            simulateButton.bezelStyle = .glass
-        }
         simulateButton.target = self
         simulateButton.action = #selector(simulateApply(_:))
 

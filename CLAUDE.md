@@ -160,6 +160,10 @@ No re-descubrirlas:
   test que comparaba igualdad exacta pasaba local y fallaba en el runner. La afirmación que sí vale en
   las dos versiones es que Foundation **no agrega** el prefijo `/private`; comparar la cadena completa
   es afirmar una propiedad incidental. Tercera divergencia entre SDKs que solo CI puede atrapar.
+- **`#available` no protege la *existencia* de un símbolo en el SDK, solo su disponibilidad en runtime.**
+  Poner `NSButton.BezelStyle.glass` detrás de `if #available(macOS 26.0, *)` compila local (SDK 26) y es
+  error duro en CI (SDK 15), porque el símbolo no está ahí para compilar. Un símbolo de un SDK más nuevo no
+  se alcanza así. **Quinta divergencia entre SDKs que solo CI atrapa.**
 - **El closure de `UndoManager.registerUndo` no es `@MainActor` en el SDK 15.** Compila limpio local
   (SDK 26) y es error duro en CI. Va con `MainActor.assumeIsolated`, que es una suposición sana:
   `UndoManager` corre el bloque en el hilo que llamó a `undo()`, y el único que llama es el menú
