@@ -237,8 +237,17 @@ Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.m
   así que nada se vuelve ilegible.
 - El video se muestreará con `AVAssetImageGenerator` en vez de ffmpeg. `.mkv` y `.avi` pueden no
   abrirse; el corpus real de este usuario es `.mp4` y `.mov`.
-- **No hay benchmarks publicados.** La única medición de rendimiento que existe es la de la caché de
-  hashes: en datos reales de un USB externo, 133.199 s en frío contra 3.978 s en caliente (33.5×).
+- **Los benchmarks son de un solo corpus, esta máquina.** Medido sobre datos reales:
+
+  | Corpus | Archivos | Bytes | Frío | Caliente |
+  |---|---|---|---|---|
+  | `~/me/code` (SSD) | 10,506 | 664 MB | 0.11 s | — |
+  | carpeta en USB externo | 696 | 245 GB | 0.61 s | — |
+  | carpeta en USB externo | 15,242 | 806 GB | 130.2 s | 7.1 s (18.3×) |
+
+  La de 245 GB tarda menos de un segundo porque ningún par de archivos comparte tamaño: el bucketing
+  los descarta y no se lee un byte de contenido. La de 806 GB es donde sí hay trabajo. Nada de esto
+  dice cómo se porta en un disco que gira, ni en un montaje de red.
 
 ## Arquitectura
 

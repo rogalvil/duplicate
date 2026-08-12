@@ -441,6 +441,33 @@ Y ahí está la trampa del arnés: **desde una terminal el límite blando ya vie
 `fdlimit` baja el límite a 256 él mismo, llama a la misma función que llama el arranque, y verifica que
 volvió a subir. Bajar siempre se puede; subir está acotado por el límite duro, que no se toca.
 
+### Lo medido en el corpus real, y lo que dice del diseño
+
+Cuatro escaneos completos por el motor de la app, de solo lectura, con el binario corriendo directo
+(sin el costo de `make`):
+
+| Corpus | Archivos | Bytes | Frío | Caliente | Grupos | Recuperable |
+|---|---|---|---|---|---|---|
+| `~/me/code` (SSD interno) | 10,506 | 664 MB | **0.11 s** | — | 6 | 6.1 KB |
+| `_____check` (USB externo) | 1,138 | 2 GB | **0.93 s** | — | 11 | 6.3 MB |
+| `JulianaPalvin` (USB externo) | 696 | 245 GB | **0.61 s** | — | 0 | 0 |
+| `OF` (USB externo) | 15,242 | 806 GB | **130.2 s** | **7.1 s** (18.3×) | 12 | 3.1 GB |
+
+**La fila de 245 GB es la que explica el diseño.** Tardó 0.61 s porque ningún par de archivos comparte
+tamaño, así que el bucketing los elimina todos y **no se leyó un solo byte de contenido**. El mismo
+efecto en `~/me/code`: 10,506 archivos, 244 candidatos.
+
+**La fila de 806 GB es el caso donde sí hay trabajo**, y es donde la caché de hashes se paga: 986
+candidatos, 130.2 s en frío contra 7.1 s en caliente, **18.3×**. (Una medición anterior sobre otro
+directorio dio 33.5×; el factor depende de cuántos candidatos haya y de qué tan grandes sean, así que
+citar uno solo sería citar el que conviene.)
+
+**Una conclusión falsa que casi publiqué**: corrí el mismo directorio dos veces por el modo `storage` y
+el segundo pase dio 128.6 s contra 131.8 s, o sea "la caché no sirve". No era eso: `storage --dir` corre
+con la `Configuration` por default, que trae `cache: nil`, así que **las dos corridas fueron frías**. El
+modo `cache` es el único que la enciende. La lección es del arnés, no del código: un modo que no dice
+qué configuración usa invita a leer su número como si midiera otra cosa.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
