@@ -25,7 +25,10 @@ enum SelfTest {
         let modes: [String]
         switch mode {
         case "all":
-            modes = ["bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest"]
+            modes = [
+                "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
+                "walk-permissions", "trash-exclusion",
+            ]
         default: modes = [mode]
         }
 
@@ -39,6 +42,8 @@ enum SelfTest {
                 case "json-roundtrip": try checkJSONRoundTrip(arguments: arguments)
                 case "scans": try checkTypedScanRoundTrip(arguments: arguments)
                 case "digest": try checkDigestAgainstShasum(arguments: arguments)
+                case "walk-permissions": try checkWalkPermissions()
+                case "trash-exclusion": try checkTrashExclusion(arguments: arguments)
                 default:
                     print("FAILED: unknown selftest mode '\(name)'")
                     return 1
@@ -447,6 +452,168 @@ enum SelfTest {
             throw SelfTestFailure("shasum produced no digest for \(path)")
         }
         return String(first)
+    }
+
+    // MARK: - walk-permissions
+
+    /// Proves the walk keeps going past a directory it cannot read, **and reports that it did**.
+    ///
+    /// The second half is where the value is, and it took a failed teeth-proof to find that out. The
+    /// plan claimed that an error handler returning `false` stops the enumeration, so a naive port would
+    /// scan 3% of a home directory and report success. **Measured on this SDK, that is not true:** an
+    /// EACCES on a subdirectory yields the same file list whether the handler returns `true`, returns
+    /// `false`, or is absent entirely.
+    ///
+    /// What is true, and what this mode actually guards, is the reporting. With `errorHandler: nil` the
+    /// walk returns identical files and the caller learns nothing -- no count, no path, no signal. "No
+    /// duplicates found" then means either "there are none" or "I could not look inside 47 protected
+    /// directories", with no way for the user to tell which.
+    ///
+    /// Proof of teeth: pass `errorHandler: nil` and `inaccessiblePaths` comes back empty while every
+    /// other assertion still passes.
+    private static func checkWalkPermissions() throws {
+        guard getuid() != 0 else {
+            // An explicit skip, not a silent pass: root reads a 0o000 directory, so the assertion below
+            // would hold for the wrong reason.
+            print("  SKIPPED: running as root, which can read a 0o000 directory")
+            return
+        }
+
+        let scratch = NSTemporaryDirectory() + "/duplicate-walkperm-\(getpid())"
+        let manager = FileManager.default
+        defer {
+            try? manager.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: scratch + "/m-locked"
+            )
+            try? manager.removeItem(atPath: scratch)
+        }
+
+        for directory in ["a-before", "m-locked", "z-after"] {
+            try manager.createDirectory(
+                atPath: scratch + "/" + directory,
+                withIntermediateDirectories: true
+            )
+        }
+        for path in ["a-before/one.txt", "m-locked/unreachable.txt", "z-after/two.txt"] {
+            try Data("x".utf8).write(to: URL(filePath: scratch + "/" + path))
+        }
+        try manager.setAttributes(
+            [.posixPermissions: 0o000],
+            ofItemAtPath: scratch + "/m-locked"
+        )
+
+        let result = try FileManagerWalker().walk(
+            root: scratch,
+            policy: ScanPolicy(),
+            exclusions: ExclusionSet()
+        )
+        let names = Set(result.entries.map { ($0.path as NSString).lastPathComponent })
+        try expect(names.contains("one.txt"), "the file before the locked directory is missing")
+        try expect(
+            names.contains("two.txt"),
+            "enumeration stopped at the locked directory: only \(names.sorted()) came back"
+        )
+        try expect(
+            result.inaccessiblePaths.count == 1,
+            "expected exactly one inaccessible directory, got \(result.inaccessiblePaths)"
+        )
+        // Paths must read under the root the caller gave, not the resolved one. NSTemporaryDirectory
+        // lives under /var, a symlink to /private/var, so this is exercised by construction.
+        try expect(
+            result.entries.allSatisfy { $0.path.hasPrefix(scratch + "/") },
+            "a path escaped the requested root prefix"
+        )
+        print("  walked past 1 unreadable directory; \(result.entries.count) files kept")
+    }
+
+    // MARK: - trash-exclusion
+
+    /// Proves the real resolver finds the Trash roots, and that a stand-in one is actually pruned.
+    ///
+    /// Two halves, because neither alone is enough. The stand-in half proves the pruning works and can
+    /// run anywhere; the real half proves the resolver points at the right places on this machine.
+    ///
+    /// **The real Trash is never listed, never walked and never written to.** Only its identity is read,
+    /// and only to assert that it is in the exclusion set.
+    ///
+    /// Proof of teeth: compare exclusion roots by path string instead of by identity and the symlink
+    /// half fails while the plain half still passes -- which is exactly the shape that would ship
+    /// unnoticed.
+    private static func checkTrashExclusion(arguments: [String]) throws {
+        let manager = FileManager.default
+
+        // Half one: a stand-in tree, with a duplicate planted inside the excluded root and a symlink
+        // pointing at a second one.
+        let scratch = NSTemporaryDirectory() + "/duplicate-trash-\(getpid())"
+        defer { try? manager.removeItem(atPath: scratch) }
+        for directory in ["real", "faketrash", "elsewhere"] {
+            try manager.createDirectory(
+                atPath: scratch + "/" + directory,
+                withIntermediateDirectories: true
+            )
+        }
+        let payload = Data(repeating: 7, count: 64)
+        for path in ["real/dup.txt", "faketrash/dup.txt", "elsewhere/dup.txt"] {
+            try payload.write(to: URL(filePath: scratch + "/" + path))
+        }
+        try manager.createSymbolicLink(
+            atPath: scratch + "/link-trash",
+            withDestinationPath: scratch + "/elsewhere"
+        )
+
+        let exclusions = ExclusionSet.forScan(
+            of: scratch,
+            resolver: FixedTrashRootResolver([
+                scratch + "/faketrash",
+                // Named through the symlink on purpose: the walk will meet the target under its own
+                // name, which only identity-based pruning recognises.
+                scratch + "/link-trash",
+            ])
+        )
+        let result = try FileManagerWalker().walk(
+            root: scratch,
+            policy: ScanPolicy(),
+            exclusions: exclusions
+        )
+        let kept = result.entries.map { $0.path.dropFirst(scratch.count + 1) }.sorted()
+        try expect(
+            kept == ["real/dup.txt"],
+            "expected only real/dup.txt to survive, got \(kept)"
+        )
+        // And the planted copies never form a group, which is the whole point: a rescan must not
+        // re-discover what a previous run removed.
+        try expect(
+            SizeBuckets.candidates(in: result.entries).isEmpty,
+            "the excluded copies still formed a duplicate group"
+        )
+
+        // Half two: the real resolver, on this machine. Read-only.
+        let resolver = SystemTrashRootResolver()
+        let probeRoot = value(for: "--dir", in: arguments) ?? NSHomeDirectory()
+        let roots = resolver.trashRoots(forItemAt: probeRoot)
+        try expect(!roots.isEmpty, "the resolver named no Trash roots for \(probeRoot)")
+        try expect(
+            roots.contains(NSHomeDirectory() + "/.Trash"),
+            "the resolver did not name ~/.Trash: \(roots)"
+        )
+
+        let live = ExclusionSet.forScan(of: probeRoot, resolver: resolver)
+        // ~/.Trash exists on every Mac, so its identity must have resolved.
+        try expect(
+            !live.identities.isEmpty,
+            "no Trash identity resolved from \(roots)"
+        )
+        // The CLI's three quarantine directories all live under ~/.Trash, so excluding it covers all of
+        // them at once. Assert on the resolved set, never by listing the Trash.
+        try expect(
+            live.resolvedPaths.contains { $0.hasSuffix("/.Trash") },
+            "~/.Trash did not resolve into the exclusion set: \(live.resolvedPaths)"
+        )
+        print(
+            "  stand-in trash pruned; live resolver covers \(live.identities.count) "
+                + "director\(live.identities.count == 1 ? "y" : "ies")"
+        )
     }
 
     // MARK: - menu
