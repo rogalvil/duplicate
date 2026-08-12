@@ -27,7 +27,7 @@ enum SelfTest {
         case "all":
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
-                "walk-permissions", "trash-exclusion", "scan", "about", "icon",
+                "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache",
             ]
         default: modes = [mode]
         }
@@ -45,6 +45,7 @@ enum SelfTest {
                 case "walk-permissions": try checkWalkPermissions()
                 case "trash-exclusion": try checkTrashExclusion(arguments: arguments)
                 case "scan": try await checkEndToEndScan(arguments: arguments)
+                case "cache": try await checkHashCache(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -778,6 +779,125 @@ enum SelfTest {
         print(
             "  2 groups over 4 concurrency widths, byte-identical; "
                 + "\(ByteSize.format(outcome.scan.redundantByteCountUpperBound)) redundant"
+        )
+    }
+
+    // MARK: - cache
+
+    /// Proves a warm scan reads nothing and answers identically.
+    ///
+    /// The cache is the largest performance decision in the app, and the one that matters most for the
+    /// corpus it was built for: that corpus lives on an external volume, where the read is the expensive
+    /// part by a wide margin. So the assertion is not "it is faster" -- it is **zero reads and the same
+    /// bytes**, which is stronger and does not depend on how busy the machine is.
+    ///
+    /// - Note: `--dir <path>` runs the same two passes against a real tree, and reports the wall time of
+    ///   each. Read-only apart from the cache file, which lives in `~/Library/Caches`.
+    ///
+    /// Proof of teeth: drop `withSize` back to rebuilding the entry from scratch -- the bug this mode
+    /// found -- and the warm pass reads every file again.
+    private static func checkHashCache(arguments: [String]) async throws {
+        let instant = ScanIdentifier.Instant(
+            year: 2026, month: 5, day: 11, hour: 6, minute: 47, second: 16, microsecond: 685054
+        )
+        let manager = FileManager.default
+
+        // A cache file of its own, so a selftest never disturbs the one a real scan built.
+        let cacheDirectory = NSTemporaryDirectory() + "/duplicate-cachetest-\(getpid())"
+        defer { try? manager.removeItem(atPath: cacheDirectory) }
+        try manager.createDirectory(atPath: cacheDirectory, withIntermediateDirectories: true)
+        let cacheURL = URL(filePath: cacheDirectory).appending(
+            path: "hashes.v1", directoryHint: .notDirectory
+        )
+
+        // The tree: a real directory when asked, otherwise a synthesized one with a known answer.
+        var scratch: String?
+        let root: String
+        if let given = value(for: "--dir", in: arguments) {
+            root = given
+        } else {
+            let path = NSTemporaryDirectory() + "/duplicate-cachetree-\(getpid())"
+            try manager.createDirectory(atPath: path, withIntermediateDirectories: true)
+            scratch = path
+            let payload = Data((0..<200_000).map { UInt8($0 % 251) })
+            for index in 0..<8 {
+                try payload.write(to: URL(filePath: path + "/g\(index).bin"))
+            }
+            try Data(repeating: 4, count: 5000).write(to: URL(filePath: path + "/unique.bin"))
+            root = path
+        }
+        defer { if let scratch { try? manager.removeItem(atPath: scratch) } }
+
+        let clock = ContinuousClock()
+
+        let cold = HashCache(url: cacheURL)
+        await cold.load()
+        let coldStart = clock.now
+        let first = try await DuplicateFinder().find(
+            root: root,
+            instant: instant,
+            configuration: .init(cache: cold)
+        )
+        let coldElapsed = clock.now - coldStart
+        let written = try await cold.persist()
+        try expect(first.cacheHits == 0, "the cold pass had \(first.cacheHits) cache hits")
+
+        // A tree whose files all have distinct sizes has no candidates, so there is nothing to hash and
+        // nothing to cache. That is a legitimate answer, not a failure -- and asserting `written > 0`
+        // here was wrong: it failed on a real 696-file directory that simply has no duplicates.
+        let coldStats = await cold.statistics
+        if written == 0 {
+            try expect(
+                coldStats.hits + coldStats.misses == 0,
+                "nothing was cached even though \(coldStats.misses) candidates were hashed"
+            )
+            print("  \(root): no hash candidates, so nothing to cache")
+            return
+        }
+
+        // A fresh instance, which is what another process would see.
+        let warm = HashCache(url: cacheURL)
+        await warm.load()
+        try expect(
+            await warm.report.isClean, "the cache did not reload cleanly: \(await warm.report)")
+        let warmStart = clock.now
+        let second = try await DuplicateFinder().find(
+            root: root,
+            instant: instant,
+            configuration: .init(cache: warm)
+        )
+        let warmElapsed = clock.now - warmStart
+
+        let coldDocument = try JSONWriter.document(DuplicateScanCodec.encode(first.scan))
+        let warmDocument = try JSONWriter.document(DuplicateScanCodec.encode(second.scan))
+        try expect(
+            coldDocument == warmDocument,
+            "the warm pass produced a different document (\(coldDocument.count) vs "
+                + "\(warmDocument.count) bytes)"
+        )
+
+        let stats = await warm.statistics
+        try expect(
+            stats.misses == 0,
+            "the warm pass missed \(stats.misses) of \(stats.hits + stats.misses) candidates"
+        )
+        if !first.scan.groups.isEmpty || first.cacheHits > 0 {
+            try expect(second.cacheHits > 0, "the warm pass had no cache hits at all")
+        }
+
+        func seconds(_ duration: Duration) -> Double {
+            Double(duration.components.seconds)
+                + Double(duration.components.attoseconds) / 1e18
+        }
+        print(
+            "  \(root == scratch ? "synthesized tree" : root): "
+                + "\(second.cacheHits) hits, \(stats.misses) misses, "
+                + "\(written) records written"
+        )
+        print(
+            "  cold \(String(format: "%.3f", seconds(coldElapsed)))s  "
+                + "warm \(String(format: "%.3f", seconds(warmElapsed)))s  "
+                + "(\(String(format: "%.1f", seconds(coldElapsed) / max(seconds(warmElapsed), 1e-9)))x)"
         )
     }
 

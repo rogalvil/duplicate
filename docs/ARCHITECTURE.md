@@ -242,6 +242,8 @@ Reversiones verificadas para este scaffolding:
 | cambiar el indent del JSON de 2 a 4 | `json-roundtrip`, en los 226 documentos, "differs at byte 4" |
 | renombrar la clave `sha256` a `digest` en el codec | `scans`, "differs at byte 191" |
 | poner `created_at` antes de `root` al codificar | `scans`, "differs at byte 44" |
+| reconstruir el `FileEntry` en vez de usar `withSize` | `cache`, el pase caliente vuelve a leer todo |
+| corromper un byte de un registro de caché | el test de CRC: una fila cae, el resto sobrevive |
 | quitar la sustitución `__BUILD_NUMBER__` del Makefile | `about`, nombrando el placeholder |
 | no copiar el `.icns` al bundle | `icon`, "is missing from the bundle's Resources" |
 | perder el `%@` al traducir `about.builtOn` | `about`, "does not contain the date" |

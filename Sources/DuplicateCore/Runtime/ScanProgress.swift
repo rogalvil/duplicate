@@ -36,6 +36,8 @@ public struct ScanProgress: Sendable, Equatable {
     public let filesHashed: Int
     /// Bytes read from disk by the hasher.
     public let bytesRead: Int64
+    /// Candidates answered from the hash cache instead of being read.
+    public let cacheHits: Int
     /// The most recently sampled path. Sampled, never accumulated.
     public let currentPath: String
 
@@ -46,6 +48,7 @@ public struct ScanProgress: Sendable, Equatable {
         filesProbed: Int = 0,
         filesHashed: Int = 0,
         bytesRead: Int64 = 0,
+        cacheHits: Int = 0,
         currentPath: String = ""
     ) {
         self.phase = phase
@@ -54,13 +57,16 @@ public struct ScanProgress: Sendable, Equatable {
         self.filesProbed = filesProbed
         self.filesHashed = filesHashed
         self.bytesRead = bytesRead
+        self.cacheHits = cacheHits
         self.currentPath = currentPath
     }
 
     /// Completion of the current phase in `0...1`, or `nil` when the phase has no total.
     public var fraction: Double? {
         guard phase.isDeterminate, candidates > 0 else { return nil }
-        let done = phase == .probing ? filesProbed : filesHashed
+        // Cache hits count as done: they are candidates that will never be read, and a bar that
+        // ignored them would sit at zero through an entirely warm rescan.
+        let done = phase == .probing ? filesProbed : filesHashed + cacheHits
         return min(1.0, Double(done) / Double(candidates))
     }
 }
@@ -87,6 +93,7 @@ public final class ProgressCounters: Sendable {
     private let filesProbedStorage = Atomic<Int>(0)
     private let filesHashedStorage = Atomic<Int>(0)
     private let bytesReadStorage = Atomic<Int64>(0)
+    private let cacheHitsStorage = Atomic<Int>(0)
     private let currentPath = Mutex<String>("")
 
     public init() {}
@@ -122,6 +129,11 @@ public final class ProgressCounters: Sendable {
         currentPath.withLock { $0 = path }
     }
 
+    /// Records one candidate answered from the cache rather than read.
+    public func noteCacheHit() {
+        cacheHitsStorage.add(1, ordering: .relaxed)
+    }
+
     /// One relaxed load per field. Safe to call from any thread, at any rate.
     public func snapshot() -> ScanProgress {
         ScanProgress(
@@ -131,6 +143,7 @@ public final class ProgressCounters: Sendable {
             filesProbed: filesProbedStorage.load(ordering: .relaxed),
             filesHashed: filesHashedStorage.load(ordering: .relaxed),
             bytesRead: bytesReadStorage.load(ordering: .relaxed),
+            cacheHits: cacheHitsStorage.load(ordering: .relaxed),
             currentPath: currentPath.withLock { $0 }
         )
     }

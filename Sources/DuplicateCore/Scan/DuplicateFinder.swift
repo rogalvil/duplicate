@@ -23,15 +23,22 @@ public struct DuplicateFinder: Sendable {
         public var exclusions: ExclusionSet
         /// How many files to hash at once. `nil` asks ``IOConcurrencyPolicy`` for the root's volume.
         public var concurrency: Int?
+        /// Where to look before reading a file, and where to record what was read.
+        ///
+        /// `nil` disables caching entirely, which is what the tests that assert read counts use. The
+        /// caller loads and persists it: a scan should not decide on its own to write to a shared cache.
+        public var cache: HashCache?
 
         public init(
             policy: ScanPolicy = ScanPolicy(),
             exclusions: ExclusionSet = ExclusionSet(),
-            concurrency: Int? = nil
+            concurrency: Int? = nil,
+            cache: HashCache? = nil
         ) {
             self.policy = policy
             self.exclusions = exclusions
             self.concurrency = concurrency
+            self.cache = cache
         }
     }
 
@@ -41,11 +48,19 @@ public struct DuplicateFinder: Sendable {
         public let walk: WalkResult
         /// Candidates that could not be hashed, with the reason. Skipped, not fatal.
         public let unreadable: [String]
+        /// How many candidates the cache answered without a read.
+        public let cacheHits: Int
 
-        public init(scan: DuplicateScan, walk: WalkResult, unreadable: [String]) {
+        public init(
+            scan: DuplicateScan,
+            walk: WalkResult,
+            unreadable: [String],
+            cacheHits: Int = 0
+        ) {
             self.scan = scan
             self.walk = walk
             self.unreadable = unreadable
+            self.cacheHits = cacheHits
         }
     }
 
@@ -106,17 +121,42 @@ public struct DuplicateFinder: Sendable {
         // Stage two: the full digest, which is the content identity the shared format stores.
         progress.setPhase(.hashing)
         progress.setCandidates(survivors.count)
-        let hashed = try await hashAll(survivors, width: width, progress: progress)
+
+        // The cache is consulted here rather than inside the hasher, for two reasons. `FileHashing` is
+        // synchronous and `HashCache` is an actor, so a caching hasher could not await it; and asking
+        // once per candidate outside the bounded window keeps an actor hop out of the hot path.
+        var cached: [(entry: FileEntry, digest: Digest32)] = []
+        var needsReading = survivors
+        if let cache = configuration.cache {
+            needsReading = []
+            for entry in survivors {
+                if let digest = await cache.digest(for: entry) {
+                    cached.append((entry, digest))
+                    progress.noteCacheHit()
+                } else {
+                    needsReading.append(entry)
+                }
+            }
+        }
+
+        let hashed = try await hashAll(needsReading, width: width, progress: progress)
         try Task.checkCancellation()
 
+        if let cache = configuration.cache {
+            for (entry, digest) in hashed.digests {
+                await cache.store(digest, for: entry)
+            }
+        }
+
         progress.setPhase(.grouping)
-        let groups = GroupBuilder.groups(from: hashed.digests)
+        let groups = GroupBuilder.groups(from: cached + hashed.digests)
         progress.setPhase(.finished)
 
         return Outcome(
             scan: GroupBuilder.scan(root: root, instant: instant, groups: groups),
             walk: walk,
-            unreadable: hashed.unreadable
+            unreadable: hashed.unreadable,
+            cacheHits: cached.count
         )
     }
 
@@ -185,9 +225,7 @@ public struct DuplicateFinder: Sendable {
                 // underneath the scan, its digest is still correct for what is on disk -- but it is no
                 // longer evidence of a match, so the walk's size is replaced with the one that was
                 // actually hashed and the group builder decides again.
-                digests.append(
-                    (FileEntry(path: entry.path, size: hashed.byteCount), hashed.digest)
-                )
+                digests.append((entry.withSize(hashed.byteCount), hashed.digest))
             case .failure?:
                 // Reported either way. A file that vanished mid-scan and a file on a failing disk are
                 // both "we did not get a digest", and the caller shows the list rather than pretending
