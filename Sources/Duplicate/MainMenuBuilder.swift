@@ -17,7 +17,9 @@ import AppKit
 enum MainMenuBuilder {
     static func build() -> NSMenu {
         let mainMenu = NSMenu()
-        for submenu in [applicationMenu(), fileMenu(), editMenu(), groupMenu(), windowMenu()] {
+        for submenu in [
+            applicationMenu(), fileMenu(), editMenu(), groupMenu(), sessionsMenu(), windowMenu(),
+        ] {
             let item = NSMenuItem()
             item.submenu = submenu
             mainMenu.addItem(item)
@@ -187,6 +189,32 @@ enum MainMenuBuilder {
             action: #selector(ReviewWindowController.revealSelectedFile(_:)),
             keyEquivalent: "r"
         )
+        menu.addItem(.separator())
+
+        // Simulating is where a review becomes an action, so it gets a shortcut. Applying does not: it
+        // happens from the sheet the simulation opens, which is the only place the plan is on screen.
+        let simulate = menu.addItem(
+            withTitle: Strings.string("menu.group.simulate"),
+            action: #selector(ReviewWindowController.simulateApply(_:)),
+            keyEquivalent: "d"
+        )
+        simulate.keyEquivalentModifierMask = [.command, .shift]
+        return menu
+    }
+
+    /// Undoing an apply, deliberately far from ⌘Z.
+    ///
+    /// **No key equivalent on purpose.** Moving four thousand files back is not the kind of act a keystroke
+    /// should be able to start by accident, and ⌘Z already means something else in this app -- the review's
+    /// own undo.
+    private static func sessionsMenu() -> NSMenu {
+        let menu = NSMenu(title: Strings.string("menu.sessions"))
+        let undoLast = menu.addItem(
+            withTitle: Strings.string("menu.sessions.undoLast"),
+            action: #selector(AppDelegate.undoLastSession(_:)),
+            keyEquivalent: ""
+        )
+        undoLast.target = NSApp.delegate
         return menu
     }
 

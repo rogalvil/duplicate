@@ -468,6 +468,52 @@ con la `Configuration` por default, que trae `cache: nil`, así que **las dos co
 modo `cache` es el único que la enciende. La lección es del arnés, no del código: un modo que no dice
 qué configuración usa invita a leer su número como si midiera otra cosa.
 
+### Aplicar: lo que se muestra es lo que se mueve
+
+`ApplyRunner` camina un plan, un archivo a la vez. **Serial a propósito**: el cuello es metadata de
+filesystem, la concurrencia no compra nada, y volvería no determinista el orden del journal — que es el
+orden que un deshacer reproduce.
+
+**La primera falla no detiene la corrida.** Un archivo bloqueado por otro proceso no puede abortar los
+otros 3,997. **Pero veinte fallas seguidas sí la detienen**: un problema global —un permiso revocado, un
+volumen que se fue— no debe producir cuatro mil filas idénticas que leer.
+
+**El journal se escribe en lotes de 32, no al final.** Un crash a media corrida tiene que dejar un
+journal que describa lo que ya se movió, o esos archivos no se pueden devolver desde la app. El lote
+mantiene eso cierto costando una escritura por 32 archivos en vez de una por archivo.
+
+**Cada archivo se vuelve a hashear justo antes de moverse.** Un digest rancio —porque el archivo cambió
+después del escaneo— tiene que impedir que ese archivo se mueva, no descubrirse después. Y una ruta que
+nadie avaló se rehúsa en vez de permitirse: disponer de algo ausente del plan es exactamente el error que
+`VerifyingDisposer` existe para evitar.
+
+**La hoja lista todas las rutas, no una muestra.** La confirmación de una acción destructiva que dice "y
+3,997 más" está pidiendo consentimiento sobre algo que el usuario no puede ver.
+
+**La compuerta se revisa en el handler, no se confía del estado del botón.** Un control deshabilitado que
+un atajo de teclado todavía alcanza no es una regla. Y la huella se calcula una vez y sirve para los dos
+pasos, así que lo que el usuario vio y lo que `ApplyGate` autoriza son el mismo plan por construcción y
+no por coincidencia.
+
+### Deshacer, y por qué no es ⌘Z
+
+Deshacer una casilla y deshacer cuatro mil archivos mandados a la Papelera no son el mismo acto. Toda
+otra app de macOS le enseñó al usuario que ⌘Z significa "lo que acabo de escribir", así que alguien
+apretando ⌘Z para destildar una casilla y moviendo 4,000 archivos de vuelta sería una catástrofe.
+
+Por eso el deshacer de sesión vive en un menú `Sesiones` **sin equivalente de teclado**, y ⌘Z se queda en
+el `NSUndoManager` de la revisión.
+
+**Nunca se sobrescribe una ruta original ocupada.** Contenido byte-idéntico cuenta como *ya restaurado*
+—pudo haberlo devuelto Finder, que la app no puede ver— y cualquier otra cosa se bloquea. El runner
+**vuelve a chequear** justo antes de mover, porque el plan pudo mostrarse al usuario minutos antes.
+
+**Una Papelera vaciada da un plan que no puede hacer nada, y entonces no se muestra un plan**: una línea
+que lo dice. Nunca un botón Restaurar que no va a hacer nada.
+
+Y `applicationShouldTerminate` devuelve `.terminateLater` mientras un apply corre: salir a medias dejaría
+archivos medio movidos y un journal que se corta.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice

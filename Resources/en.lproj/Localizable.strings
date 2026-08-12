@@ -159,3 +159,47 @@
 "scan.inaccessible.openSettings" = "Open Privacy Settings";
 "menu.file.newScan" = "New Scan...";
 "library.toolbar.newScan" = "New Scan";
+
+/* Apply and undo */
+"apply.window.title" = "Apply";
+/* %1$d files, %2$@ total size. */
+"apply.headline" = "%1$d files would be moved to the Trash, freeing %2$@";
+"apply.detail" = "Nothing has moved yet. Every file is re-hashed immediately before it is moved, and any file that changed since the scan is left alone. Finder's Put Back works on everything moved this way, and so does Sessions > Undo the last session.";
+"apply.button.apply" = "Move to Trash";
+"apply.button.undo" = "Undo This Session";
+"apply.running" = "Moving files...";
+/* %1$d files moved, %2$@ freed. */
+"apply.done.headline" = "Moved %1$d files, freeing %2$@";
+"apply.done.clean" = "Every file moved. Sessions > Undo the last session puts them back.";
+/* %d files that went to quarantine instead. */
+"apply.done.quarantined" = "%d could not go to the Trash and were moved to the quarantine folder instead.";
+/* %d files that failed. */
+"apply.done.failed" = "%d files were left alone.";
+"apply.done.stoppedEarly" = "The run stopped early because failures kept coming: something is wrong beyond a single file.";
+"apply.failed.title" = "The apply could not run";
+"apply.refused.title" = "This plan is out of date";
+"apply.refused.body" = "The decisions changed after this plan was shown, so it no longer describes what would happen. Simulate again.";
+"apply.nothing.title" = "Nothing to apply";
+"apply.nothing.body" = "No group has been decided yet. Groups you skipped or never opened are not acted on.";
+"menu.group.simulate" = "Simulate Applying...";
+"menu.sessions" = "Sessions";
+"menu.sessions.undoLast" = "Undo the Last Session...";
+"undo.noSessions.title" = "Nothing has been applied yet";
+"undo.noSessions.body" = "There is no session to undo. The app records every file it moves, and there are no records.";
+/* %@ is the session id. */
+"undo.confirm.title" = "Undo session %@?";
+"undo.confirm.body" = "Every file this session moved will be put back where it was. A file that something else already put back, or whose original path is now occupied by different content, is left alone rather than overwritten.";
+"undo.confirm.restore" = "Put Files Back";
+/* %1$d files restored, %2$@ of content. */
+"undo.done.headline" = "Put back %1$d files, %2$@";
+"undo.clean" = "Everything this session moved is back where it was.";
+/* %d files that could not be restored. */
+"undo.failed" = "%d could not be put back.";
+/* %d files blocked by something at the original path. */
+"undo.blocked" = "%d were left alone because their original path is occupied by different content. Nothing is ever overwritten.";
+/* %d files already back. */
+"undo.alreadyRestored" = "%d were already back, byte for byte -- Finder's Put Back does the same thing.";
+"undo.allRestored" = "Everything was already back. Nothing to do.";
+"undo.nothingToDo" = "Nothing in this session can be put back. The Trash may have been emptied.";
+"undo.noJournal" = "This session has no record, so nothing can be put back.";
+"button.close" = "Close";

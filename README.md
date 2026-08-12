@@ -14,14 +14,12 @@ deshacer.
 | Escaneo de duplicados exactos desde la app, con progreso y cancelación | **funciona** |
 | Biblioteca de escaneos, con actualización en vivo | **funciona** |
 | Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
-| Papelera + journal + deshacer | **listo**, con tests, sin botón todavía |
-| Simular y aplicar desde la app | **no existe todavía** |
+| Simular, aplicar a la Papelera y deshacer la sesión | **funciona** |
 | Detector de carpetas | **no existe todavía** |
 | Detector perceptual de imagen y video | **no existe todavía** |
 
-O sea: hoy la app **escanea, lista y revisa** sin necesitar el CLI. Lo que todavía no hace es **mover
-nada**: el código destructivo está listo y probado, pero no hay botón que lo dispare, así que las
-decisiones se aplican con `rav duplicate` por ahora.
+O sea: para **duplicados exactos el ciclo está completo** y no hace falta el CLI — escanear, revisar,
+simular, aplicar, deshacer. Lo que falta son los otros dos detectores.
 
 ## Requisitos
 
@@ -208,7 +206,7 @@ make help       # lista todos los targets
 ```
 
 Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.md). El catálogo de los
-24 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
+25 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ## Si algo no funciona

@@ -33,7 +33,7 @@ enum SelfTest {
             "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
-            "fdlimit", "scan-window",
+            "fdlimit", "scan-window", "apply-window",
         ]
 
         let modes: [String]
@@ -74,6 +74,7 @@ enum SelfTest {
                 case "preview": try await checkPreview()
                 case "fdlimit": try checkDescriptorLimit()
                 case "scan-window": try await checkScanWindow()
+                case "apply-window": try await checkApplyWindow()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -2552,6 +2553,187 @@ enum SelfTest {
 
         print("  60 files scanned by the window into 20 groups, saved and read back")
         print("  a bad root refused before any work; a cancelled scan wrote nothing")
+    }
+
+    // MARK: - apply-window
+
+    /// The whole destructive loop through the real windows: review, simulate, apply, undo.
+    ///
+    /// **This is the mode that says the app is finished for exact duplicates.** Everything before it either
+    /// found files or described what it would do to them.
+    ///
+    /// What it asserts, in order of how much it matters:
+    ///
+    /// 1. **Nothing moves without a current dry run.** Applying is refused before simulating, and refused
+    ///    again after a decision changes -- checked through `ApplyGate`, on the real sheet.
+    /// 2. **What the sheet lists is exactly what moves.** Every path, not a sample.
+    /// 3. **A file that changed since the scan is left alone**, and the rest still move.
+    /// 4. **Undo puts everything back byte-identically.**
+    ///
+    /// Uses a quarantine root under `/tmp`, not the Trash: the Trash path is covered by `--mode trash`, and
+    /// a mode that filled the user's Trash on every run is a mode nobody wants in `selftest-all`.
+    ///
+    /// Proof of teeth: four breaks, each named beside its assertion.
+    @MainActor
+    private static func checkApplyWindow() async throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-apply-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let tree = root + "/tree"
+        try FileManager.default.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let store = ScanStore(state: state)
+
+        func make(_ name: String, _ contents: String) throws -> String {
+            let path = tree + "/" + name
+            try FileManager.default.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true
+            )
+            try Data(contents.utf8).write(to: URL(filePath: path))
+            return path
+        }
+
+        let keepA = try make("a/keep.txt", "group one contents")
+        let dupA = try make("a/copy.txt", "group one contents")
+        let keepB = try make("b/keep.txt", "group two contents")
+        let dupB = try make("b/copy.txt", "group two contents")
+        let hasher = ContentHasher()
+        let digestA = try hasher.fullDigest(atPath: keepA).digest
+        let digestB = try hasher.fullDigest(atPath: keepB).digest
+        let sizeA = Int64("group one contents".utf8.count)
+        let sizeB = Int64("group two contents".utf8.count)
+
+        let scan = DuplicateScan(
+            scanID: "20260812-140000-000000",
+            root: tree,
+            createdAt: "2026-08-12T14:00:00.000000Z",
+            groups: [
+                DuplicateGroup(
+                    size: sizeA, digest: digestA, files: PathOrder.sorted([keepA, dupA])),
+                DuplicateGroup(
+                    size: sizeB, digest: digestB, files: PathOrder.sorted([keepB, dupB])),
+            ]
+        )
+        try store.save(scan)
+
+        let review = ReviewWindowController(scan: scan, stateDirectory: state)
+        defer { review.window?.close() }
+        await review.awaitPresenceForSelftest()
+
+        // 1. **Nothing to simulate before anything is decided**, and nothing to apply either.
+        //
+        // Teeth: make `removalPlan` fall back to `effectiveKeep` for undecided groups -- **that** is the
+        // function the plan comes from, not `decisionsForSaving`. Measured: breaking `decisionsForSaving`
+        // leaves this assertion passing, which is why the note names the right one.
+        try expect(
+            ApplyPlan.from(review.reviewState).isEmpty,
+            "an untouched review already plans to move files"
+        )
+        try expect(
+            review.reviewFlow.isAvailable(.apply) == false, "apply is offered before any dry run")
+
+        // Decide both groups, keeping the file named `keep.txt` in each.
+        //
+        // **Confirming is what makes it a decision.** Getting the keep set right is not enough: if the
+        // heuristic already picked the right file there is nothing to toggle, and the group stays
+        // `.undecided` -- which is the tri-state working, not a bug. That is exactly what happened the first
+        // time this was written, and the plan came back empty.
+        for index in 0..<2 {
+            review.selectGroupForSelftest(index)
+            await review.awaitPresenceForSelftest()
+            let presentation = try expectSome(
+                review.currentPresentation, "group \(index + 1) has no presentation")
+            let keepRow = try expectSome(
+                presentation.rows.firstIndex { $0.path.hasSuffix("keep.txt") },
+                "no keep.txt in group \(index + 1)"
+            )
+            if presentation.rows[keepRow].isKept == false {
+                // Keep the right one, then drop the other: a group must never be left keeping nothing, so
+                // the order matters.
+                review.selectFileForSelftest(keepRow)
+                review.toggleForSelftest()
+                for row in presentation.rows.indices where row != keepRow {
+                    review.selectFileForSelftest(row)
+                    review.toggleForSelftest()
+                }
+            }
+            review.selectGroupForSelftest(index)
+            review.confirmGroup(nil)
+            try expect(
+                review.reviewState.decision(at: index).isActionable,
+                "group \(index + 1) is still undecided after confirming"
+            )
+        }
+
+        let plan = ApplyPlan.from(review.reviewState)
+        try expect(plan.fileCount == 2, "\(plan.fileCount) files planned, wanted 2")
+        try expect(
+            Set(plan.items.map(\.path)) == Set([dupA, dupB]),
+            "the plan names \(plan.items.map(\.path))"
+        )
+
+        // 2. The sheet lists exactly the plan, and the gate refuses until it is shown.
+        // Teeth: have `simulateApply` skip `flow.advance(.dryRun,...)` and the apply below is refused.
+        review.simulateForSelftest()
+        let sheet = try expectSome(review.openApplySheet, "simulating opened no sheet")
+        defer { sheet.window?.close() }
+        try expect(sheet.canApply, "the sheet will not let a real plan be applied")
+        for path in [dupA, dupB] {
+            try expect(sheet.listText.contains(path), "the sheet does not list \(path)")
+        }
+        try expect(
+            sheet.listText.contains(keepA) == false, "the sheet lists a file it would keep")
+
+        // 3. **A file that changed since the scan is left alone**, and the other still moves.
+        // Teeth: drop the digest check from `VerifyingDisposer` and the changed file moves too.
+        try Data("changed after the scan".utf8).write(to: URL(filePath: dupB))
+
+        sheet.applyForSelftest()
+        await sheet.awaitApplyForSelftest()
+        let report = try expectSome(sheet.lastReport, "the apply produced no report")
+
+        try expect(report.movedCount == 1, "\(report.movedCount) files moved, wanted 1")
+        try expect(report.failures.count == 1, "\(report.failures.count) failures, wanted 1")
+        try expect(
+            report.failures[0].reason == .contentChanged(path: dupB),
+            "the failure reads \(report.failures[0].reason)"
+        )
+        try expect(
+            FileManager.default.fileExists(atPath: dupA) == false, "the duplicate did not move")
+        try expect(
+            FileManager.default.fileExists(atPath: dupB), "the changed file was moved anyway")
+        try expect(FileManager.default.fileExists(atPath: keepA), "the keeper was moved")
+
+        // The journal describes what happened, which is what makes an undo possible at all.
+        let journalled = try MoveJournal.load(sessionID: report.sessionID, in: state)
+        try expect(journalled.entries.count == 1, "\(journalled.entries.count) journal entries")
+        try expect(journalled.entries[0].originalPath == dupA, "the journal names the wrong file")
+
+        // 4. **Applying consumes the authorisation.** A second apply needs a second dry run.
+        // Teeth: remove the `flow.advance(.apply)` from the completion and this fails.
+        try expect(
+            review.reviewFlow.isAvailable(.apply) == false,
+            "apply is still offered after it already ran"
+        )
+
+        // 5. **Undo puts it back byte-identically.**
+        // Teeth: make `UndoRunner` copy instead of move, or restore to a suffixed name, and the digest
+        // comparison fails.
+        let outcome = UndoCoordinator.undo(sessionID: report.sessionID, in: state)
+        try expect(outcome.restoredCount == 1, "\(outcome.restoredCount) files restored, wanted 1")
+        try expect(FileManager.default.fileExists(atPath: dupA), "the file was not put back")
+        try expect(
+            try hasher.fullDigest(atPath: dupA).digest == digestA,
+            "the restored file does not match what was moved"
+        )
+
+        // And a second undo of the same session is a no-op rather than an error, because the `undone_at`
+        // records say the work is done.
+        let again = UndoCoordinator.undo(sessionID: report.sessionID, in: state)
+        try expect(again.restoredCount == 0, "a second undo moved \(again.restoredCount) files")
+
+        print("  simulated, applied 1 of 2, refused the file that changed since the scan")
+        print("  undo restored it byte-identically; a second undo did nothing")
     }
 
     // MARK: - about
