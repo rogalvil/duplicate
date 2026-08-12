@@ -257,6 +257,22 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **El plan de aplicar sale de `removalPlan`, no de `decisionsForSaving`.** Son dos funciones distintas
+  sobre el mismo tri-estado, y confundirlas hace que un arnés pruebe la que no importa: medido, romper
+  `decisionsForSaving` deja pasar la aserción de "una revisión intacta no planea mover nada", y romper
+  `removalPlan` la hace fallar.
+- **Confirmar es lo que convierte un preview en decisión.** Dejar el keep set correcto no alcanza: si el
+  heurístico ya eligió bien, no hay nada que alternar y el grupo sigue `.undecided`. Eso es el
+  tri-estado funcionando, y un arnés que solo alterna casillas obtiene un plan vacío — ya pasó.
+- **Veinte fallas seguidas detienen un apply; una sola no.** Un archivo bloqueado por otro proceso no
+  puede abortar los otros 3,997, pero un problema global —permiso revocado, volumen que se fue— no debe
+  producir cuatro mil filas idénticas que leer.
+- **El journal se escribe en lotes de 32 durante el apply, no al final.** Un crash a media corrida tiene
+  que dejar un journal que describa lo que ya se movió, o esos archivos no se pueden devolver.
+- **`Mutex` es noncopyable**, así que no se puede capturar en los closures que escapan (el de progreso y
+  el del `Timer`). Una clase `Sendable` con un `Atomic` adentro sí.
+- **El closure de un `Timer` es nonisolated**, así que pasarle el propio `timer` para invalidarse es una
+  carrera que el compilador rechaza. Se guarda el timer en una propiedad `@MainActor` y se invalida ahí.
 - **Launch Services arranca la app con `RLIMIT_NOFILE` blando en 256.** Quedarse sin descriptores no
   truena: sale como archivo ilegible, se cuenta como candidato saltado, y **el escaneo encuentra menos
   de lo que debía** — una falla que se ve como una respuesta más chica, no como un error. `main.swift`

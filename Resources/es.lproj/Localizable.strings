@@ -158,3 +158,47 @@
 "scan.inaccessible.openSettings" = "Abrir Privacidad";
 "menu.file.newScan" = "Nuevo escaneo...";
 "library.toolbar.newScan" = "Nuevo escaneo";
+
+/* Aplicar y deshacer */
+"apply.window.title" = "Aplicar";
+/* %1$d archivos, %2$@ tamaño total. */
+"apply.headline" = "Se moverían %1$d archivos a la Papelera, liberando %2$@";
+"apply.detail" = "Todavía no se ha movido nada. Cada archivo se vuelve a hashear justo antes de moverse, y cualquiera que haya cambiado desde el escaneo se deja en paz. El \"Devolver\" de Finder funciona con todo lo que se mueve así, y también Sesiones > Deshacer la última sesión.";
+"apply.button.apply" = "Mover a la Papelera";
+"apply.button.undo" = "Deshacer esta sesión";
+"apply.running" = "Moviendo archivos...";
+/* %1$d archivos movidos, %2$@ liberados. */
+"apply.done.headline" = "Se movieron %1$d archivos, liberando %2$@";
+"apply.done.clean" = "Se movieron todos. Sesiones > Deshacer la última sesión los devuelve.";
+/* %d archivos que fueron a cuarentena. */
+"apply.done.quarantined" = "%d no pudieron ir a la Papelera y se movieron a la carpeta de cuarentena.";
+/* %d archivos que fallaron. */
+"apply.done.failed" = "%d archivos se dejaron en paz.";
+"apply.done.stoppedEarly" = "La corrida se detuvo temprano porque las fallas siguieron llegando: hay algo mal más allá de un archivo suelto.";
+"apply.failed.title" = "No se pudo aplicar";
+"apply.refused.title" = "Este plan está vencido";
+"apply.refused.body" = "Las decisiones cambiaron después de mostrar este plan, así que ya no describe lo que pasaría. Simula otra vez.";
+"apply.nothing.title" = "No hay nada que aplicar";
+"apply.nothing.body" = "Todavía no hay ningún grupo decidido. Los grupos que saltaste o que nunca abriste no se accionan.";
+"menu.group.simulate" = "Simular la aplicación...";
+"menu.sessions" = "Sesiones";
+"menu.sessions.undoLast" = "Deshacer la última sesión...";
+"undo.noSessions.title" = "Todavía no se ha aplicado nada";
+"undo.noSessions.body" = "No hay ninguna sesión que deshacer. La app registra cada archivo que mueve, y no hay registros.";
+/* %@ es el id de la sesión. */
+"undo.confirm.title" = "¿Deshacer la sesión %@?";
+"undo.confirm.body" = "Cada archivo que esta sesión movió va a volver a donde estaba. Un archivo que algo más ya devolvió, o cuya ruta original está ocupada por contenido distinto, se deja en paz en vez de sobrescribirse.";
+"undo.confirm.restore" = "Devolver los archivos";
+/* %1$d archivos restaurados, %2$@ de contenido. */
+"undo.done.headline" = "Se devolvieron %1$d archivos, %2$@";
+"undo.clean" = "Todo lo que esta sesión movió está de vuelta donde estaba.";
+/* %d archivos que no se pudieron restaurar. */
+"undo.failed" = "%d no se pudieron devolver.";
+/* %d archivos bloqueados por algo en la ruta original. */
+"undo.blocked" = "%d se dejaron en paz porque su ruta original está ocupada por contenido distinto. Nunca se sobrescribe nada.";
+/* %d archivos que ya estaban de vuelta. */
+"undo.alreadyRestored" = "%d ya estaban de vuelta, byte por byte — el \"Devolver\" de Finder hace lo mismo.";
+"undo.allRestored" = "Todo ya estaba de vuelta. Nada que hacer.";
+"undo.nothingToDo" = "Nada de esta sesión se puede devolver. La Papelera pudo haberse vaciado.";
+"undo.noJournal" = "Esta sesión no tiene registro, así que no se puede devolver nada.";
+"button.close" = "Cerrar";

@@ -327,6 +327,14 @@ final class LibraryWindowController: NSWindowController {
         panel.showWindow(nil)
     }
 
+    /// Whether any open review is in the middle of an apply.
+    ///
+    /// Asked by `applicationShouldTerminate`: quitting halfway through would leave files half-moved and a
+    /// journal that stops mid-run.
+    var hasApplyInFlight: Bool {
+        reviewWindows.values.contains { $0.isApplying }
+    }
+
     /// Selects a row by scan id once it appears, since the list is read asynchronously.
     private func select(scanID: String) {
         if let index = rows.firstIndex(where: { $0.scanID == scanID }) {

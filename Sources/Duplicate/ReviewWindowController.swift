@@ -53,6 +53,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     private let warningLabel = NSTextField(labelWithString: "")
 
     private let undo = UndoManager()
+    private var applySheet: ApplySheetController?
 
     private let previewPane = PreviewPane()
     private let thumbnailer = QuickLookThumbnailer()
@@ -449,6 +450,54 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         selectGroup(state.groupIndex + 1)
     }
 
+    /// Shows what applying would do, and only then allows applying.
+    ///
+    /// **The fingerprint is computed once and used for both steps.** The sheet is handed the flow already at
+    /// `.dryRunDone` with that value, so what the user sees and what `ApplyGate` authorises are the same
+    /// plan by construction rather than by coincidence.
+    @objc func simulateApply(_ sender: Any?) {
+        let plan = ApplyPlan.from(state)
+        guard !plan.isEmpty else {
+            presentNothingToApply()
+            return
+        }
+        let fingerprint = ApplyGate.fingerprint(of: state.removalPlan)
+        _ = flow.advance(.dryRun, fingerprint: fingerprint)
+
+        let sheet = ApplySheetController(
+            plan: plan,
+            fingerprint: fingerprint,
+            flow: flow,
+            stateDirectory: stateDirectory
+        )
+        sheet.onApplied = { [weak self] _ in
+            guard let self else { return }
+            // Applying consumes the authorisation, so a second Apply needs a second dry run. And the files
+            // are gone now, so the review is re-read from disk rather than left claiming they are there.
+            _ = self.flow.advance(.apply)
+            self.checkPresence()
+            self.refreshDetail()
+        }
+        applySheet = sheet
+        if let window, let sheetWindow = sheet.window {
+            window.beginSheet(sheetWindow)
+        } else {
+            sheet.showWindow(nil)
+        }
+    }
+
+    private func presentNothingToApply() {
+        let alert = NSAlert()
+        alert.messageText = Strings.string("apply.nothing.title")
+        alert.informativeText = Strings.string("apply.nothing.body")
+        alert.addButton(withTitle: Strings.string("button.ok"))
+        if let window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
     @objc func revealSelectedFile(_ sender: Any?) {
         guard let presentation else { return }
         let row = fileTable.clickedRow >= 0 ? fileTable.clickedRow : fileTable.selectedRow
@@ -520,6 +569,9 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             return state.decision(at: state.groupIndex) != .undecided
         case #selector(saveDecisions(_:)):
             return hasUnsavedChanges && !state.decisionsForSaving.isEmpty
+        case #selector(simulateApply(_:)):
+            // Offered only when something is decided. Nothing to simulate is not an error worth a sheet.
+            return !state.decisionsForSaving.isEmpty
         case #selector(revealSelectedFile(_:)):
             return fileTable.selectedRow >= 0
         default:
@@ -539,6 +591,10 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var groupRowCount: Int { groupTable.numberOfRows }
     var fileRowCount: Int { fileTable.numberOfRows }
     var canUndoReview: Bool { undo.canUndo }
+    var openApplySheet: ApplySheetController? { applySheet }
+    /// Whether this review's apply sheet is moving files right now.
+    var isApplying: Bool { applySheet?.isApplying ?? false }
+    func simulateForSelftest() { simulateApply(nil) }
     var preview: PreviewPane { previewPane }
     var groupPresence: GroupPresence? { presence }
     var thumbnailCacheCount: Int { thumbnailer.cachedCount }
