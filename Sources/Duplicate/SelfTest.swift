@@ -27,7 +27,7 @@ enum SelfTest {
         case "all":
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
-                "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache",
+                "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             ]
         default: modes = [mode]
         }
@@ -46,6 +46,7 @@ enum SelfTest {
                 case "trash-exclusion": try checkTrashExclusion(arguments: arguments)
                 case "scan": try await checkEndToEndScan(arguments: arguments)
                 case "cache": try await checkHashCache(arguments: arguments)
+                case "storage": try await checkStorageClasses(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -898,6 +899,121 @@ enum SelfTest {
             "  cold \(String(format: "%.3f", seconds(coldElapsed)))s  "
                 + "warm \(String(format: "%.3f", seconds(warmElapsed)))s  "
                 + "(\(String(format: "%.1f", seconds(coldElapsed) / max(seconds(warmElapsed), 1e-9)))x)"
+        )
+    }
+
+    // MARK: - storage
+
+    /// Proves the reclaimable figure counts storage, not files.
+    ///
+    /// Built against the real syscalls, because the whole thing rests on a fact that is easy to state and
+    /// easy to get backwards: **copying a file on APFS produces a clone.** `FileManager.copyItem` and `cp`
+    /// both go through `clonefile`, so a file duplicated in Finder shares storage with its original and
+    /// removing it frees nothing. An app that counted files would claim bytes that `df` can prove it never
+    /// returned.
+    ///
+    /// The tree here holds all four cases at once: a source, a `clonefile` clone, a `copyItem` copy, a
+    /// `link(2)` hardlink, and one file whose bytes were written afresh. Only the last one is a second copy
+    /// of the content.
+    ///
+    /// - Note: `--dir <path>` reports the same two figures for a real tree, and how far apart they are.
+    ///
+    /// Proof of teeth: make `StoragePartition.of` key on the path instead of the content identifier and
+    /// the reclaimable figure jumps from one copy to four.
+    private static func checkStorageClasses(arguments: [String]) async throws {
+        let instant = ScanIdentifier.Instant(
+            year: 2026, month: 5, day: 11, hour: 6, minute: 47, second: 16, microsecond: 3
+        )
+
+        if let root = value(for: "--dir", in: arguments) {
+            let outcome = try await DuplicateFinder().find(root: root, instant: instant)
+            let scan = outcome.scan
+            let shared = scan.groupsWithSharedStorage.count
+            try expect(
+                scan.reclaimableBytes <= scan.redundantByteCountUpperBound,
+                "the honest figure exceeds its own upper bound"
+            )
+            print(
+                "  \(root): \(scan.groups.count) groups, "
+                    + "apparent \(ByteSize.format(scan.redundantByteCountUpperBound)), "
+                    + "reclaimable \(ByteSize.format(scan.reclaimableBytes))"
+                    + (scan.isReclaimExact ? " (exact)" : " (upper bound)")
+            )
+            print("  \(shared) group\(shared == 1 ? "" : "s") contain files that share storage")
+            return
+        }
+
+        let manager = FileManager.default
+        let scratch = NSTemporaryDirectory() + "/duplicate-storage-\(getpid())"
+        defer { try? manager.removeItem(atPath: scratch) }
+        try manager.createDirectory(atPath: scratch, withIntermediateDirectories: true)
+
+        let supportsCloning =
+            (try? URL(filePath: scratch).resourceValues(
+                forKeys: [.volumeSupportsFileCloningKey]
+            ).volumeSupportsFileCloning) ?? false
+        guard supportsCloning else {
+            // An explicit skip, not a silent pass: without cloning the distinction cannot be observed, so
+            // every assertion below would hold for the wrong reason.
+            print("  SKIPPED: \(scratch) is on a volume that cannot clone")
+            return
+        }
+
+        let payload = Data((0..<8192).map { UInt8($0 % 251) })
+        let source = scratch + "/source.bin"
+        try payload.write(to: URL(filePath: source))
+        // Written afresh, which is the only way to get a genuinely second copy on APFS.
+        try payload.write(to: URL(filePath: scratch + "/independent.bin"))
+        let clone = scratch + "/clone.bin"
+        let rc = source.withCString { s in clone.withCString { c in clonefile(s, c, 0) } }
+        try expect(rc == 0, "clonefile failed with errno \(errno)")
+        try manager.copyItem(atPath: source, toPath: scratch + "/copied.bin")
+        try manager.linkItem(atPath: source, toPath: scratch + "/hardlink.bin")
+
+        let outcome = try await DuplicateFinder().find(
+            root: scratch,
+            instant: instant,
+            configuration: .init(concurrency: 2)
+        )
+        let group = try expectSome(outcome.scan.groups.first, "no group was found")
+        try expect(group.files.count == 5, "expected 5 members, got \(group.files.count)")
+        try expect(group.isReclaimExact, "the volume reported no content identifiers")
+
+        // Five files, two distinct copies of the content: source+clone+copied+hardlink share one, and
+        // independent.bin is the other. So exactly one copy is reclaimable.
+        let partition = try expectSome(group.storage, "the group carries no partition")
+        try expect(
+            partition.distinctCopies == 2,
+            "expected 2 distinct copies, got \(partition.distinctCopies): \(partition.clusters)"
+        )
+        try expect(
+            group.reclaimableBytes == 8192,
+            "reclaimable is \(group.reclaimableBytes), expected 8192"
+        )
+        try expect(
+            group.redundantByteCountUpperBound == 8192 * 4,
+            "the file-counting figure changed: \(group.redundantByteCountUpperBound)"
+        )
+
+        // And the removal set never contains a second name for the storage being kept.
+        let removals = group.removalCandidates(keeping: source)
+        try expect(removals.count == 1, "removal set is \(removals)")
+        try expect(
+            removals[0].hasSuffix("/independent.bin"),
+            "the removal set names \(removals[0]), which shares storage with the keeper"
+        )
+        try expect(
+            group.storageSiblings(of: source).count == 3,
+            "expected 3 storage siblings, got \(group.storageSiblings(of: source))"
+        )
+
+        print(
+            "  5 files, 2 distinct copies: apparent "
+                + "\(ByteSize.format(group.redundantByteCountUpperBound)), reclaimable "
+                + "\(ByteSize.format(group.reclaimableBytes))"
+        )
+        print(
+            "  copyItem and cp both clone on APFS, so only the freshly written file is a second copy"
         )
     }
 

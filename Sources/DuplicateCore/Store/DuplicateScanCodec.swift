@@ -24,11 +24,36 @@ public enum DuplicateScanCodec {
     }
 
     public static func encode(group: DuplicateGroup) -> JSONValue {
-        .object([
+        var members = [
             JSONMember(key: "size", value: .int(group.size)),
             JSONMember(key: "sha256", value: .string(group.digest.hexString)),
             JSONMember(key: "files", value: .array(group.files.map(JSONValue.string))),
-        ])
+        ]
+        // Emitted only when the scan actually knows the partition, and under a namespaced key.
+        //
+        // Both halves matter. The CLI's `load_scan` reads only the keys it knows and ignores the rest
+        // (`src/rav/core/duplicates.py:114-133`), so an extra key is forward-compatible -- but omitting it
+        // when there is nothing to say is what keeps a re-encode of a CLI-written document byte-identical,
+        // which is the property the interop selftests assert against 226 real files.
+        if let storage = group.storage {
+            members.append(
+                JSONMember(
+                    key: "rav_app",
+                    value: .object([
+                        JSONMember(
+                            key: "storage_clusters",
+                            value: .array(
+                                storage.clusters.map { cluster in
+                                    .array(cluster.map(JSONValue.string))
+                                }
+                            )
+                        ),
+                        JSONMember(key: "storage_exact", value: .bool(storage.isExact)),
+                    ])
+                )
+            )
+        }
+        return .object(members)
     }
 
     // MARK: - Decoding
@@ -85,7 +110,41 @@ public enum DuplicateScanCodec {
             }
             return path
         }
-        return DuplicateGroup(size: size, digest: digest, files: files)
+        return DuplicateGroup(
+            size: size,
+            digest: digest,
+            files: files,
+            storage: decodeStorage(value, files: files)
+        )
+    }
+
+    /// Reads the app's own storage partition, when the document carries one.
+    ///
+    /// Returns `nil` rather than a fabricated partition when the key is absent or malformed. `nil` means
+    /// "unknown", not "no sharing", and the difference decides whether the reclaimable figure is exact
+    /// or an upper bound.
+    private static func decodeStorage(_ value: JSONValue, files: [String]) -> StoragePartition? {
+        guard
+            let app = value["rav_app"],
+            let raw = app["storage_clusters"]?.arrayValue
+        else { return nil }
+        var clusters: [[String]] = []
+        for element in raw {
+            guard let paths = element.arrayValue else { return nil }
+            let members = paths.compactMap(\.stringValue)
+            guard members.count == paths.count, !members.isEmpty else { return nil }
+            clusters.append(members)
+        }
+        // Every member must appear exactly once, or the partition does not describe this group and acting
+        // on it would move the wrong files.
+        guard clusters.flatMap({ $0 }).count == files.count else { return nil }
+        let exact: Bool
+        if case .bool(let flag)? = app["storage_exact"] {
+            exact = flag
+        } else {
+            exact = false
+        }
+        return StoragePartition(clusters: clusters, isExact: exact)
     }
 
     private static func string(_ value: JSONValue, _ key: String) throws -> String {

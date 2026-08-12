@@ -31,6 +31,19 @@ public struct DuplicateScan: Hashable, Sendable {
         groups.reduce(0) { $0 + $1.redundantByteCountUpperBound }
     }
 
+    /// Sum of what removing the redundant copies would actually free.
+    public var reclaimableBytes: Int64 {
+        groups.reduce(0) { $0 + $1.reclaimableBytes }
+    }
+
+    /// Whether every group's figure is exact.
+    public var isReclaimExact: Bool { groups.allSatisfy(\.isReclaimExact) }
+
+    /// Groups where some members share storage, so their apparent saving is not real.
+    public var groupsWithSharedStorage: [DuplicateGroup] {
+        groups.filter(\.hasSharedStorage)
+    }
+
     /// Whether the scan root or any member path is relative, and therefore not actionable as-is.
     ///
     /// The UI has to resolve these against a base directory the user picks before anything can be
