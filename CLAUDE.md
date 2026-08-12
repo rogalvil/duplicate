@@ -188,9 +188,8 @@ Dos reglas:
    exacto que lo hace fallar. Un arnés que pasa contra código roto no sirve de nada, y ya pasó en el
    proyecto anterior.
 
-Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
-`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`, `undo`,
-`review`, `decisions`, `gate`, `library`, `review-window`.
+El catálogo completo —qué afirma cada modo, cómo se probó que falla, y qué toca en disco— está en
+[`docs/SELFTEST.md`](docs/SELFTEST.md). **CI no corre ninguno**, por costo; ahí está explicado.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el

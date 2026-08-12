@@ -208,8 +208,9 @@ make selftest-all
 make help       # lista todos los targets
 ```
 
-Cómo trabajar en el repo, qué exige un PR y por qué el selftest existe:
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.md). El catálogo de los
+21 modos de selftest, con la rotura exacta que hace fallar a cada uno:
+[`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ## Si algo no funciona
 
