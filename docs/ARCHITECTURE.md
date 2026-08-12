@@ -392,6 +392,55 @@ que uno parado en una ruta registrada significa que el archivo fue reemplazado. 
 sería activamente falso, porque `trashItem` sobre un symlink manda el enlace y deja los bytes donde
 están.
 
+### Escanear desde la app, y las dos cosas que eso obliga
+
+`ScanSession` es la costura que faltaba. `DuplicateFinder` produce un escaneo y `ScanStore` escribe uno,
+pero decidir **cuál** identificador, **cuáles** exclusiones, **si** usar la caché compartida y **cuándo**
+el documento llega a disco son decisiones con consecuencias, y estaban repartidas entre un test y un
+selftest en vez de vivir en algún lado.
+
+En Core porque todas son valores, y porque la ventana no puede ser el lugar que las sabe: un escaneo
+lanzado desde una ventana y uno lanzado desde una futura línea de comandos tienen que producir el mismo
+documento.
+
+**Guardar es lo último que pasa, y una falla al guardar se reporta en vez de lanzarse.** Un escaneo de
+800,000 archivos que terminó bien no se puede tirar porque el directorio de estado estaba de solo
+lectura: quien llama todavía puede revisarlo en memoria y el reporte dice que no está en disco. Lanzar
+convertiría un problema recuperable en veinte minutos perdidos.
+
+**Un escaneo cancelado no escribe nada**, porque el save va después de que el finder regresa — y el
+finder revisa la cancelación en cuatro puntos. Los appends de la caché de hashes **sí se conservan**, a
+propósito: son hechos verdaderos, y tirarlos haría pagar el precio completo en el siguiente intento.
+
+**El `Date` entra y el instante se resuelve adentro.** Una versión anterior daba un identificador por un
+método y tomaba un instante por otro, lo que dejaba deduplicar uno y guardar bajo el otro: el
+identificador decide el nombre del archivo, el instante decide lo que va estampado adentro, y tienen que
+salir del mismo valor.
+
+### El progreso se jala, no se empuja
+
+Los hooks del CLI disparan una vez por archivo. A 800,000 archivos, un update empujado serían 800,000
+saltos de actor para redibujar una etiqueta que nadie puede leer más de diez veces por segundo.
+
+El escáner cuenta con atómicos y la ventana lee un `snapshot()` en un `Timer` a **10 Hz**. Diez lecturas
+por segundo en vez de 800,000 empujones. El timer se agrega en modo `.common`, porque sin eso un escaneo
+que termina con un menú abierto deja de actualizarse.
+
+Dígitos monoespaciados en los contadores: un numeral proporcional actualizándose diez veces por segundo
+salta de lado.
+
+### El límite de descriptores, y por qué el arnés lo baja él mismo
+
+**Launch Services arranca una app con `RLIMIT_NOFILE` blando en 256.** Un escaneo tiene un descriptor por
+hash concurrente más el del recorrido, y junto a la caché de hashes, la conexión XPC de Quick Look y lo
+que Foundation guarde, 256 no es un margen cómodo. Quedarse sin descriptores **no truena**: sale como
+archivo ilegible, se cuenta como candidato saltado, y el escaneo encuentra menos de lo que debía.
+
+Y ahí está la trampa del arnés: **desde una terminal el límite blando ya viene en millones** —medido,
+1048576— así que un modo que solo mirara el valor actual pasaría exista o no el `setrlimit`. El modo
+`fdlimit` baja el límite a 256 él mismo, llama a la misma función que llama el arranque, y verifica que
+volvió a subir. Bajar siempre se puede; subir está acotado por el límite duro, que no se toca.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice

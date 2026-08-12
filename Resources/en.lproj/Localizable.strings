@@ -125,3 +125,37 @@
 "review.warning.notADuplicate" = "Only %1$d of the %2$d files this group recorded still exist, so there is nothing left to deduplicate here.";
 /* %1$d files gone or changed, %2$d the scan recorded. */
 "review.warning.stale" = "%1$d of the %2$d files in this group are gone or have changed since the scan.";
+
+/* Scan window */
+"scan.window.title" = "New Scan";
+"scan.noRoot" = "No folder chosen";
+"scan.badRoot" = "That folder cannot be scanned";
+"scan.chooseFolder" = "Choose Folder...";
+"scan.chooseFolder.prompt" = "Scan";
+"scan.option.hidden" = "Include hidden files (the CLI does; a folder of identical .DS_Store buries real findings)";
+"scan.option.packages" = "Look inside packages like .app and .photoslibrary (removing a file from one corrupts it)";
+"scan.option.cache" = "Use the hash cache (a second scan of the same folder is much faster)";
+"scan.option.minimumSize" = "Ignore files smaller than";
+"scan.start" = "Start";
+"scan.stopping" = "Stopping...";
+"scan.phase.idle" = "Ready";
+"scan.phase.indexing" = "Listing files";
+"scan.phase.probing" = "Comparing candidates";
+"scan.phase.hashing" = "Reading contents";
+"scan.phase.grouping" = "Grouping";
+"scan.phase.finished" = "Done";
+/* %d files seen. */
+"scan.counts.files" = "%d files";
+/* %1$d of %2$d hashed. */
+"scan.counts.hashed" = "%1$d of %2$d hashed";
+/* %d served from the cache. */
+"scan.counts.cached" = "%d from cache";
+/* %d seconds elapsed. */
+"scan.counts.elapsed" = "%ds";
+"scan.failed.title" = "The scan could not finish";
+"scan.inaccessible.title" = "Some folders could not be read";
+/* %d folders that could not be entered. */
+"scan.inaccessible.body" = "%d folders were skipped because macOS did not grant access. Anything inside them was not scanned, so this result is incomplete. A permission granted now does not apply to a running app: the app has to be relaunched.";
+"scan.inaccessible.openSettings" = "Open Privacy Settings";
+"menu.file.newScan" = "New Scan...";
+"library.toolbar.newScan" = "New Scan";

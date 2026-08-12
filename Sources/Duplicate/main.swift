@@ -6,6 +6,10 @@ import Foundation
 // Touching NSApplication.shared first is what opens the window-server connection. Several AppKit
 // and Quick Look calls abort the process with CGS_REQUIRE_INIT without it, and the failure points
 // nowhere near the cause.
+// Raised before anything opens a file. See `DescriptorLimit` for why 256 is not enough and why the
+// failure it prevents looks like a smaller answer rather than an error.
+DescriptorLimit.raiseIfNeeded()
+
 let application = NSApplication.shared
 
 // .regular, not .accessory: this is a windowed app with a Dock icon and a main menu. Set here as

@@ -5,6 +5,7 @@ import AppKit
 import DuplicateCore
 import Foundation
 @preconcurrency import ImageIO
+import Synchronization
 
 /// Headless checks that assert, and exit non-zero when they fail.
 ///
@@ -32,6 +33,7 @@ enum SelfTest {
             "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
+            "fdlimit", "scan-window",
         ]
 
         let modes: [String]
@@ -70,6 +72,8 @@ enum SelfTest {
                 case "library": try await checkLibraryWindow()
                 case "review-window": try await checkReviewWindow()
                 case "preview": try await checkPreview()
+                case "fdlimit": try checkDescriptorLimit()
+                case "scan-window": try await checkScanWindow()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -313,7 +317,8 @@ enum SelfTest {
         )
 
         // Pass two: every declared key is referenced somewhere, however it is passed.
-        let interpolated = Set(LibrarySort.allCases.map { "library.sort.\($0.rawValue)" })
+        var interpolated = Set(LibrarySort.allCases.map { "library.sort.\($0.rawValue)" })
+        interpolated.formUnion(ScanPhase.allCases.map { "scan.phase.\($0)" })
         let unreferenced = base.keys
             .filter { !interpolated.contains($0) && !text.contains("\"\($0)\"") }
             .sorted()
@@ -2334,6 +2339,219 @@ enum SelfTest {
         print(
             "  a group whose files are gone is reported, and a changed length is not reported as fine"
         )
+    }
+
+    // MARK: - fdlimit
+
+    /// Proves the descriptor limit really gets raised, and that a real scan stays well inside it.
+    ///
+    /// **Launch Services starts an app with a soft `RLIMIT_NOFILE` of 256.** Running out does not crash: it
+    /// surfaces as an unreadable file, gets counted as a skipped candidate, and the scan quietly finds less
+    /// than it should -- a failure that looks like a smaller answer rather than an error.
+    ///
+    /// **The raise is exercised, not observed.** From a terminal the soft limit is often already in the
+    /// millions, so asserting on the current value would pass whether or not `main.swift` does anything --
+    /// measured: 1048576 on this machine. So the mode lowers the limit to 256 itself, calls the same
+    /// function launch does, and checks it came back up. Lowering always succeeds; raising back is bounded
+    /// by the hard limit, which is left alone.
+    ///
+    /// Also counts descriptors across a real scan, because the leak this would catch is a missing
+    /// `defer { close(fd) }` on the cancellation path, which no unit test notices.
+    ///
+    /// Proof of teeth: make `DescriptorLimit.raiseIfNeeded` return without calling `setrlimit` and the
+    /// first assertion fails with 256; leak a descriptor per file in `ChunkedReader` and the second fails.
+    private static func checkDescriptorLimit() throws {
+        let entryLimit = DescriptorLimit.current
+        try expect(entryLimit > 0, "the descriptor limit could not be read")
+        defer { _ = DescriptorLimit.lowerForTesting(to: entryLimit) }
+
+        try expect(
+            DescriptorLimit.lowerForTesting(to: 256),
+            "the soft limit could not be lowered for the test")
+        try expect(DescriptorLimit.current == 256, "lowering did not take effect")
+        let raised = DescriptorLimit.raiseIfNeeded()
+        try expect(
+            raised >= DescriptorLimit.target,
+            "the limit came back as \(raised), wanted at least \(DescriptorLimit.target)"
+        )
+        try expect(DescriptorLimit.current == raised, "getrlimit disagrees with the raise")
+
+        let before = openDescriptorCount()
+
+        // A scan over a tree big enough to exercise the concurrency window.
+        let root = NSTemporaryDirectory() + "duplicate-selftest-fd-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let tree = root + "/tree"
+        try FileManager.default.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        for index in 0..<300 {
+            try Data(repeating: UInt8(index % 251), count: 4096)
+                .write(to: URL(filePath: tree + "/f\(index).bin"))
+        }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let session = ScanSession(
+            store: ScanStore(state: state),
+            trashResolver: FixedTrashRootResolver([root + "/faketrash"]),
+            cacheURL: URL(filePath: root + "/hashes.v1")
+        )
+        let result = try runBlocking {
+            try await session.run(
+                ScanSession.Request(root: tree),
+                instant: ScanIdentifier.Instant(
+                    year: 2026, month: 8, day: 12, hour: 12, minute: 0, second: 0, microsecond: 0)
+            )
+        }
+        try expect(result.scan.groups.count > 0, "the fixture produced no groups")
+
+        let after = openDescriptorCount()
+        // A handful of descriptors legitimately survive a scan: the hash cache's own, and whatever the
+        // state directory writer left in a cache. A per-file leak over 300 files would be unmistakable.
+        try expect(
+            after - before <= 16,
+            "the scan leaked descriptors: \(before) open before, \(after) after"
+        )
+        print("  lowered to 256, raised back to \(raised); the launch limit here was \(entryLimit)")
+        print("  300 files scanned with \(after - before) descriptors still open afterwards")
+    }
+
+    /// How many descriptors this process has open, by probing the table.
+    ///
+    /// `fcntl(F_GETFD)` rather than listing `/dev/fd`: listing it opens a descriptor of its own and changes
+    /// the number being measured.
+    private static func openDescriptorCount() -> Int {
+        var limits = rlimit()
+        guard getrlimit(RLIMIT_NOFILE, &limits) == 0 else { return 0 }
+        let ceiling = Int(min(limits.rlim_cur, 8192))
+        var count = 0
+        for descriptor in 0..<ceiling where fcntl(Int32(descriptor), F_GETFD) != -1 {
+            count += 1
+        }
+        return count
+    }
+
+    /// Runs an async body from a synchronous selftest mode.
+    private static func runBlocking<T: Sendable>(
+        _ body: @escaping @Sendable () async throws -> T
+    ) throws -> T {
+        let semaphore = DispatchSemaphore(value: 0)
+        let box = Mutex<Result<T, any Error>?>(nil)
+        Task.detached {
+            do {
+                let value = try await body()
+                box.withLock { $0 = .success(value) }
+            } catch {
+                box.withLock { $0 = .failure(error) }
+            }
+            semaphore.signal()
+        }
+        semaphore.wait()
+        guard let result = box.withLock({ $0 }) else {
+            throw SelfTestFailure("the async body produced nothing")
+        }
+        return try result.get()
+    }
+
+    // MARK: - scan-window
+
+    /// Drives the real scan window over a real tree, and then cancels a second one.
+    ///
+    /// **This is the mode that says the app no longer needs the CLI.** Everything before it produced or read
+    /// documents somebody else made; this one has the window make one.
+    ///
+    /// What it asserts: the options refuse a root that cannot be scanned; a real scan runs to completion and
+    /// **the saved document is the one the store reads back**; the progress labels show sentences and real
+    /// counts rather than key literals; and a cancelled scan **writes nothing at all**.
+    ///
+    /// Writes only under `/tmp`, including the hash cache -- pointing at the real one would make the next
+    /// real scan look warm because a selftest hashed a fixture.
+    ///
+    /// Proof of teeth: four breaks, each named beside its assertion.
+    @MainActor
+    private static func checkScanWindow() async throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-scanwin-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let tree = root + "/tree"
+        try FileManager.default.createDirectory(atPath: tree, withIntermediateDirectories: true)
+
+        // Three groups' worth of duplicates and some unique files, big enough that the hashing phase is
+        // real work rather than a single batch.
+        for index in 0..<60 {
+            let contents = "payload \(index % 20) " + String(repeating: "x", count: 2048)
+            try Data(contents.utf8).write(to: URL(filePath: tree + "/f\(index).bin"))
+        }
+        try Data("unique".utf8).write(to: URL(filePath: tree + "/only.bin"))
+
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let store = ScanStore(state: state)
+        let controller = ScanPanelController(stateDirectory: state)
+        defer { controller.window?.close() }
+
+        // 1. A root that cannot be scanned is refused before any work.
+        // Teeth: make `ScanSession.check` always return `.ok` and this fails.
+        controller.setRootForSelftest(root + "/does-not-exist")
+        try expect(controller.canStart == false, "a missing folder was accepted")
+        controller.setRootForSelftest(tree + "/only.bin")
+        try expect(controller.canStart == false, "a file was accepted as a folder")
+
+        controller.setRootForSelftest(tree)
+        try expect(controller.canStart, "a readable folder was refused")
+
+        // The request the options produce reaches the session with the defaults the window shows.
+        let request = try expectSome(
+            controller.requestForSelftest(), "the options produced no request")
+        try expect(request.root == tree, "the request names \(request.root)")
+        try expect(
+            request.policy.includesHiddenFiles == false,
+            "hidden files are on by default, which buries real findings under .DS_Store groups"
+        )
+        try expect(
+            request.policy.packageHandling == .skipEntirely,
+            "packages are descended into by default, which is how a bundle gets corrupted"
+        )
+
+        // 2. A real scan runs and lands on disk.
+        // Teeth: drop the `store.save` from `ScanSession.run` and the reload below fails.
+        controller.startForSelftest()
+        try expect(controller.isShowingProgress, "the window stayed on the options page")
+        await controller.awaitCompletionForSelftest()
+        try expect(controller.isRunning == false, "the scan is still running after completion")
+
+        let identifiers = store.identifiers(in: .scans)
+        try expect(identifiers.count == 1, "\(identifiers.count) scans saved, wanted 1")
+        let saved = try store.loadScan(id: identifiers[0])
+        try expect(saved.root == tree, "the saved scan names \(saved.root)")
+        try expect(saved.groups.count == 20, "\(saved.groups.count) groups found, wanted 20")
+        try expect(saved.fileCount == 60, "\(saved.fileCount) files grouped, wanted 60")
+
+        // 3. The progress labels are sentences with real numbers, not key literals.
+        // Teeth: misspell a `scan.phase.*` key and the phase text comes back as the key.
+        controller.refreshProgressForSelftest()
+        try expect(
+            controller.phaseText == Strings.string("scan.phase.finished"),
+            "the phase reads \(controller.phaseText)"
+        )
+        try expect(
+            !controller.phaseText.contains("scan.phase"), "the phase label shows a key literal")
+        try expect(
+            controller.countsText.contains("61"),
+            "the counts read \(controller.countsText), which does not mention the 61 files seen"
+        )
+
+        // 4. **A cancelled scan writes nothing.**
+        // Teeth: move the `store.save` before the finder's last cancellation check and a second document
+        // appears.
+        let second = ScanPanelController(stateDirectory: state)
+        defer { second.window?.close() }
+        second.setRootForSelftest(tree)
+        second.startForSelftest()
+        second.cancelForSelftest()
+        await second.awaitCompletionForSelftest()
+        try expect(
+            store.identifiers(in: .scans).count == 1,
+            "a cancelled scan left \(store.identifiers(in: .scans).count) documents behind"
+        )
+
+        print("  60 files scanned by the window into 20 groups, saved and read back")
+        print("  a bad root refused before any work; a cancelled scan wrote nothing")
     }
 
     // MARK: - about
