@@ -172,4 +172,49 @@ struct ScanIdentifierFormattingTests {
         #expect(ScanIdentifier.nextAvailable(from: date) { $0 == first } == second)
         #expect(ScanIdentifier.nextAvailable(from: date, limit: 3) { _ in true } == nil)
     }
+
+    @Test("An identifier parses back to the instant it names")
+    func parsesBackToAnInstant() throws {
+        let instant = try #require(ScanIdentifier.instant(from: "20260511-064716-685054"))
+        #expect(instant.year == 2026)
+        #expect(instant.month == 5)
+        #expect(instant.day == 11)
+        #expect(instant.hour == 6)
+        #expect(instant.minute == 47)
+        #expect(instant.second == 16)
+        #expect(instant.microsecond == 685_054)
+        // Round-trip: reading and re-writing must not move the instant.
+        #expect(instant.identifier == "20260511-064716-685054")
+    }
+
+    /// Every identifier in the real corpus, and the boundaries, through the round-trip. Parsing digits by
+    /// hand is exactly the kind of code that works for one value and is off by a factor of ten for another.
+    @Test(
+        "Identifiers round-trip through instant",
+        arguments: [
+            "20260511-064716-685054", "20250101-000000-000000", "20261231-235959-999999",
+            "20260101-000000-000001", "20260229-120000-100000",
+        ]
+    )
+    func roundTripsEveryPart(identifier: String) throws {
+        let instant = try #require(ScanIdentifier.instant(from: identifier))
+        #expect(instant.identifier == identifier)
+    }
+
+    @Test("A malformed identifier parses to nil rather than a wrong instant")
+    func refusesMalformedIdentifiers() {
+        for bad in ["", "20260511-064716", "../../etc/passwd", "2026051x-064716-685054"] {
+            #expect(ScanIdentifier.instant(from: bad) == nil)
+            #expect(ScanIdentifier.date(from: bad) == nil)
+        }
+    }
+
+    /// The identifier is UTC, so the `Date` it yields has to be the same instant regardless of the reader's
+    /// time zone. Asserted against the seconds value the timestamp names, not against a formatted string.
+    @Test("An identifier yields a UTC date")
+    func yieldsAUTCDate() throws {
+        let date = try #require(ScanIdentifier.date(from: "20260511-064716-685054"))
+        #expect(ScanIdentifier.identifier(from: date) == "20260511-064716-685054")
+        #expect(ScanIdentifier.timestamp(from: date) == "2026-05-11T06:47:16.685054Z")
+    }
 }

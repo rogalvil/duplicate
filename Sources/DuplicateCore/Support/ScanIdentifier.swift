@@ -152,6 +152,48 @@ public enum ScanIdentifier {
         Instant(date).timestamp
     }
 
+    /// The instant an identifier names, or `nil` when it is not a well-formed identifier.
+    ///
+    /// Reads the **identifier**, not the `created_at` string, on purpose. The two come from the same
+    /// `datetime.now()` in the CLI, so they agree, but the identifier's shape is guaranteed by
+    /// ``isValid`` while `created_at` is an opaque string the app promises not to interpret --
+    /// `ISO8601DateFormatter` cannot parse its six fractional digits anyway.
+    public static func instant(from identifier: String) -> Instant? {
+        guard isValid(identifier) else { return nil }
+        let digits = Array(identifier.utf8).map { Int($0) - Int(UInt8(ascii: "0")) }
+        func number(_ range: Range<Int>) -> Int {
+            digits[range].reduce(0) { $0 * 10 + $1 }
+        }
+        return Instant(
+            year: number(0..<4),
+            month: number(4..<6),
+            day: number(6..<8),
+            hour: number(9..<11),
+            minute: number(11..<13),
+            second: number(13..<15),
+            microsecond: number(16..<22)
+        )
+    }
+
+    /// The moment an identifier names, for display.
+    ///
+    /// A `Date` and not a formatted string: how a date reads depends on the reader's locale, and Core
+    /// does not produce prose.
+    public static func date(from identifier: String) -> Date? {
+        guard let instant = instant(from: identifier) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        var parts = DateComponents()
+        parts.year = instant.year
+        parts.month = instant.month
+        parts.day = instant.day
+        parts.hour = instant.hour
+        parts.minute = instant.minute
+        parts.second = instant.second
+        parts.nanosecond = instant.microsecond * 1000
+        return calendar.date(from: parts)
+    }
+
     /// The first identifier at or after `date` that `isTaken` says is free.
     ///
     /// Two tools writing into one directory can collide. At microsecond precision that is

@@ -266,6 +266,50 @@ después, no contra un adversario, así que SHA-256 sería ceremonia.
 Y `hasDecisions` **sí se lee**, a diferencia del CLI, que lo recibe como parámetro en `menu_options` y
 nunca lo consulta: su "ver decisiones" se ofrece incluso cuando no hay nada que mostrar.
 
+### La biblioteca se mantiene al día sola, y el watch tiene un hueco conocido
+
+La ventana lista todo escaneo bajo el estado compartido, sin importar qué herramienta lo escribió, y
+se actualiza mientras está abierta: un `rav duplicate scan` que termina en una terminal aparece sin
+que nadie pida nada. Eso es el punto de compartir el formato — si hubiera que apretar Actualizar, las
+dos herramientas serían dos programas y no uno visto de dos maneras.
+
+Se hace con `DispatchSource.makeFileSystemObjectSource` sobre `scans/` y `decisions/`, no con un poll:
+un sondeo de un segundo sobre un directorio que nadie está mirando es un despertar por segundo para
+siempre, y uno de diez segundos hace que la app se sienta rota junto a la terminal que acaba de
+imprimir el `scan_id`.
+
+Lo medido, que decidió la forma del tipo:
+
+| acción sobre el directorio | evento |
+|---|---|
+| se crea o se borra una entrada | `.write` |
+| cambia el **contenido** de un archivo existente | **nada** |
+| escritura con `.atomic` (temporal + rename) | `.write` dos veces |
+| se borra el directorio vigilado | `.write` y luego `.delete`, y la fuente sigue viva |
+
+La segunda fila es el hueco, y se documenta en vez de descubrirse: el `write_text` del CLI sobre un
+documento que ya existe no dispara nada. Para esta ventana alcanza, porque cada fila depende de que el
+archivo *exista* y no de lo que diga adentro. Una vista que mostrara conteos de decisiones no.
+
+La tercera es la razón del debounce de 150 ms: **una sola escritura son dos eventos**.
+
+La cuarta es la razón de reabrir por ruta en vez de confiar en que la fuente se detenga. Un descriptor
+a un directorio borrado se queda abierto y callado, así que sin eso la app se vería sana y no volvería
+a actualizarse nunca.
+
+Y hay un test que **afirma el hueco** — reescribir en sitio no dispara nada — para que sea un hecho
+verificado y no una frase en un comentario que puede dejar de ser cierta en silencio.
+
+### La ventana se prueba a través de su propio camino de dibujo
+
+`swift test` no puede importar el ejecutable, así que la tabla se verifica en `--selftest --mode
+library`: se construye el `LibraryWindowController` de verdad contra un directorio de estado en `/tmp`
+y se lee de vuelta llamando al mismo `tableView(_:viewFor:row:)` con el que la ventana dibuja. Leerlo
+de una segunda copia de las reglas de formato pasaría mientras la ventana muestra otra cosa.
+
+Incluye la afirmación que importa: se guarda un escaneo desde fuera y la fila aparece en la tabla sin
+que nadie la pida. Ese es el comportamiento que justifica la ventana entera.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice

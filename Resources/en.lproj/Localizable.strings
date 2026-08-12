@@ -18,3 +18,35 @@
 "about.unknown" = "unknown";
 "about.dirtyBuild" = "Built from a modified working tree: this build matches no commit.";
 "about.placeholderWarning" = "Warning: the build did not substitute its Info.plist placeholders.";
+
+/* Scan library */
+"library.column.root" = "Scanned folder";
+"library.column.created" = "Scanned";
+"library.column.groups" = "Groups";
+"library.column.files" = "Files";
+"library.column.reclaimable" = "Reclaimable";
+"library.column.state" = "State";
+"library.state.reviewed" = "Reviewed";
+"library.state.relativePaths" = "Relative paths";
+"library.reclaimable.upperBound.tooltip" = "An upper bound: this scan did not record which files share storage, so deleting them may free less.";
+"library.search.placeholder" = "Filter by folder or scan id";
+"library.sort.newest" = "Newest first";
+"library.sort.oldest" = "Oldest first";
+"library.sort.mostGroups" = "Most groups";
+"library.sort.mostReclaimable" = "Most reclaimable";
+"library.toolbar.refresh" = "Refresh";
+"library.toolbar.sort" = "Sort";
+"library.toolbar.search" = "Filter";
+/* %1$d scans, %2$d groups, %3$d files, %4$@ a formatted size. */
+"library.footer" = "%1$d scans - %2$d groups - %3$d files - %4$@ reclaimable";
+"library.footer.upperBound" = "%1$d scans - %2$d groups - %3$d files - up to %4$@ reclaimable";
+/* %@ is the directory scans are read from. */
+"library.empty" = "No scans yet.\n\nRun rav duplicate scan <folder> and it will appear here.\n\n%@";
+"library.empty.filtered" = "No scan matches this filter.";
+"library.action.revealFolder" = "Open Scanned Folder";
+"library.action.revealDocument" = "Show Scan File in Finder";
+"library.action.copyIdentifier" = "Copy Scan ID";
+"library.relativePaths.title" = "This scan recorded relative paths";
+/* %@ is the recorded root. */
+"library.relativePaths.body" = "Its root is \"%@\", which depends on the folder the CLI was run from. This app cannot resolve it, and guessing would point at the wrong folder.";
+"button.ok" = "OK";

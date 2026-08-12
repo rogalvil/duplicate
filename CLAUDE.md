@@ -186,7 +186,7 @@ Dos reglas:
 
 Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
 `walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`, `undo`,
-`review`, `decisions`, `gate`.
+`review`, `decisions`, `gate`, `library`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -253,6 +253,31 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Un watch de directorio ve las *entradas*, no su contenido.** Medido con
+  `DispatchSource.makeFileSystemObjectSource`: crear o borrar una entrada dispara `.write`; **cambiar
+  el contenido de un archivo existente no dispara nada**. Una escritura `.atomic` dispara **dos**
+  eventos (el temporal y el rename), que es la razón de que exista el debounce. Y borrar el
+  directorio vigilado dispara `.write` + `.delete` **sin cancelar la fuente**: el descriptor sigue
+  abierto y callado para siempre, así que hay que reabrir por ruta o la ventana se ve sana y nunca se
+  actualiza otra vez.
+
+  Consecuencia práctica: el `write_text` del CLI sobre un documento que ya existe es invisible. Para
+  la biblioteca alcanza — cada fila depende de que el archivo *exista* — pero una vista que mostrara
+  conteos de decisiones necesitaría más que esto.
+- **`Array.sort` no es estable.** Un comparador que declara iguales dos filas puede devolverlas en
+  cualquier orden, así que una lista de escaneos con el mismo número de grupos se reordenaría sola cada
+  vez que el watcher dispara. Todo orden de la biblioteca desempata en el `scan_id`, que es único por
+  construcción.
+- **La selección de la tabla se restaura por `scan_id`, no por índice de fila.** Un escaneo nuevo
+  aparece arriba y corre todos los índices de abajo; reaplicar el índice movería la selección a otro
+  escaneo sin avisar.
+- **El chequeo de l10n mira las tablas *y* el código, en los dos sentidos.** Comparar en.lproj contra
+  es.lproj no atrapa el error que de verdad se envía: un typo en `Strings.string("...")`. Las dos
+  tablas coinciden, la clave no está en ninguna, y la UI muestra `library.column.roo`. El modo escanea
+  las fuentes por sitios de llamada literales, y además exige que toda clave declarada aparezca
+  referenciada — porque una clave muerta suele ser la mitad de un rename, y la otra mitad es una
+  llamada viva a una clave que ya no existe. Las claves interpoladas se enumeran a mano; ningún escaneo
+  literal las puede ver.
 - **Aplicar exige una simulación *vigente*, no "hubo una alguna vez".** Editar una sola decisión
   después de ver el dry-run invalida la aprobación, porque el plan que el usuario aprobó ya no es el
   plan que correría. Por eso `ReviewFlow` guarda la huella del plan simulado y `ApplyGate.authorize`
