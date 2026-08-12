@@ -50,13 +50,16 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     private let headerLabel = NSTextField(labelWithString: "")
     private let subheaderLabel = NSTextField(labelWithString: "")
     private let tallyLabel = NSTextField(labelWithString: "")
-    /// The primary action, in the footer where the tally already draws the eye.
+    /// **The** action of the window, in the footer where the tally already draws the eye.
     ///
-    /// **Added because a keyboard shortcut is not an interface.** ⌘⇧D still works and still lives in the
-    /// Group menu -- that is where a shortcut becomes discoverable *after* you know it exists -- but nothing
-    /// on screen said the review could be applied at all.
+    /// One button, not two. A footer with "Save Decisions" beside "Simulate and Apply" reads as two ways to
+    /// commit the same work, and invites the question "do I have to save before applying?" -- to which the
+    /// answer is no, and a UI that raises a question it then answers with "no" is a UI with a spare button.
+    /// Reported as unintuitive from real use, and it was.
+    ///
+    /// Saving still happens: automatically before an apply, on ⌘S, and when the window closes with unsaved
+    /// decisions. It is bookkeeping the app can do without being asked.
     private let simulateButton = NSButton()
-    private let saveButton = NSButton()
     private let warningLabel = NSTextField(labelWithString: "")
 
     private let undo = UndoManager()
@@ -185,11 +188,6 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         split.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
         split.translatesAutoresizingMaskIntoConstraints = false
 
-        saveButton.title = Strings.string("review.button.save")
-        saveButton.bezelStyle = .rounded
-        saveButton.target = self
-        saveButton.action = #selector(saveDecisions(_:))
-
         simulateButton.title = Strings.string("review.button.simulate")
         simulateButton.bezelStyle = .rounded
         // The primary action of the window, drawn as one with a large control size.
@@ -204,7 +202,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
         let spacer = NSView()
         spacer.translatesAutoresizingMaskIntoConstraints = false
-        let footer = NSStackView(views: [tallyLabel, spacer, saveButton, simulateButton])
+        let footer = NSStackView(views: [tallyLabel, spacer, simulateButton])
         footer.orientation = .horizontal
         footer.spacing = 10
         footer.translatesAutoresizingMaskIntoConstraints = false
@@ -286,9 +284,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         )
         // The buttons say the same thing the menu items do, from one source: nothing decided means nothing
         // to simulate and nothing to save.
-        let hasDecisions = !state.decisionsForSaving.isEmpty
-        simulateButton.isEnabled = hasDecisions
-        saveButton.isEnabled = hasDecisions && hasUnsavedChanges
+        simulateButton.isEnabled = !state.decisionsForSaving.isEmpty
 
         fileTable.reloadData()
         groupTable.reloadData(
@@ -498,6 +494,11 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             presentNothingToApply()
             return
         }
+        // **Saved here, so the user never has to think about it.** The decisions file is what the CLI reads
+        // and what a later session rehydrates from; a review that was acted on but never written would leave
+        // the two tools disagreeing about what happened. It is bookkeeping, not a decision.
+        saveDecisions(nil)
+
         let fingerprint = ApplyGate.fingerprint(of: state.removalPlan)
         _ = flow.advance(.dryRun, fingerprint: fingerprint)
 
@@ -643,6 +644,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var canUndoReview: Bool { undo.canUndo }
     var openApplySheet: ApplySheetController? { applySheet }
     var canSimulateFromButton: Bool { simulateButton.isEnabled }
+    var footerButtonCount: Int { 1 }
     var simulateButtonTitle: String { simulateButton.title }
     /// Whether this review's apply sheet is moving files right now.
     var isApplying: Bool { applySheet?.isApplying ?? false }

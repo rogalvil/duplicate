@@ -116,7 +116,8 @@ Doble clic en un escaneo abre su revisión. En la revisión:
 | `⌘[` `⌘]` | grupo anterior y siguiente |
 | `⌘R` | muestra el archivo en Finder |
 | `⌘Z` | deshace la última decisión |
-| `⌘S` | guarda las decisiones |
+| `⌘S` | guarda las decisiones (también se guardan solas al simular y al cerrar) |
+| `⌘⇧D` | simula y abre la hoja de aplicar — o el botón del pie |
 
 Las decisiones se guardan en `decisions/<scan_id>.json`, que es el mismo archivo que lee
 `rav duplicate decisions <scan_id>`. **Solo se escriben los grupos que decidiste**: los que saltaste y
@@ -206,7 +207,7 @@ make help       # lista todos los targets
 ```
 
 Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.md). El catálogo de los
-25 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
+26 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ## Si algo no funciona

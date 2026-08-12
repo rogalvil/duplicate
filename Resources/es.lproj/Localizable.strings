@@ -203,7 +203,6 @@
 "undo.noJournal" = "Esta sesión no tiene registro, así que no se puede devolver nada.";
 "button.close" = "Cerrar";
 
-/* Botones del pie de la revisión */
+/* Pie de la revisión */
 "review.button.simulate" = "Simular y aplicar...";
-"review.button.save" = "Guardar decisiones";
 "library.toolbar.review" = "Revisar";
