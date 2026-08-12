@@ -63,7 +63,6 @@
 "menu.edit.selectAll" = "Seleccionar todo";
 "menu.group" = "Grupo";
 "menu.group.confirm" = "Confirmar y siguiente";
-"menu.group.skip" = "Saltar este grupo";
 "menu.group.clearDecision" = "Quitar la decisión";
 "menu.group.keepAll" = "Conservar todos los archivos";
 "menu.group.discardAll" = "Descartar el grupo completo...";
