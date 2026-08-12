@@ -28,7 +28,7 @@ enum SelfTest {
             modes = [
                 "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
                 "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
-                "trash", "undo", "review",
+                "trash", "undo", "review", "decisions", "gate",
             ]
         default: modes = [mode]
         }
@@ -51,6 +51,8 @@ enum SelfTest {
                 case "trash": try checkTrashRoundTrip()
                 case "undo": try checkUndoCycle()
                 case "review": try await checkReviewTriState()
+                case "decisions": try checkRealDecisions(arguments: arguments)
+                case "gate": try checkApplyGate()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -1379,6 +1381,152 @@ enum SelfTest {
 
         print("  reviewed 1 of 50 groups; saved exactly 1 decision, 49 left undecided")
         print("  a skip is recorded as neither decided nor unseen")
+    }
+
+    // MARK: - decisions
+
+    /// Reads every decisions document the CLI wrote, through the app's codec, and re-encodes it.
+    ///
+    /// A gap I named in a previous change and left open: the decisions round-trip was proven only against a
+    /// synthesized fixture, while this machine holds 55 files the CLI really wrote. Cheap to check, so there
+    /// was no reason not to.
+    ///
+    /// Read-only.
+    ///
+    /// Proof of teeth: drop `created_at` from the encoder and every document differs.
+    private static func checkRealDecisions(arguments: [String]) throws {
+        let state = StateDirectory.current()
+        let root = value(for: "--dir", in: arguments) ?? state.path(for: .decisions)
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: root) else {
+            print("  SKIPPED: \(root) is not readable")
+            return
+        }
+
+        var decoded = 0
+        var keys = 0
+        var emptyKeepLists = 0
+        var failures: [String] = []
+
+        for name in names.sorted() where name.hasSuffix(".json") {
+            let path = root + "/" + name
+            guard let data = FileManager.default.contents(atPath: path) else { continue }
+            do {
+                let document = try DecisionsCodec.decode(JSONReader.parse(data))
+                let reencoded = try JSONWriter.document(DecisionsCodec.encode(document))
+                guard reencoded == data else {
+                    let offset = zip(data, reencoded).enumerated()
+                        .first { $0.element.0 != $0.element.1 }?.offset
+                    failures.append(
+                        "\(name): differs at byte \(offset.map(String.init) ?? "the end")"
+                    )
+                    continue
+                }
+                guard name == document.scanID + ".json" else {
+                    failures.append("\(name): holds scan_id \(document.scanID)")
+                    continue
+                }
+                decoded += 1
+                keys += document.decisions.count
+                emptyKeepLists += document.decisions.filter { $0.keptPaths.isEmpty }.count
+            } catch {
+                failures.append("\(name): \(error)")
+            }
+        }
+
+        guard failures.isEmpty else {
+            throw SelfTestFailure(
+                "\(failures.count) of \(decoded + failures.count) documents failed:\n    "
+                    + failures.prefix(10).joined(separator: "\n    ")
+            )
+        }
+        if decoded == 0 {
+            print("  SKIPPED: no decisions documents in \(root)")
+        } else {
+            print("  \(decoded) decisions documents re-encoded byte-identically")
+            print(
+                "  \(keys) decision keys, \(emptyKeepLists) with an empty keep list "
+                    + "(the CLI's keep-none, which it then ignores)"
+            )
+        }
+    }
+
+    // MARK: - gate
+
+    /// Proves nothing can be applied without a current dry run.
+    ///
+    /// The invariant the CLI enforces implicitly, in the branches of its command loop. Here Core owns it, and
+    /// this mode checks the three ways around it that a UI could otherwise take: applying with no dry run at
+    /// all, applying after editing a decision, and applying a plan that differs from the one shown.
+    ///
+    /// Proof of teeth: make `ApplyGate.authorize` ignore its fingerprint argument and the second assertion
+    /// fails.
+    private static func checkApplyGate() throws {
+        let digest = Digest32(hexString: String(repeating: "a", count: 64))!
+        let groups = (0..<3).map { index in
+            DuplicateGroup(
+                size: 1000,
+                digest: Digest32(hexString: String(repeating: "\(index)", count: 64))!,
+                files: ["/root/\(index)/a", "/root/\(index)/b"]
+            )
+        }
+        _ = digest
+        let scan = DuplicateScan(
+            scanID: "20260511-064716-685054",
+            root: "/root",
+            createdAt: "2026-05-11T06:47:16.685054Z",
+            groups: groups
+        )
+        var state = ExactReviewState(scan: scan, root: "/root")
+        var flow = ReviewFlow()
+
+        // No dry run: refused.
+        let firstPlan = ApplyGate.fingerprint(of: state.removalPlan)
+        try expectThrows("applying with no dry run") {
+            try ApplyGate.authorize(flow: flow, fingerprint: firstPlan)
+        }
+        try expect(!flow.isAvailable(.apply), "apply was offered before any dry run")
+        try expect(!flow.isAvailable(.dryRun), "a dry run was offered with nothing decided")
+
+        // Decide something, then simulate.
+        _ = state.confirm()
+        flow.decisionsChanged(hasAny: !state.decisionsForSaving.isEmpty)
+        try expect(flow.isAvailable(.dryRun), "a dry run was not offered after deciding")
+        let planned = ApplyGate.fingerprint(of: state.removalPlan)
+        _ = flow.advance(.dryRun, fingerprint: planned)
+        try expect(flow.step == .dryRunDone, "the flow is at \(flow.step)")
+        try expect(flow.isAvailable(.apply), "apply was not offered after a dry run")
+        try ApplyGate.authorize(flow: flow, fingerprint: planned)
+
+        // Edit a decision afterwards: the approved plan is stale, so apply is refused again.
+        _ = state.confirm()
+        flow.decisionsChanged(hasAny: true)
+        let changed = ApplyGate.fingerprint(of: state.removalPlan)
+        try expect(changed != planned, "the fingerprint did not change with the plan")
+        try expectThrows("applying after editing a decision") {
+            try ApplyGate.authorize(flow: flow, fingerprint: changed)
+        }
+        try expect(!flow.isAvailable(.apply), "apply survived an edit")
+
+        // And a plan that differs from the one shown is refused even at the right step.
+        _ = flow.advance(.dryRun, fingerprint: changed)
+        try expectThrows("applying a plan other than the one shown") {
+            try ApplyGate.authorize(flow: flow, fingerprint: planned)
+        }
+        try ApplyGate.authorize(flow: flow, fingerprint: changed)
+
+        print(
+            "  apply refused with no dry run, after an edit, and for a plan that was not the one shown"
+        )
+    }
+
+    /// Runs `body` and fails unless it throws.
+    private static func expectThrows(_ what: String, _ body: () throws -> Void) throws {
+        do {
+            try body()
+        } catch {
+            return
+        }
+        throw SelfTestFailure("\(what) was allowed")
     }
 
     // MARK: - about
