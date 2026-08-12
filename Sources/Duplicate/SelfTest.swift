@@ -1685,6 +1685,18 @@ enum SelfTest {
         let controller = LibraryWindowController(stateDirectory: state)
         defer { controller.close() }
 
+        // The read is off the main thread, so the table starts empty. That is the point -- a window that
+        // stalls for a third of a second before it draws feels broken -- and it is asserted rather than
+        // assumed, because a synchronous load would still pass every check below.
+        try expect(
+            controller.displayedRowCount == 0, "the window read the directory before drawing")
+        try expect(
+            controller.emptyStateText == nil, "the empty state flashed before the first read")
+        try await waitOnMainActor(
+            until: { controller.hasFinishedFirstLoad },
+            what: "the first read to finish"
+        )
+
         try expect(
             controller.displayedRowCount == 3, "\(controller.displayedRowCount) rows, wanted 3")
         try expect(controller.watcherCount == 2, "\(controller.watcherCount) watchers, wanted 2")
@@ -1772,6 +1784,7 @@ enum SelfTest {
             until: { controller.displayedRowCount == 4 },
             what: "a new scan to reach the table"
         )
+        try expect(controller.emptyStateText == nil, "the empty state is showing with 4 rows")
         try expect(
             controller.displayedValue(row: 0, column: "root") == "/Users/tester/Nuevo",
             "the new scan is not at the top"
@@ -1795,6 +1808,34 @@ enum SelfTest {
 
         print("  4 scans listed, sorted, filtered; upper bound and review state labelled")
         print("  a scan and a decisions file written by another writer both reached the table")
+
+        try measureRealCorpusLoad()
+    }
+
+    /// Times the read the window pays on open, against the real corpus.
+    ///
+    /// Read-only, and skipped out loud when there is no corpus. The assertion is on completeness, not on
+    /// the clock: a wall-time bound would be flaky on a loaded machine and on CI. The number is printed so
+    /// a regression is visible in a PR body.
+    private static func measureRealCorpusLoad() throws {
+        let store = ScanStore(state: .current())
+        let identifiers = store.identifiers(in: .scans)
+        guard !identifiers.isEmpty else {
+            print("  SKIPPED: no real corpus to time")
+            return
+        }
+        let start = ContinuousClock.now
+        let library = ScanLibrary(store: store)
+        let elapsed = ContinuousClock.now - start
+        try expect(
+            library.summaries.count == identifiers.count,
+            "\(identifiers.count) scans on disk but \(library.summaries.count) decoded"
+        )
+        let totals = library.totals
+        print(
+            "  real corpus: \(identifiers.count) scans, \(totals.groupCount) groups read in "
+                + "\(elapsed)"
+        )
     }
 
     /// Spins the run loop until `condition` holds, or fails naming what it waited for.

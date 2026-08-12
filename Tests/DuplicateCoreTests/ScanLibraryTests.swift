@@ -247,4 +247,26 @@ struct ScanLibraryTests {
         #expect(changed)
         #expect(library.summaries.first?.hasDecisions == true)
     }
+
+    /// The window opens with an empty library and fills it from a background task, because reading the real
+    /// corpus takes 0.34 s and doing that on the main thread stalls the window before it draws.
+    @Test("A library can start empty and be filled later")
+    func startsEmptyOnRequest() throws {
+        let scratch = try LibraryScratch()
+        defer { scratch.remove() }
+        try scratch.add(id: "20260101-000000-000000", root: "/a")
+
+        var library = ScanLibrary(store: scratch.store, loadNow: false)
+        #expect(library.summaries.isEmpty)
+        #expect(library.totals.scanCount == 0)
+
+        let adopted = library.adopt(scratch.store.summaries())
+        #expect(adopted)
+        #expect(library.summaries.count == 1)
+
+        // Adopting the same list again is not a change, so a table does not get reloaded for nothing --
+        // and a reload drops the selection, which the user sees.
+        let again = library.adopt(scratch.store.summaries())
+        #expect(again == false)
+    }
 }
