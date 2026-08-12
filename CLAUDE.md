@@ -185,7 +185,7 @@ Dos reglas:
    proyecto anterior.
 
 Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
-`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`.
+`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -206,6 +206,22 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   está en el SDK y estaría *permitido*, pero se rechazó por mérito: el workload es un lookup puntual
   sobre clave compuesta, y SQLite traería WAL, shm y semántica de `busy_timeout`, o sea más
   superficie de corrupción, no menos.
+- **Copiar un archivo en APFS produce un clon, no una copia.** Medido: `FileManager.copyItem` y `cp`
+  pasan por `clonefile`, así que el archivo copiado conserva su propio inodo pero **comparte el
+  `contentIdentifier` del origen** — y borrarlo no libera nada. Solo una escritura fresca de los
+  bytes produce una segunda copia real. Una app que contara archivos reclamaría bytes que `df` puede
+  desmentir.
+
+  | cómo se hizo el segundo archivo | inodo | contentID | borrar uno libera |
+  |---|---|---|---|
+  | `link(2)` | igual | igual | nada |
+  | `clonefile(2)` | distinto | **igual** | nada |
+  | `copyItem` / `cp` en APFS | distinto | **igual** | nada |
+  | escrito aparte, o descargado dos veces | distinto | distinto | su tamaño completo |
+
+  El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
+  menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
+  nombre del inodo que se está conservando.
 - **La caché de hashes vive en `~/Library/Caches`, nunca en el state dir compartido.** Son dos clases
   de dato: un scan es formato de interop que el CLI lee y no se puede perder; la caché es dato
   derivado que macOS puede purgar bajo presión de disco, que es la semántica que se quiere.

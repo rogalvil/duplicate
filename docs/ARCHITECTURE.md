@@ -210,6 +210,26 @@ bases de datos gestionadas por apps, donde quitar un "duplicado" rompe una app. 
 Acceso Total al Disco para ordenar Descargas es indistinguible de malware para un usuario cuidadoso.
 `~/Library` se excluye por default, con un toggle avanzado apagado.
 
+### La cifra de espacio recuperable cuenta almacenamiento, no archivos
+
+Medido, y contraintuitivo: **copiar un archivo en APFS produce un clon.** `FileManager.copyItem` y
+`cp` pasan por `clonefile`, así que un archivo duplicado en Finder comparte sus bytes con el original
+y borrarlo no libera nada. Solo escribir los bytes de nuevo produce una segunda copia.
+
+Por eso `DuplicateGroup` lleva una `StoragePartition` y expone dos números distintos:
+`redundantByteCountUpperBound` (contando archivos, que es lo que haría un port ingenuo) y
+`reclaimableBytes` (contando clases de almacenamiento). En el árbol de prueba con las cinco variantes
+difieren 4×.
+
+Fuera de APFS no hay `contentIdentifier`: los hardlinks se siguen detectando por inodo, los clones no,
+y la cifra pasa a ser cota superior. `isExact` reporta cuál de los dos casos es, para que la UI lo
+etiquete en vez de redondearlo a un número confiado.
+
+Medición sobre el corpus real: de 6,414 grupos distintos, solo 12 conservan todos sus archivos en
+disco (el corpus es de mayo y se limpió), y **esos 12 tienen almacenamiento independiente** — cero
+clones. Tiene sentido para este corpus: los duplicados vienen de descargar lo mismo dos veces, no de
+copiar local. Muestra chica, y se reporta como tal.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
@@ -242,6 +262,8 @@ Reversiones verificadas para este scaffolding:
 | cambiar el indent del JSON de 2 a 4 | `json-roundtrip`, en los 226 documentos, "differs at byte 4" |
 | renombrar la clave `sha256` a `digest` en el codec | `scans`, "differs at byte 191" |
 | poner `created_at` antes de `root` al codificar | `scans`, "differs at byte 44" |
+| agrupar por ruta en vez de por `contentIdentifier` | `storage`, "expected 2 distinct copies, got 5" |
+| volver a `files[1:]` en `removalCandidates` | `storage`, el set de remoción incluye el clon del keeper |
 | reconstruir el `FileEntry` en vez de usar `withSize` | `cache`, el pase caliente vuelve a leer todo |
 | corromper un byte de un registro de caché | el test de CRC: una fila cae, el resto sobrevive |
 | quitar la sustitución `__BUILD_NUMBER__` del Makefile | `about`, nombrando el placeholder |

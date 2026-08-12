@@ -42,11 +42,15 @@ public enum GroupBuilder {
                 end += 1
             }
             if end - start > 1 {
+                let members = indices[start..<end].map { hashed[$0].entry }
                 result.append(
                     DuplicateGroup(
                         size: size,
                         digest: digest,
-                        files: indices[start..<end].map { hashed[$0].entry.path }
+                        files: members.map(\.path),
+                        // Computed here, where the entries with their identity and content identifiers are
+                        // still in hand. A group carries only paths, so this is the last moment it can be.
+                        storage: StoragePartition.of(members)
                     )
                 )
             }
