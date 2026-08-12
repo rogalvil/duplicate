@@ -2278,6 +2278,14 @@ enum SelfTest {
             controller.preview.stateText.isEmpty,
             "a file that is right there reports \(controller.preview.stateText)"
         )
+        // **The whole path, not just the name.** With the common parent hoisted out of the rows, a pane
+        // showing only a file name leaves no way to tell which of two identically named files is on screen.
+        // Reported from real use.
+        // Teeth: drop the `pathLabel.stringValue` assignment and this comes back empty.
+        try expect(
+            controller.preview.pathText == copyPath,
+            "the pane shows \(controller.preview.pathText) instead of the full path"
+        )
 
         // 2. **The cache collapses a group to one thumbnail.**
         //
@@ -2716,15 +2724,53 @@ enum SelfTest {
             "apply is still offered after it already ran"
         )
 
-        // 5. **Undo puts it back byte-identically.**
+        // 5. **Undo puts it back byte-identically, through the sheet's own button.**
+        //
+        // Driven through `sheet.undoForSelftest()` and not by calling `UndoCoordinator` directly, because the
+        // next assertion is about what the *sheet* does afterwards. An earlier version called the coordinator
+        // and then called `reloadFromDisk()` itself -- which passed with the fix removed, since it was
+        // testing that the function works rather than that anything calls it. Measured, then rewritten.
+        //
         // Teeth: make `UndoRunner` copy instead of move, or restore to a suffixed name, and the digest
         // comparison fails.
-        let outcome = UndoCoordinator.undo(sessionID: report.sessionID, in: state)
-        try expect(outcome.restoredCount == 1, "\(outcome.restoredCount) files restored, wanted 1")
+        review.selectGroupForSelftest(0)
+        await review.awaitPresenceForSelftest()
+        try expect(
+            review.groupPresence?.files.first { $0.path == dupA }?.state == .missing,
+            "the window does not report the applied file as gone before the undo"
+        )
+
+        try expect(sheet.canUndo, "the sheet offers no undo after moving a file")
+        sheet.undoForSelftest()
         try expect(FileManager.default.fileExists(atPath: dupA), "the file was not put back")
         try expect(
             try hasher.fullDigest(atPath: dupA).digest == digestA,
             "the restored file does not match what was moved"
+        )
+
+        // 6. **The window has to notice the file came back, without being told separately.**
+        //
+        // This is the bug real use found: the review re-read the disk after an apply and not after an undo,
+        // so it kept saying "this file no longer exists" about a file sitting right there again.
+        //
+        // Nothing below calls `reloadFromDisk()` -- the sheet's `onUndone` hook has to.
+        //
+        // Teeth: remove the `onUndone?()` call from the sheet, or the hook the review installs, and the
+        // presence stays `.missing`.
+        await review.awaitPresenceForSelftest()
+        var attempts = 0
+        while review.groupPresence?.files.first(where: { $0.path == dupA })?.state != .present,
+            attempts < 100
+        {
+            try? await Task.sleep(for: .milliseconds(25))
+            attempts += 1
+        }
+        let afterUndo = try expectSome(review.groupPresence, "the presence check never landed")
+        let restored = try expectSome(
+            afterUndo.files.first { $0.path == dupA }, "the restored file is not in the group")
+        try expect(
+            restored.state == .present,
+            "after the undo the window still reports \(restored.state) for a file that is back"
         )
 
         // And a second undo of the same session is a no-op rather than an error, because the `undone_at`

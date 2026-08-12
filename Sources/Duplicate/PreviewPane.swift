@@ -14,6 +14,12 @@ import DuplicateCore
 final class PreviewPane: NSView {
     private let imageView = NSImageView()
     private let nameLabel = NSTextField(labelWithString: "")
+    /// The **whole** path, not the name.
+    ///
+    /// Added because of real use: with the group's common parent hoisted into the review's header, the rows
+    /// show only the differing tail, and a pane that showed just the file name left no way to tell which of
+    /// two identically named files was on screen. Selectable, so it can be copied.
+    private let pathLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(labelWithString: "")
     private let stateLabel = NSTextField(wrappingLabelWithString: "")
     private let placeholder = NSTextField(labelWithString: "")
@@ -45,6 +51,13 @@ final class PreviewPane: NSView {
 
         nameLabel.font = .systemFont(ofSize: 12, weight: .medium)
         nameLabel.lineBreakMode = .byTruncatingMiddle
+        pathLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        pathLabel.textColor = .secondaryLabelColor
+        // Truncated in the middle: the head says which volume and the tail says which file, and the
+        // directory levels between them are what nobody needs.
+        pathLabel.lineBreakMode = .byTruncatingMiddle
+        pathLabel.isSelectable = true
+        pathLabel.maximumNumberOfLines = 2
         detailLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         detailLabel.textColor = .secondaryLabelColor
         stateLabel.font = .systemFont(ofSize: 11)
@@ -53,7 +66,7 @@ final class PreviewPane: NSView {
         placeholder.alignment = .center
         placeholder.stringValue = Strings.string("preview.empty")
 
-        let stack = NSStackView(views: [imageView, nameLabel, detailLabel, stateLabel])
+        let stack = NSStackView(views: [imageView, nameLabel, pathLabel, detailLabel, stateLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
@@ -73,6 +86,7 @@ final class PreviewPane: NSView {
             placeholder.centerXAnchor.constraint(equalTo: centerXAnchor),
             placeholder.centerYAnchor.constraint(equalTo: centerYAnchor),
             placeholder.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -24),
+            pathLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -16),
         ])
     }
 
@@ -81,6 +95,7 @@ final class PreviewPane: NSView {
         placeholder.isHidden = false
         imageView.isHidden = true
         nameLabel.stringValue = ""
+        pathLabel.stringValue = ""
         detailLabel.stringValue = ""
         stateLabel.stringValue = ""
     }
@@ -94,6 +109,8 @@ final class PreviewPane: NSView {
         imageView.isHidden = false
         nameLabel.stringValue = (presence.path as NSString).lastPathComponent
         nameLabel.toolTip = presence.path
+        pathLabel.stringValue = presence.path
+        pathLabel.toolTip = presence.path
 
         var details = [ByteSize.format(size)]
         if let modified = presence.modifiedAt {
@@ -136,6 +153,7 @@ final class PreviewPane: NSView {
     // MARK: - Selftest hooks
 
     var nameText: String { nameLabel.stringValue }
+    var pathText: String { pathLabel.stringValue }
     var detailText: String { detailLabel.stringValue }
     var stateText: String { stateLabel.stringValue }
     var isShowingPlaceholder: Bool { !placeholder.isHidden }

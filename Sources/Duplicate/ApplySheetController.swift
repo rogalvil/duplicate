@@ -28,6 +28,12 @@ final class AppliedCounter: Sendable {
 final class ApplySheetController: NSWindowController {
     /// Called after a successful apply, with the report, so the review can offer an undo.
     var onApplied: ((DisposalReport) -> Void)?
+    /// Called after an undo put files back.
+    ///
+    /// **Separate from `onApplied` because the review has to re-read the disk either way.** Without this the
+    /// window keeps showing "this file no longer exists" for a file that is sitting right there again --
+    /// reported from real use, and the reason this callback exists.
+    var onUndone: (() -> Void)?
     /// Whether an apply is under way, for `applicationShouldTerminate`.
     private(set) var isApplying = false
 
@@ -283,6 +289,7 @@ final class ApplySheetController: NSWindowController {
         guard let report else { return }
         undoButton.isEnabled = false
         let outcome = UndoCoordinator.undo(sessionID: report.sessionID, in: stateDirectory)
+        onUndone?()
         headlineLabel.stringValue = String(
             format: Strings.string("undo.done.headline"),
             outcome.restoredCount, ByteSize.format(outcome.restoredBytes)

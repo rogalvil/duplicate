@@ -470,13 +470,15 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             flow: flow,
             stateDirectory: stateDirectory
         )
+        sheet.onUndone = { [weak self] in
+            self?.reloadFromDisk()
+        }
         sheet.onApplied = { [weak self] _ in
             guard let self else { return }
             // Applying consumes the authorisation, so a second Apply needs a second dry run. And the files
             // are gone now, so the review is re-read from disk rather than left claiming they are there.
             _ = self.flow.advance(.apply)
-            self.checkPresence()
-            self.refreshDetail()
+            self.reloadFromDisk()
         }
         applySheet = sheet
         if let window, let sheetWindow = sheet.window {
@@ -484,6 +486,17 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         } else {
             sheet.showWindow(nil)
         }
+    }
+
+    /// Re-reads what the filesystem says about this group and redraws.
+    ///
+    /// Called after anything that moves files -- an apply **and an undo**. Leaving it out of the undo path is
+    /// what made the window keep saying "this file no longer exists" about a file that had just been put
+    /// back, which is how the bug was found: by using it.
+    func reloadFromDisk() {
+        checkPresence()
+        refreshDetail()
+        refreshPreview()
     }
 
     private func presentNothingToApply() {

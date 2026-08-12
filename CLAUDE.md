@@ -257,6 +257,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Todo lo que mueve archivos tiene que refrescar la presencia, y eso incluye deshacer.** El primer
+  cableado solo lo hacía tras aplicar, así que la ventana seguía diciendo "este archivo ya no existe"
+  sobre un archivo que acababa de volver. Lo encontró el uso real, no un test.
+- **Un arnés que llama él mismo a la función arreglada no tiene dientes.** La primera versión de esa
+  aserción invocaba `reloadFromDisk()` y luego afirmaba: pasaba con el arreglo quitado, porque probaba que
+  la función sirve y no que algo la llame. Hay que manejar el camino de producción — el botón de la hoja —
+  y no tocar nada más.
+- **El panel muestra la ruta completa, no solo el nombre.** Con el padre común izado fuera de las filas,
+  un panel con solo el nombre no deja distinguir dos archivos que se llaman igual. También lo encontró el
+  uso real.
 - **El plan de aplicar sale de `removalPlan`, no de `decisionsForSaving`.** Son dos funciones distintas
   sobre el mismo tri-estado, y confundirlas hace que un arnés pruebe la que no importa: medido, romper
   `decisionsForSaving` deja pasar la aserción de "una revisión intacta no planea mover nada", y romper
