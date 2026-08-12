@@ -275,12 +275,23 @@ public struct ExactReviewState: Sendable {
     }
 
     /// Total bytes the plan would free, counting storage rather than files.
+    ///
+    /// Walks the groups once with their index in hand. An earlier version looked each group up with
+    /// `firstIndex(of:)`, which is O(n) per group and therefore quadratic -- 21,594 groups in this user's
+    /// corpus would have made it about 233 million comparisons for a number shown in a label.
     public var plannedReclaimBytes: Int64 {
-        removalPlan.reduce(0) { total, item in
-            switch decision(at: scan.groups.firstIndex(of: item.group) ?? 0) {
-            case .discardAll: total + item.group.size * Int64(item.paths.count)
-            default: total + item.group.reclaimableBytes
+        var total: Int64 = 0
+        for (index, group) in scan.groups.enumerated() {
+            switch decision(at: index) {
+            case .discardAll:
+                // Every copy goes, so every copy's storage is freed -- not one fewer.
+                total += group.size * Int64(group.storage?.distinctCopies ?? group.files.count)
+            case .decided:
+                total += group.reclaimableBytes
+            case .undecided, .skipped:
+                continue
             }
         }
+        return total
     }
 }

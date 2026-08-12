@@ -230,6 +230,42 @@ disco (el corpus es de mayo y se limpió), y **esos 12 tienen almacenamiento ind
 clones. Tiene sentido para este corpus: los duplicados vienen de descargar lo mismo dos veces, no de
 copiar local. Muestra chica, y se reporta como tal.
 
+### Escrituras atómicas, y por qué es mejora gratis
+
+`ScanStore` escribe con `Data.write(options: .atomic)`: archivo temporal más rename. El CLI usa
+`Path.write_text` (`src/rav/core/duplicates.py:107`), que no lo es — un crash o un disco lleno a media
+escritura deja un JSON truncado donde había un scan, y la siguiente lectura de ese scan falla. El
+formato no cambia en un byte, así que es mejora estricta sin costo de interop.
+
+Lo que un test puede afirmar de eso no es la atomicidad — no hay forma de matar el proceso a la mitad
+desde `swift test` — sino que **no queda basura**: guardar dos veces deja exactamente un archivo en
+`scans/`. Una escritura atómica que filtrara su archivo de staging seguiría siendo atómica y ensuciaría
+el directorio compartido que el CLI lista.
+
+Y un scan que no decodifica **se salta**, no aborta la lista. La biblioteca es la única entrada a los
+datos de la app; fallar cerrada dejaría 118 scans buenos escondidos detrás de uno malo.
+
+### La compuerta de aplicar: una simulación vigente, no una simulación cualquiera
+
+El CLI también impone "aplicar solo después de simular", pero de forma implícita, en las ramas de su
+loop de comandos (`src/rav/core/duplicate_flow.py:49-71`). Ahí la regla vive donde el loop resulte
+estar correcto. En una ventana eso no alcanza: un botón gris es detalle de presentación, y un atajo de
+teclado o una hoja que quedó abierta lo alcanzan igual.
+
+`ReviewFlow` es un value type que Core posee y la UI *consulta*. Guarda la huella del plan que se
+simuló, y `ApplyGate.authorize` la compara contra el plan que pide correr. Las tres formas de rodear la
+regla quedan cerradas: aplicar sin ninguna simulación, aplicar después de editar una decisión, y
+aplicar un plan distinto del que se mostró. `make selftest MODE=gate` afirma las tres.
+
+**La huella es de contenido**, sobre las claves de grupo y las rutas que se removerían, ordenadas: dos
+planes que tocarían exactamente los mismos archivos coinciden, y cualquier otro no. No usa el `Hasher`
+de Swift porque está sembrado por proceso y una revisión reabierta después de un relanzamiento tiene
+que reconocer su propia huella. FNV-1a a mano, 20 líneas — esto compara un plan contra sí mismo minutos
+después, no contra un adversario, así que SHA-256 sería ceremonia.
+
+Y `hasDecisions` **sí se lee**, a diferencia del CLI, que lo recibe como parámetro en `menu_options` y
+nunca lo consulta: su "ver decisiones" se ofrece incluso cuando no hay nada que mostrar.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice

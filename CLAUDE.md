@@ -185,7 +185,8 @@ Dos reglas:
    proyecto anterior.
 
 Modos actuales: `bundle`, `state-dir`, `l10n`, `menu`, `json-roundtrip`, `scans`, `digest`,
-`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`, `undo`, `review`.
+`walk-permissions`, `trash-exclusion`, `scan`, `about`, `icon`, `cache`, `storage`, `trash`, `undo`,
+`review`, `decisions`, `gate`.
 
 Los dos de interop son los más fuertes. `json-roundtrip` lee cada documento de los seis
 subdirectorios compartidos, lo re-codifica y compara bytes. `scans` hace lo mismo **pasando por el
@@ -252,6 +253,15 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Aplicar exige una simulación *vigente*, no "hubo una alguna vez".** Editar una sola decisión
+  después de ver el dry-run invalida la aprobación, porque el plan que el usuario aprobó ya no es el
+  plan que correría. Por eso `ReviewFlow` guarda la huella del plan simulado y `ApplyGate.authorize`
+  la compara; un botón gris es detalle de presentación, y un atajo de teclado o una hoja que se quedó
+  abierta lo alcanzan igual.
+- **La huella del plan no puede venir del `Hasher` de Swift.** Está sembrado por proceso, así que
+  sobrevivir a un relanzamiento — que es lo que una revisión reabierta necesita — lo descarta. FNV-1a
+  a mano, 20 líneas, porque esto compara un plan contra sí mismo minutos después y no contra un
+  adversario.
 - **La caché de hashes vive en `~/Library/Caches`, nunca en el state dir compartido.** Son dos clases
   de dato: un scan es formato de interop que el CLI lee y no se puede perder; la caché es dato
   derivado que macOS puede purgar bajo presión de disco, que es la semántica que se quiere.
