@@ -160,6 +160,13 @@ enum MainMenuBuilder {
         )
         menu.addItem(.separator())
 
+        // No key equivalent: this is the one review action that touches many groups at once, and a
+        // shortcut for it would be a shortcut for "decide 800 things".
+        menu.addItem(
+            withTitle: Strings.string("menu.group.confirmSelected"),
+            action: #selector(ReviewWindowController.confirmSelectedGroups(_:)),
+            keyEquivalent: ""
+        )
         menu.addItem(
             withTitle: Strings.string("menu.group.keepAll"),
             action: #selector(ReviewWindowController.keepAll(_:)),

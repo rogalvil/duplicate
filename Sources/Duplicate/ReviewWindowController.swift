@@ -64,6 +64,13 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
     private let undo = UndoManager()
     private var applySheet: ApplySheetController?
+    /// Which groups the sidebar is showing.
+    private var filter = GroupFilter()
+    /// Scan indices of the visible rows, in order. The sidebar's row is an index into this.
+    private var visible: [Int] = []
+    private let sizeFilterPopup = NSPopUpButton()
+    private let undecidedToggle = NSButton()
+    private let filterCountLabel = NSTextField(labelWithString: "")
     /// What the decisions file that was loaded looks like next to the scan.
     private var provenance: DecisionsProvenance = .none
 
@@ -109,6 +116,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         self.savedDecisions = state.decisionsForSaving
         self.provenance = DecisionsProvenance.classify(scan: scan, priorDecisions: prior)
         buildContent()
+        rebuildVisibleGroups()
         selectGroup(0)
     }
 
@@ -201,6 +209,39 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             fileTable.addTableColumn(column)
         }
 
+        // **Multiple selection, because 880 groups cannot be decided one at a time** -- and the answer is
+        // not a button that decides them all, which is the CLI's defect. Selecting a set and confirming it
+        // is an act on groups the user chose and can see the size of.
+        groupTable.allowsMultipleSelection = true
+
+        sizeFilterPopup.target = self
+        sizeFilterPopup.action = #selector(filterChanged(_:))
+        for size in GroupFilter.sizeChoices {
+            sizeFilterPopup.addItem(
+                withTitle: size == 0
+                    ? Strings.string("review.filter.anySize")
+                    : String(format: Strings.string("review.filter.atLeast"), ByteSize.format(size))
+            )
+        }
+        sizeFilterPopup.selectItem(at: 0)
+
+        undecidedToggle.setButtonType(.switch)
+        undecidedToggle.title = Strings.string("review.filter.onlyUndecided")
+        undecidedToggle.target = self
+        undecidedToggle.action = #selector(filterChanged(_:))
+
+        filterCountLabel.font = .systemFont(ofSize: 10)
+        filterCountLabel.textColor = .secondaryLabelColor
+        for label in [filterCountLabel] {
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+
+        let filterBar = NSStackView(views: [sizeFilterPopup, undecidedToggle, filterCountLabel])
+        filterBar.orientation = .vertical
+        filterBar.alignment = .leading
+        filterBar.spacing = 4
+        filterBar.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 6, right: 8)
+
         let groupScroll = NSScrollView()
         groupScroll.documentView = groupTable
         groupScroll.hasVerticalScroller = true
@@ -267,7 +308,19 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         let split = NSSplitView()
         split.isVertical = true
         split.dividerStyle = .thin
-        split.addArrangedSubview(groupScroll)
+        let sidebar = NSStackView(views: [filterBar, groupScroll])
+        sidebar.orientation = .vertical
+        sidebar.alignment = .leading
+        sidebar.spacing = 0
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        groupScroll.translatesAutoresizingMaskIntoConstraints = false
+        filterBar.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            groupScroll.widthAnchor.constraint(equalTo: sidebar.widthAnchor),
+            filterBar.widthAnchor.constraint(equalTo: sidebar.widthAnchor),
+        ])
+
+        split.addArrangedSubview(sidebar)
         split.addArrangedSubview(detail)
         // The group sidebar holds its width and the detail takes the slack -- the same reasoning as the
         // inner split, in the direction a sidebar normally behaves.
@@ -312,7 +365,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             fileScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 300),
         ])
         window.contentView = content
-        groupScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 230).isActive = true
+        sidebar.widthAnchor.constraint(greaterThanOrEqualToConstant: 240).isActive = true
     }
 
     // MARK: - Presentation
@@ -382,18 +435,88 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         simulateButton.isEnabled = !state.decisionsForSaving.isEmpty
 
         fileTable.reloadData()
-        groupTable.reloadData(
-            forRowIndexes: IndexSet(integersIn: 0..<state.groupCount),
-            columnIndexes: IndexSet(integer: 0)
+        if !visible.isEmpty {
+            groupTable.reloadData(
+                forRowIndexes: IndexSet(integersIn: 0..<visible.count),
+                columnIndexes: IndexSet(integer: 0)
+            )
+        }
+    }
+
+    /// Recomputes which groups the sidebar shows, keeping the current one visible when it still matches.
+    ///
+    /// **A narrowed list never changes a decision.** Hiding a group is a display choice; the groups that
+    /// disappear stay exactly as they were -- undecided, unwritten, unacted on.
+    private func rebuildVisibleGroups() {
+        let previous = state.groupIndex
+        visible = filter.matchingIndices(
+            in: state.scan,
+            decision: { self.state.decision(at: $0) },
+            stillDuplicate: [:]
         )
+        filterCountLabel.stringValue = String(
+            format: Strings.string("review.filter.count"), visible.count, state.groupCount)
+        groupTable.reloadData()
+
+        if let row = visible.firstIndex(of: previous) {
+            groupTable.selectRowIndexes([row], byExtendingSelection: false)
+        } else if let first = visible.first {
+            selectGroup(first)
+        }
+    }
+
+    @objc private func filterChanged(_ sender: Any?) {
+        let index = sizeFilterPopup.indexOfSelectedItem
+        filter.minimumSize =
+            GroupFilter.sizeChoices.indices.contains(index) ? GroupFilter.sizeChoices[index] : 0
+        filter.onlyUndecided = undecidedToggle.state == .on
+        rebuildVisibleGroups()
+        refreshDetail()
+    }
+
+    /// The scan indices the user has selected in the sidebar.
+    private var selectedGroupIndices: [Int] {
+        groupTable.selectedRowIndexes.compactMap { row in
+            visible.indices.contains(row) ? visible[row] : nil
+        }
+    }
+
+    /// Accepts what is shown for every selected group, after saying how many and how much.
+    ///
+    /// **The line this does not cross**: it records the keep set that is on screen, for groups the user
+    /// selected. What the CLI does -- and what this app refuses to do -- is decide every group as a side
+    /// effect of quitting, with nothing asked and nothing shown.
+    @objc func confirmSelectedGroups(_ sender: Any?) {
+        let indices = selectedGroupIndices
+        guard !indices.isEmpty, let window else { return }
+        let untouched = indices.filter { state.decision(at: $0) == .undecided }
+        let bytes = untouched.reduce(Int64(0)) { total, index in
+            total + state.scan.groups[index].reclaimableBytes
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(
+            format: Strings.string("review.bulk.title"), untouched.count)
+        alert.informativeText = String(
+            format: Strings.string("review.bulk.body"), ByteSize.format(bytes))
+        alert.addButton(withTitle: Strings.string("review.bulk.confirm"))
+        alert.addButton(withTitle: Strings.string("button.cancel"))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            MainActor.assumeIsolated {
+                self.mutate { $0.confirmAll(indices) }
+                self.rebuildVisibleGroups()
+            }
+        }
     }
 
     private func selectGroup(_ index: Int) {
         let changedGroup = index != state.groupIndex || presence == nil
         state.go(to: index)
-        if groupTable.selectedRow != index, state.scan.groups.indices.contains(index) {
-            groupTable.selectRowIndexes([index], byExtendingSelection: false)
-            groupTable.scrollRowToVisible(index)
+        if let row = visible.firstIndex(of: index), groupTable.selectedRow != row {
+            groupTable.selectRowIndexes([row], byExtendingSelection: false)
+            groupTable.scrollRowToVisible(row)
         }
         if changedGroup {
             // Dropped rather than kept: the previous group's answer says nothing about this one, and
@@ -740,6 +863,21 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var openApplySheet: ApplySheetController? { applySheet }
     var canSimulateFromButton: Bool { simulateButton.isEnabled }
     var importedProvenance: DecisionsProvenance { provenance }
+    var visibleGroupCount: Int { visible.count }
+    var visibleGroupIndices: [Int] { visible }
+
+    func setFilterForSelftest(minimumSize: Int64, onlyUndecided: Bool) {
+        filter.minimumSize = minimumSize
+        filter.onlyUndecided = onlyUndecided
+        rebuildVisibleGroups()
+        refreshDetail()
+    }
+
+    func confirmAllVisibleForSelftest() {
+        let indices = visible
+        mutate { $0.confirmAll(indices) }
+        rebuildVisibleGroups()
+    }
 
     /// The smallest size this window's constraints allow.
     ///
@@ -817,7 +955,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
 extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        tableView === groupTable ? state.groupCount : (presentation?.rows.count ?? 0)
+        tableView === groupTable ? visible.count : (presentation?.rows.count ?? 0)
     }
 
     func tableView(
@@ -836,13 +974,17 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
         }
         guard table === groupTable else { return }
         let row = groupTable.selectedRow
-        guard row >= 0, row != state.groupIndex else { return }
-        selectGroup(row)
+        guard row >= 0, visible.indices.contains(row) else { return }
+        let index = visible[row]
+        guard index != state.groupIndex else { return }
+        selectGroup(index)
     }
 
     private func groupCell(row: Int) -> NSView? {
-        guard state.scan.groups.indices.contains(row) else { return nil }
-        let group = state.scan.groups[row]
+        guard visible.indices.contains(row) else { return nil }
+        let index = visible[row]
+        guard state.scan.groups.indices.contains(index) else { return nil }
+        let group = state.scan.groups[index]
         let identifier = NSUserInterfaceItemIdentifier("group")
         let cell =
             groupTable.makeView(withIdentifier: identifier, owner: self) as? GroupRowView
@@ -850,7 +992,7 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
 
         // Symbol, not a word: this column is 230 points wide and the second line already carries numbers.
         let mark: String
-        switch state.decision(at: row) {
+        switch state.decision(at: index) {
         case .decided: mark = "\u{2713} "
         case .discardAll: mark = "\u{2717} "
         case .skipped: mark = "\u{2192} "
@@ -864,8 +1006,7 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
             format: Strings.string("review.group.detail"),
             ByteSize.format(group.size), group.files.count
         )
-        cell.titleField.textColor =
-            state.decision(at: row).isActionable ? .labelColor : .labelColor
+        cell.titleField.textColor = .labelColor
         cell.detailField.textColor = .secondaryLabelColor
         return cell
     }

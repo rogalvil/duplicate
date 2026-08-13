@@ -2248,9 +2248,71 @@ enum SelfTest {
             "starting over rewrote the file before the user asked"
         )
 
+        // 12. **880 groups cannot be reviewed one at a time, and the answer is not deciding them all.**
+        //
+        // The sidebar narrows to what is worth attention -- in the real scan the groups run from 20.5 MB
+        // down to 346 B -- and the groups that disappear stay exactly as they were. Then a selection can be
+        // confirmed together, which is an act on a set the user chose, not a side effect of quitting.
+        //
+        // Teeth: make `matchingIndices` ignore `minimumSize` and the narrowed count fails; make
+        // `confirmAll` decide every group instead of the given indices and the untouched-group assertion
+        // does.
+        let scaleID = "20260812-170000-000000"
+        let scaleGroups: [DuplicateGroup] = [
+            DuplicateGroup(
+                size: 20_000_000, digest: digest("a"), files: [tree + "/big-a", tree + "/big-b"]),
+            DuplicateGroup(
+                size: 5_000_000, digest: digest("b"), files: [tree + "/mid-a", tree + "/mid-b"]),
+            DuplicateGroup(
+                size: 346, digest: digest("c"), files: [tree + "/tiny-a", tree + "/tiny-b"]),
+            DuplicateGroup(
+                size: 100, digest: digest("d"), files: [tree + "/wee-a", tree + "/wee-b"]),
+        ]
+        let scaleScan = DuplicateScan(
+            scanID: scaleID, root: tree,
+            createdAt: "2026-08-12T17:00:00.000000Z", groups: scaleGroups
+        )
+        try store.save(scaleScan)
+
+        let atScale = ReviewWindowController(scan: scaleScan, stateDirectory: state)
+        defer { atScale.window?.close() }
+        try expect(atScale.visibleGroupCount == 4, "the unfiltered sidebar hides groups")
+
+        atScale.setFilterForSelftest(minimumSize: 1_000_000, onlyUndecided: false)
+        try expect(
+            atScale.visibleGroupIndices == [0, 1],
+            "the size filter shows \(atScale.visibleGroupIndices)"
+        )
+
+        // **Narrowing decides nothing.** The two hidden groups are still untouched.
+        try expect(
+            atScale.reviewState.tally.decided == 0, "narrowing the list decided something")
+
+        atScale.confirmAllVisibleForSelftest()
+        try expect(
+            atScale.reviewState.tally.decided == 2,
+            "\(atScale.reviewState.tally.decided) groups decided, wanted the 2 that were shown"
+        )
+        try expect(
+            atScale.reviewState.decision(at: 2) == .undecided,
+            "a hidden group was decided by a bulk confirm of the visible ones"
+        )
+        try expect(
+            atScale.reviewState.decision(at: 3) == .undecided, "the smallest group was decided too")
+
+        // And with "only undecided" on, the ones just decided drop out of the list.
+        atScale.setFilterForSelftest(minimumSize: 0, onlyUndecided: true)
+        try expect(
+            atScale.visibleGroupIndices == [2, 3],
+            "the undecided filter shows \(atScale.visibleGroupIndices)"
+        )
+
         print("  3 groups over a real tree: preview is not a decision, keep-nothing refused")
         print("  the keeper's own storage is not offered; 2 of 3 saved, the skip is not")
         print("  a decisions file covering all 6 groups is flagged, and starting over clears it")
+        print(
+            "  the sidebar narrows to 2 of 4 groups, and confirming those leaves the rest untouched"
+        )
     }
 
     // MARK: - preview
