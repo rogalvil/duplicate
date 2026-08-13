@@ -266,6 +266,19 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   archivos tienen exactamente una decisión por grupo**, y el único parcial es el que escribió esta app. La
   app los carga —son el formato compartido— y avisa: ni rehusarlos ni tirarlos en silencio serían mejores,
   los dos son la app decidiendo por el usuario.
+- **El resultado del chequeo de disco se guarda en `Caches`, con su fecha, y nada destructivo lo cree.**
+  Tarda lo suficiente para no valer repetirlo, y conserva casi todo su valor —un escaneo de mayo cuyos
+  archivos ya no están seguirá sin tenerlos mañana— pero solo es cierto en el instante en que se tomó. El
+  apply re-hashea cada archivo justo antes de moverlo, así que una foto vencida cuesta un archivo rehusado
+  y un error honesto, nunca un movimiento equivocado.
+- **Se guarda por clave de grupo, no por índice.** Un índice solo significa algo para un documento exacto;
+  `size:digest` sobrevive un re-escaneo del mismo contenido, que es justo para lo que sirve guardarlo.
+- **Un selftest que usa un default de `~/Library/Caches` contamina la siguiente corrida.** Pasó: la foto
+  de una corrida anterior hizo que un chequeo de dientes fallara en la aserción equivocada. El directorio
+  se inyecta y el modo apunta a `/tmp`.
+- **`timestamp(from:)` omite el `.000000` en un segundo exacto, y eso es correcto**: medido,
+  `datetime(2026,8,12,12,0,0).isoformat()` en Python tampoco lo pone. Un test que esperaba la forma
+  rellenada estaba equivocado sobre el formato, no sobre el código.
 - **Con un filtro activo, la fila de la barra lateral es un índice en la lista *visible*, no en el
   escaneo.** Y cualquier mutación puede cambiar esa lista: decidir un grupo con "sin decidir" encendido lo
   saca. Sin reconstruir después de mutar, la barra sigue mostrándolo mientras el estado ya avanzó — lo

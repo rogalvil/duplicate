@@ -62,6 +62,11 @@ public enum JSONValue: Sendable, Equatable {
         }
     }
 
+    public var boolValue: Bool? {
+        if case .bool(let value) = self { return value }
+        return nil
+    }
+
     public var arrayValue: [JSONValue]? {
         guard case .array(let elements) = self else { return nil }
         return elements
