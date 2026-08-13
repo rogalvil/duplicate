@@ -69,6 +69,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         window.title = Strings.string("window.library.title")
         window.center()
         window.setFrameAutosaveName("LibraryWindow")
+        window.minSize = NSSize(width: 720, height: 360)
         window.tabbingMode = .disallowed
         super.init(window: window)
 
@@ -547,6 +548,12 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     var footerText: String { footer.stringValue }
     var emptyStateText: String? { emptyState.isHidden ? nil : emptyState.stringValue }
     var watcherCount: Int { watchers.count }
+
+    /// The smallest size this window's constraints allow. See the review window for why this is asserted.
+    var requiredContentSize: NSSize {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return window?.contentView?.fittingSize ?? .zero
+    }
     var hasFinishedFirstLoad: Bool { hasLoadedOnce }
 
     /// Drives the sort control and the search field the way a click would.

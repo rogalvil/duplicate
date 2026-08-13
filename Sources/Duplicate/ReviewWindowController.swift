@@ -102,7 +102,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         // AutoLayout starts breaking constraints and the detail pane vanishes entirely -- seen in a real
         // screenshot: a squashed window with an empty right half and no footer. `minSize` makes the window
         // stop instead.
-        window.minSize = NSSize(width: 820, height: 480)
+        window.minSize = NSSize(width: 780, height: 420)
         super.init(window: window)
 
         window.delegate = self
@@ -225,7 +225,10 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         inner.dividerStyle = .thin
         inner.addArrangedSubview(fileScroll)
         inner.addArrangedSubview(previewPane)
-        inner.setHoldingPriority(.defaultLow, forSubviewAt: 0)
+        // The file list holds its width; the preview yields. Without this the split gives the preview
+        // whatever its content asks for and the list collapses to nothing -- which is what the screenshot
+        // showed: a detail pane with no file table in it at all.
+        inner.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
         inner.translatesAutoresizingMaskIntoConstraints = false
         previewPane.showPlaceholder()
 
@@ -277,7 +280,9 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -10),
             inner.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -28),
             inner.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
-            previewPane.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            previewPane.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
+            previewPane.widthAnchor.constraint(lessThanOrEqualToConstant: 380),
+            fileScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
         ])
         window.contentView = content
         groupScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 230).isActive = true
@@ -708,6 +713,15 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var openApplySheet: ApplySheetController? { applySheet }
     var canSimulateFromButton: Bool { simulateButton.isEnabled }
     var importedProvenance: DecisionsProvenance { provenance }
+
+    /// The smallest size this window's constraints allow.
+    ///
+    /// The one layout property worth asserting: it is what decides whether a window can be resized down, and
+    /// a constraint that demands more than a screen makes the window unusable in a way no other check sees.
+    var requiredContentSize: NSSize {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return window?.contentView?.fittingSize ?? .zero
+    }
     func discardImportedForSelftest() { clearAllDecisionsForImport() }
     var footerButtonCount: Int { 1 }
     var simulateButtonTitle: String { simulateButton.title }

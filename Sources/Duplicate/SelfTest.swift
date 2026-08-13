@@ -1968,6 +1968,25 @@ enum SelfTest {
         try expect(onDisk.presentCount == 2, "\(onDisk.presentCount) of 2 files found on disk")
         try expect(onDisk.isStale == false, "a freshly written tree reports as stale")
 
+        // **The layout has to fit on a screen.** A selftest that only reads cell text cannot see a window
+        // that demands 1,100 points of height -- which is exactly what shipped: the preview's image was
+        // square-locked to the pane width, so a wide pane demanded a tall window, the file list was pushed
+        // out, and AppKit refused to resize the window down because constraints require what they require.
+        //
+        // `fittingSize` is that requirement, and it is checkable.
+        //
+        // Teeth: restore `imageView.heightAnchor == imageView.widthAnchor` in `PreviewPane` and the height
+        // assertion fails with a number in the thousands.
+        let required = controller.requiredContentSize
+        try expect(
+            required.height <= 700,
+            "the layout demands \(Int(required.height)) points of height, which will not fit"
+        )
+        try expect(
+            required.width <= 1100,
+            "the layout demands \(Int(required.width)) points of width, which will not fit"
+        )
+
         try expect(controller.groupRowCount == 3, "\(controller.groupRowCount) groups listed")
         try expect(controller.fileRowCount == 2, "\(controller.fileRowCount) files in group 1")
 
@@ -2562,6 +2581,14 @@ enum SelfTest {
 
         controller.setRootForSelftest(tree)
         try expect(controller.canStart, "a readable folder was refused")
+
+        // The options page grew a grey explanation under every checkbox; this is what keeps that from
+        // turning into a window taller than a laptop screen.
+        let scanFit = controller.requiredContentSize
+        try expect(
+            scanFit.height <= 560 && scanFit.width <= 900,
+            "the scan layout demands \(Int(scanFit.width))x\(Int(scanFit.height))"
+        )
 
         // The request the options produce reaches the session with the defaults the window shows.
         let request = try expectSome(

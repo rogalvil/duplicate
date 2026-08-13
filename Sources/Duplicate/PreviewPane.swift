@@ -81,12 +81,21 @@ final class PreviewPane: NSView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
-            imageView.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -16),
-            imageView.heightAnchor.constraint(equalTo: imageView.widthAnchor),
+            // **Never square-locked to the pane's width.** That was the bug: `height == width` on a pane
+            // 1,100 points wide demanded 1,100 points of height, which pushed the file list and the image
+            // off the layout and -- because AppKit will not shrink a window below what its constraints
+            // require -- made the window impossible to resize down. One cause, both symptoms, and neither
+            // was visible from a passing selftest.
+            //
+            // A cap instead: the image takes what the pane offers up to a point, and `scaleProportionallyUpOrDown`
+            // handles the rest.
+            imageView.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor, constant: -16),
+            imageView.heightAnchor.constraint(lessThanOrEqualToConstant: 280),
+            imageView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
             placeholder.centerXAnchor.constraint(equalTo: centerXAnchor),
             placeholder.centerYAnchor.constraint(equalTo: centerYAnchor),
             placeholder.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -24),
-            pathLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -16),
+            pathLabel.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor, constant: -16),
         ])
     }
 
