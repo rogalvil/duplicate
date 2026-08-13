@@ -34,7 +34,7 @@ enum SelfTest {
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
-            "similar-window",
+            "similar-window", "video",
         ]
 
         let modes: [String]
@@ -80,6 +80,7 @@ enum SelfTest {
                 case "folder-window": try await checkFolderWindow()
                 case "phash": try checkPerceptualHash()
                 case "similar-window": try await checkSimilarWindow()
+                case "video": try await checkVideoHashing()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -3612,6 +3613,71 @@ enum SelfTest {
             "  a perceptual scan of 3 images: \(reloaded.pairCount) pair, "
                 + "\(result.classCount) hash classes, \(result.examinedPairs) class pairs examined")
         print("  the library lists it and the viewer shows two different files side by side")
+    }
+
+    // MARK: - video
+
+    /// Proves the video path in the release build, through a real movie file.
+    ///
+    /// **The one chain no unit test can shortcut**: `AVAssetWriter` encodes H.264, the file lands on disk,
+    /// `AVAssetImageGenerator` decodes frames out of it, and those frames go through the same hash the images
+    /// take. If the runner has no usable encoder, the write throws and this fails loudly -- a video check that
+    /// passes because it hashed nothing is worse than one that fails.
+    ///
+    /// Writes only under `/tmp`.
+    ///
+    /// Proof of teeth: two breaks, each named beside its assertion.
+    private static func checkVideoHashing() async throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-video-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: root) }
+
+        // A flat clip: every frame is the same picture, so every frame must hash the same.
+        // Teeth: drop the quantisation in `ImageHasher.hash` and the six frames come back as six hashes.
+        let flat = try await SyntheticMovie.write(
+            SyntheticMovie.Specification(seconds: 6, pattern: .constantGrey(128)),
+            to: root + "/flat.mp4")
+        let hasher = VideoHasher()
+        let flatResult = try await hasher.hashes(fileURL: URL(filePath: flat))
+        try expect(
+            flatResult.hashes.count >= 6,
+            "a six-second clip yielded \(flatResult.hashes.count) frames")
+        try expect(
+            Set(flatResult.hashes).count == 1,
+            "a flat clip produced \(Set(flatResult.hashes).count) distinct hashes"
+        )
+        try expect(
+            flatResult.hashes.first?.hexString == "8000000000000000",
+            "a flat frame hashed \(flatResult.hashes.first?.hexString ?? "nothing")"
+        )
+
+        // A moving picture has to move the hash, or every video would match every other.
+        // Teeth: hash the first frame eight times and the distinct count drops to one.
+        let moving = try await SyntheticMovie.write(
+            SyntheticMovie.Specification(seconds: 10, pattern: .movingBlock),
+            to: root + "/moving.mp4")
+        let movingResult = try await hasher.hashes(fileURL: URL(filePath: moving))
+        try expect(
+            Set(movingResult.hashes).count >= 4,
+            "a moving block produced \(Set(movingResult.hashes).count) distinct hashes"
+        )
+
+        // And the comparison the CLI writes into `similar-scans`.
+        let selfScore = VideoSimilarity.similarity(movingResult.hashes, movingResult.hashes)
+        try expect(selfScore == 1.0, "a video does not match itself: \(selfScore)")
+        let crossed = VideoSimilarity.similarity(flatResult.hashes, movingResult.hashes)
+        try expect(
+            crossed < VideoSimilarity.defaultFrameRatio,
+            "a flat clip and a moving one scored \(crossed), past the 0.70 threshold"
+        )
+
+        print(
+            "  a 6 s flat clip: \(flatResult.hashes.count) frames, one distinct hash; "
+                + "a 10 s moving clip: \(Set(movingResult.hashes).count) distinct")
+        print(
+            String(
+                format: "  self-similarity 1.0, flat against moving %.2f, threshold %.2f",
+                crossed, VideoSimilarity.defaultFrameRatio))
     }
 
     // MARK: - phash
