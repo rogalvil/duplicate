@@ -232,26 +232,40 @@ struct DirectoryWatcherTests {
     /// after `stop()` would reach a window controller that is being torn down -- the watcher is stopped
     /// from `windowWillClose`.
     ///
-    /// Teeth: drop the `isStopped = true` and `pending?.cancel()` from `stop()` and this fails with one
-    /// report observed. Measured -- an earlier version of this comment named the work item's own `isStopped`
-    /// check instead, and removing that one changes nothing here, because a cancelled item never runs.
+    /// Teeth: drop `pending?.cancel()` and `pending = nil` from `stop()` and this fails with a report still
+    /// scheduled. Measured -- and note the work item's own `isStopped` check is deliberately redundant with
+    /// the cancel, so removing only that one changes nothing here; belt and braces on a callback that would
+    /// otherwise reach a window controller mid-teardown.
     @Test("A report in flight is dropped when the watcher stops")
     func dropsAReportInFlight() async throws {
         let scratch = try WatchScratch()
         defer { scratch.remove() }
 
         let recorder = ChangeRecorder()
-        let watcher = DirectoryWatcher(path: scratch.path, debounce: .milliseconds(400)) {
+        // **A window long enough that no scheduling delay can close it.** The earlier version of this test used
+        // 400 ms and slept 100 of them, assuming the event had landed and the report had not. Measured: under
+        // the load of the full 577-test suite the whole window elapsed before the test looked, the report fired
+        // before `stop()`, and a correct watcher failed. Shortening the sleep would have traded that for a
+        // vacuous pass, since a report that never became pending is dropped for the wrong reason.
+        let watcher = DirectoryWatcher(path: scratch.path, debounce: .seconds(3600)) {
             recorder.record()
         }
         #expect(watcher.start())
 
         try scratch.write("scan.json")
-        // Well inside the 400 ms window: the event has been delivered, the report has not.
-        try await Task.sleep(for: .milliseconds(100))
+        var waited = 0
+        while !watcher.hasPendingReport, waited < 2000 {
+            try await Task.sleep(for: .milliseconds(5))
+            waited += 5
+        }
+        #expect(watcher.hasPendingReport, "no report was in flight, so stopping proves nothing")
+
         watcher.stop()
 
-        try await Task.sleep(for: .milliseconds(600))
+        // **State, not a sleep, and deliberately so.** Waiting out the window would mean waiting an hour, and
+        // it would add nothing: the work item is cancelled and released, and a cancelled item never runs. So
+        // the assertion is that nothing is left scheduled and nothing has been reported.
+        #expect(watcher.hasPendingReport == false, "a report is still scheduled after stop()")
         #expect(recorder.observed == 0)
     }
 
