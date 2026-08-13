@@ -80,6 +80,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     /// What the last disk check found, for the filter line.
     private var diskSummary: String?
     private var diskTimer: Timer?
+    private let presenceCache: PresenceCache
     /// What the decisions file that was loaded looks like next to the scan.
     private var provenance: DecisionsProvenance = .none
 
@@ -92,8 +93,17 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     /// Bumped per preview request, same reason.
     private var previewGeneration = 0
 
-    init(scan: DuplicateScan, stateDirectory: StateDirectory) {
+    /// - Parameter presenceCacheDirectory: where the disk-check snapshots live. Injected so a selftest can
+    ///   point it at a temp directory: the default is the real `~/Library/Caches`, and a mode that wrote
+    ///   there would leak its answers into the next run -- which it did, and the leak is what made a
+    ///   teeth check fail on the wrong assertion.
+    init(
+        scan: DuplicateScan,
+        stateDirectory: StateDirectory,
+        presenceCacheDirectory: URL = PresenceCache.defaultDirectory()
+    ) {
         self.stateDirectory = stateDirectory
+        self.presenceCache = PresenceCache(directory: presenceCacheDirectory)
         let store = ScanStore(state: stateDirectory)
         self.store = store
         let prior = store.priorDecisions(scanID: scan.scanID)
@@ -125,6 +135,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         self.savedDecisions = state.decisionsForSaving
         self.provenance = DecisionsProvenance.classify(scan: scan, priorDecisions: prior)
         buildContent()
+        adoptCachedPresence()
         rebuildVisibleGroups()
         selectGroup(0)
     }
@@ -503,6 +514,37 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     /// **Off the main thread and cancellable**, because it is a `stat` per file: 2,259 for one of this
     /// user's scans and 9,949 for another, on an external drive that may have spun down. A window that
     /// stopped responding for that long would be worse than not offering the filter.
+    /// Uses the last disk check for this scan, if there is one.
+    ///
+    /// **Cached because it takes long enough to be worth not repeating**, and the answer keeps most of its
+    /// value: a May scan whose files are gone will still have them gone tomorrow. The age is shown rather
+    /// than hidden, because a snapshot is only true at the instant it was taken -- and nothing destructive
+    /// reads it. The apply path re-hashes every file immediately before moving it.
+    private func adoptCachedPresence() {
+        guard let snapshot = presenceCache.load(scanID: state.scan.scanID) else { return }
+        stillDuplicate = snapshot.stillDuplicate(for: state.scan)
+        guard !stillDuplicate.isEmpty else { return }
+        stillThereToggle.isEnabled = true
+        diskSummary = String(
+            format: Strings.string("review.filter.checkedAgo"),
+            snapshot.stillDuplicateCount,
+            snapshot.checkedCount,
+            Self.age(of: snapshot.checkedAt)
+        )
+    }
+
+    /// How long ago a timestamp was, in words.
+    ///
+    /// Locale-aware, unlike the byte counts: this is not written anywhere and not compared with anything.
+    private static func age(of timestamp: String) -> String {
+        guard let then = ScanIdentifier.date(fromTimestamp: timestamp) else {
+            return Strings.string("about.unknown")
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: then, relativeTo: Date())
+    }
+
     @objc private func toggleDiskCheck(_ sender: Any?) {
         if let running = diskCheck {
             running.cancel()
@@ -531,6 +573,21 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
                     return
                 }
                 self.stillDuplicate = outcome.stillDuplicate
+
+                // Saved so the next session does not pay for it again. A failure to write is swallowed: it
+                // is a cache, and losing it costs one more check.
+                let snapshot = PresenceSnapshot(
+                    stillDuplicateByKey: Dictionary(
+                        uniqueKeysWithValues: outcome.groups.compactMap { index, presence in
+                            self.state.scan.groups.indices.contains(index)
+                                ? (self.state.scan.groups[index].key, presence.isStillADuplicate)
+                                : nil
+                        }
+                    ),
+                    checkedAt: ScanIdentifier.timestamp(from: Date())
+                )
+                _ = try? self.presenceCache.save(snapshot, scanID: self.state.scan.scanID)
+
                 self.stillThereToggle.isEnabled = true
                 self.diskSummary = String(
                     format: Strings.string("review.filter.checked"),
@@ -1007,6 +1064,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
     var diskCheckedCount: Int { stillDuplicate.count }
     var canFilterByPresence: Bool { stillThereToggle.isEnabled }
+    var diskSummaryText: String? { diskSummary }
 
     /// Runs the disk check and waits for it, for a selftest.
     func checkDiskForSelftest() async {

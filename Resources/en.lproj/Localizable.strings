@@ -231,3 +231,4 @@
 "review.filter.checkDisk" = "Check the disk";
 "review.filter.checking" = "Checking %1$d of %2$d groups...";
 "review.filter.checked" = "%1$d of %2$d still have two or more files";
+"review.filter.checkedAgo" = "%1$d of %2$d still have two or more files, checked %3$@";

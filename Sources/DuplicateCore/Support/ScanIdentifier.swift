@@ -194,6 +194,36 @@ public enum ScanIdentifier {
         return calendar.date(from: parts)
     }
 
+    /// The moment a `created_at` string names, for display.
+    ///
+    /// **Only the whole seconds are read.** The format carries six fractional digits and no formatter in
+    /// Foundation parses six, so they are dropped rather than approximated -- a microsecond cannot change
+    /// how "two hours ago" reads, and pretending to parse it would invite somebody to rely on it.
+    ///
+    /// Returns `nil` for anything not shaped like `2026-08-12T12:00:00.000000Z`, because a timestamp this
+    /// app did not write is not one it should guess at.
+    public static func date(fromTimestamp timestamp: String) -> Date? {
+        let bytes = Array(timestamp.utf8)
+        guard bytes.count >= 19, bytes.last == UInt8(ascii: "Z") else { return nil }
+        let head = String(decoding: bytes[..<19], as: UTF8.self)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        let parts = head.split(separator: "T")
+        guard parts.count == 2 else { return nil }
+        let day = parts[0].split(separator: "-")
+        let time = parts[1].split(separator: ":")
+        guard day.count == 3, time.count == 3 else { return nil }
+        var components = DateComponents()
+        components.year = Int(day[0])
+        components.month = Int(day[1])
+        components.day = Int(day[2])
+        components.hour = Int(time[0])
+        components.minute = Int(time[1])
+        components.second = Int(time[2])
+        guard components.year != nil, components.second != nil else { return nil }
+        return calendar.date(from: components)
+    }
+
     /// The first identifier at or after `date` that `isTaken` says is free.
     ///
     /// Two tools writing into one directory can collide. At microsecond precision that is

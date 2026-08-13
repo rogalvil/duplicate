@@ -217,4 +217,33 @@ struct ScanIdentifierFormattingTests {
         #expect(ScanIdentifier.identifier(from: date) == "20260511-064716-685054")
         #expect(ScanIdentifier.timestamp(from: date) == "2026-05-11T06:47:16.685054Z")
     }
+
+    /// Only the whole seconds are read: no formatter in Foundation parses six fractional digits, so they are
+    /// dropped rather than approximated. A microsecond cannot change how "two hours ago" reads.
+    ///
+    /// **And an exact second carries no fraction at all**, which is not this app's invention -- measured,
+    /// `datetime(2026,8,12,12,0,0).isoformat()` in Python is `2026-08-12T12:00:00` with nothing after the
+    /// seconds. The codec copies that, so the round-trip below is `...:00Z` and not `...:00.000000Z`. An
+    /// earlier version of this test asserted the padded form and was wrong about the format, not the code.
+    @Test("A created_at string parses back to its second")
+    func parsesATimestamp() throws {
+        let date = try #require(ScanIdentifier.date(fromTimestamp: "2026-08-12T12:00:00.000000Z"))
+        #expect(ScanIdentifier.timestamp(from: date) == "2026-08-12T12:00:00Z")
+        // The fractional part is dropped rather than carried.
+        let fractional = try #require(
+            ScanIdentifier.date(fromTimestamp: "2026-08-12T12:00:00.685054Z"))
+        #expect(ScanIdentifier.timestamp(from: fractional) == "2026-08-12T12:00:00Z")
+        // Both spellings of the same second name the same instant.
+        #expect(date == fractional)
+    }
+
+    @Test("A timestamp this app did not write is refused")
+    func refusesForeignTimestamps() {
+        for bad in [
+            "", "2026-08-12", "2026-08-12T12:00:00", "12:00:00Z", "not a timestamp",
+            "2026-08-12T12:00Z",
+        ] {
+            #expect(ScanIdentifier.date(fromTimestamp: bad) == nil)
+        }
+    }
 }

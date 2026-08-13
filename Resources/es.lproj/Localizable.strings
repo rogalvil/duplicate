@@ -230,3 +230,4 @@
 "review.filter.checkDisk" = "Revisar el disco";
 "review.filter.checking" = "Revisando %1$d de %2$d grupos...";
 "review.filter.checked" = "%1$d de %2$d todavía tienen dos o más archivos";
+"review.filter.checkedAgo" = "%1$d de %2$d todavía tienen dos o más archivos, revisado %3$@";

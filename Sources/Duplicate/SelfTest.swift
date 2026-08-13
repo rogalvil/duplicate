@@ -1958,7 +1958,9 @@ enum SelfTest {
         )
         try store.save(scan)
 
-        let controller = ReviewWindowController(scan: scan, stateDirectory: state)
+        let controller = ReviewWindowController(
+            scan: scan, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence"))
         defer { controller.window?.close() }
 
         // The window checks the filesystem off the main thread, so the assertions below wait for that
@@ -2174,7 +2176,9 @@ enum SelfTest {
         //
         // A persisted skip would be indistinguishable from a decision on the next visit, which is exactly
         // the confusion the tri-state exists to remove.
-        let reopened = ReviewWindowController(scan: scan, stateDirectory: state)
+        let reopened = ReviewWindowController(
+            scan: scan, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence"))
         defer { reopened.window?.close() }
         try expect(
             reopened.reviewState.decision(at: 0).isActionable, "a saved decision did not come back")
@@ -2222,7 +2226,9 @@ enum SelfTest {
             )
         )
 
-        let imported = ReviewWindowController(scan: wide, stateDirectory: state)
+        let imported = ReviewWindowController(
+            scan: wide, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence"))
         defer { imported.window?.close() }
         try expect(
             imported.importedProvenance == .coversEveryGroup(groups: 6),
@@ -2274,7 +2280,9 @@ enum SelfTest {
         )
         try store.save(scaleScan)
 
-        let atScale = ReviewWindowController(scan: scaleScan, stateDirectory: state)
+        let atScale = ReviewWindowController(
+            scan: scaleScan, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence"))
         defer { atScale.window?.close() }
         try expect(atScale.visibleGroupCount == 4, "the unfiltered sidebar hides groups")
 
@@ -2333,7 +2341,9 @@ enum SelfTest {
         )
         try store.save(staleScan)
 
-        let staleReview = ReviewWindowController(scan: staleScan, stateDirectory: state)
+        let staleReview = ReviewWindowController(
+            scan: staleScan, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence"))
         defer { staleReview.window?.close() }
 
         // **Not until asked.** A filter that hid groups because nobody had looked at the disk yet would
@@ -2350,6 +2360,29 @@ enum SelfTest {
             "\(staleReview.diskCheckedCount) groups checked, wanted 3"
         )
         try expect(staleReview.canFilterByPresence, "the filter is still disabled after checking")
+
+        // **The result is cached, because it takes long enough to be worth not repeating.** A second review
+        // of the same scan gets the filter without touching the disk again.
+        //
+        // Teeth: drop the `presenceCache.save` and the reopened review below cannot filter.
+        let reopenedStale = ReviewWindowController(
+            scan: staleScan, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence"))
+        defer { reopenedStale.window?.close() }
+        try expect(
+            reopenedStale.canFilterByPresence,
+            "a second review had to read the disk again"
+        )
+        try expect(
+            reopenedStale.diskCheckedCount == 3,
+            "\(reopenedStale.diskCheckedCount) groups came back from the cache, wanted 3"
+        )
+        // And it says how old the answer is, because a snapshot is only true when it was taken.
+        let summary = try expectSome(reopenedStale.diskSummaryText, "the cache reports no summary")
+        try expect(
+            summary.contains("1") && !summary.contains("review.filter"),
+            "the cached summary reads \(summary)"
+        )
 
         staleReview.setPresenceFilterForSelftest(true)
         try expect(
@@ -2491,7 +2524,9 @@ enum SelfTest {
         )
         try store.save(scan)
 
-        let controller = ReviewWindowController(scan: scan, stateDirectory: state)
+        let controller = ReviewWindowController(
+            scan: scan, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence"))
         defer { controller.window?.close() }
         await controller.awaitPresenceForSelftest()
 
@@ -2870,7 +2905,9 @@ enum SelfTest {
         )
         try store.save(scan)
 
-        let review = ReviewWindowController(scan: scan, stateDirectory: state)
+        let review = ReviewWindowController(
+            scan: scan, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence"))
         defer { review.window?.close() }
         await review.awaitPresenceForSelftest()
 
