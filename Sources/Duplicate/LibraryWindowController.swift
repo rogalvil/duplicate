@@ -323,16 +323,20 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
 
     // MARK: - Watching
 
-    /// Watches the two directories whose contents change what this window shows.
+    /// Watches every directory whose contents change what this window shows.
     ///
-    /// Both, not just `scans/`: a decisions document appearing beside a scan changes its badge, and that is
-    /// how the user sees that a review they did in the CLI landed.
+    /// **All four, and the two that were missing were a real hole.** `scans/` and `decisions/` were watched
+    /// from the start -- a decisions document appearing beside a scan changes its badge, which is how a review
+    /// done in the CLI becomes visible. `folder-scans/` and `similar-scans/` were not, because they did not
+    /// exist yet when this was written, and adding their segments to the switcher did not add them here. The
+    /// symptom is quiet: a scan finishes, its document lands, and the list keeps showing what it showed --
+    /// which reads as "the scan found nothing" rather than "this window is not looking".
     ///
-    /// **The known gap**: a directory watch reports entries, not contents, so the CLI re-saving an
-    /// existing decisions document in place fires nothing. That leaves no row wrong -- the badge tracks
-    /// existence -- but a window that showed decision *counts* would need more than this.
+    /// **The known gap that remains**: a directory watch reports entries, not contents, so the CLI re-saving
+    /// an existing document in place fires nothing. That leaves no row wrong -- every row depends on a file
+    /// existing -- but a window showing decision *counts* would need more than this.
     private func startWatching() {
-        for slot in [StateDirectory.Slot.scans, .decisions] {
+        for slot in [StateDirectory.Slot.scans, .decisions, .folderScans, .similarScans] {
             // Created if absent: a watch cannot be placed on a directory that does not exist, and a
             // first-run app with no scans yet is the normal case. `create` is `mkdir -p`, which the CLI
             // does too.

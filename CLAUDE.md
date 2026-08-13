@@ -302,6 +302,11 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El setup de `vDSP.DCT` cuesta 1 µs**, no lo que el plan supuso: 1,000 setups de tamaño 32 en 1.0 ms. No hay
   que reusarlo por worker, y así el tipo se queda siendo un valor sin discusión de `Sendable`. Su método es
   `transform(_:result:)`, no `output:`.
+- **Agregar un tipo de escaneo a la biblioteca son cuatro lugares, no dos.** Columnas, celdas, pie y estado
+  vacío — y **el watcher de su directorio**. `folder-scans/` y `similar-scans/` se quedaron sin vigilar cuando
+  llegaron sus segmentos, así que un escaneo terminaba, su documento aterrizaba, y la lista seguía igual: se
+  lee como "no encontró nada", no como "esta ventana no está mirando". El modo `library` fija el número de
+  watchers justamente para que agregar un quinto tipo y olvidarlo falle ahí.
 - **Un estado vacío y un pie que leen otra lista se dibujan encima de la lista que sí hay.** Lo destapó una
   captura: 31 escaneos perceptuales en pantalla, el pie diciendo "0 escaneos - 0 mostrados" y el placeholder de
   "todavía no hay escaneos" **encima de las filas**, porque los dos seguían leyendo el arreglo del detector
