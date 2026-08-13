@@ -15,6 +15,8 @@ final class ScanPanelController: NSWindowController {
     var onFinished: ((DuplicateScan) -> Void)?
     /// Called with the folder scan that was saved.
     var onFolderFinished: ((FolderScan) -> Void)?
+    /// Called with the perceptual scan that was saved.
+    var onSimilarFinished: ((SimilarScan) -> Void)?
 
     private let stateDirectory: StateDirectory
     private let session: ScanSession
@@ -33,6 +35,7 @@ final class ScanPanelController: NSWindowController {
     private let detectorPopup = NSPopUpButton()
     private let thresholdPopup = NSPopUpButton()
     private let folderSession: FolderScanSession
+    private let similarSession: SimilarScanSession
     private let hiddenToggle = NSButton()
     private let packagesToggle = NSButton()
     private let cacheToggle = NSButton()
@@ -51,6 +54,7 @@ final class ScanPanelController: NSWindowController {
         self.stateDirectory = stateDirectory
         self.session = ScanSession(store: ScanStore(state: stateDirectory))
         self.folderSession = FolderScanSession(store: ScanStore(state: stateDirectory))
+        self.similarSession = SimilarScanSession(store: ScanStore(state: stateDirectory))
         self.optionsStack = NSStackView()
         self.progressStack = NSStackView()
 
@@ -92,15 +96,10 @@ final class ScanPanelController: NSWindowController {
         detectorPopup.action = #selector(detectorChanged(_:))
         detectorPopup.addItem(withTitle: Strings.string("scan.detector.exact"))
         detectorPopup.addItem(withTitle: Strings.string("scan.detector.folders"))
+        detectorPopup.addItem(withTitle: Strings.string("scan.detector.similar"))
         detectorPopup.selectItem(at: 0)
 
-        for value in [0.95, 0.9, 0.8, 0.7] {
-            thresholdPopup.addItem(
-                withTitle: String(
-                    format: Strings.string("scan.threshold.value"), Int(value * 100)))
-            thresholdPopup.lastItem?.representedObject = value
-        }
-        thresholdPopup.selectItem(at: 1)
+        rebuildThresholdMenu()
         thresholdPopup.isHidden = true
 
         // Recent roots, so a second scan of the same folder is a click rather than a walk through the open
@@ -324,15 +323,55 @@ final class ScanPanelController: NSWindowController {
             root: root, policy: policy, usesCache: cacheToggle.state == .on)
     }
 
-    @objc private func detectorChanged(_ sender: Any?) {
-        // The threshold only means something for folders, so it is only offered there.
-        thresholdPopup.isHidden = detectorPopup.indexOfSelectedItem == 0
+    /// Which detector the popup is on.
+    private enum Detector: Int {
+        case exact = 0
+        case folders = 1
+        case similar = 2
     }
 
-    private var isFolderScan: Bool { detectorPopup.indexOfSelectedItem == 1 }
+    private var detector: Detector {
+        Detector(rawValue: detectorPopup.indexOfSelectedItem) ?? .exact
+    }
+
+    @objc private func detectorChanged(_ sender: Any?) {
+        // **Each detector's threshold is a different quantity in a different unit**: folders are a Dice
+        // coefficient in percent, images are a Hamming distance in bits out of 64. One popup showing "90%"
+        // for both would be two meanings behind one number, so the items are rebuilt with the detector.
+        rebuildThresholdMenu()
+        thresholdPopup.isHidden = detector == .exact
+    }
+
+    private func rebuildThresholdMenu() {
+        thresholdPopup.removeAllItems()
+        switch detector {
+        case .exact, .folders:
+            for value in [0.95, 0.9, 0.8, 0.7] {
+                thresholdPopup.addItem(
+                    withTitle: String(
+                        format: Strings.string("scan.threshold.value"), Int(value * 100)))
+                thresholdPopup.lastItem?.representedObject = value
+            }
+            thresholdPopup.selectItem(at: 1)
+        case .similar:
+            // The CLI's default is 5 bits of 64, which its own comment calls about 92% similarity.
+            for value in [0, 2, 5, 10] {
+                thresholdPopup.addItem(
+                    withTitle: String(format: Strings.string("scan.threshold.bits"), value))
+                thresholdPopup.lastItem?.representedObject = value
+            }
+            thresholdPopup.selectItem(at: 2)
+        }
+    }
+
+    private var isFolderScan: Bool { detector == .folders }
 
     private var threshold: Double {
         (thresholdPopup.selectedItem?.representedObject as? Double) ?? 0.9
+    }
+
+    private var imageThreshold: Int {
+        (thresholdPopup.selectedItem?.representedObject as? Int) ?? 5
     }
 
     @objc private func startScan(_ sender: Any?) {
@@ -348,7 +387,24 @@ final class ScanPanelController: NSWindowController {
         startTimer()
 
         let counters = self.counters
-        if isFolderScan {
+        if detector == .similar {
+            let similarSession = self.similarSession
+            let similarRequest = SimilarScanSession.Request(
+                root: request.root, imageThreshold: imageThreshold, policy: request.policy)
+            task = Task { [weak self] in
+                let outcome: Result<SimilarScanSession.Result, any Error>
+                do {
+                    outcome = .success(
+                        try await similarSession.run(similarRequest, at: Date(), progress: counters)
+                    )
+                } catch {
+                    outcome = .failure(error)
+                }
+                await MainActor.run { [weak self] in
+                    self?.finishSimilar(outcome)
+                }
+            }
+        } else if isFolderScan {
             let folderSession = self.folderSession
             let folderRequest = FolderScanSession.Request(
                 root: request.root, threshold: threshold, policy: request.policy,
@@ -380,6 +436,41 @@ final class ScanPanelController: NSWindowController {
                     self?.finish(result)
                 }
             }
+        }
+    }
+
+    /// The perceptual detector's completion.
+    ///
+    /// **It says what it did not look at.** This build hashes images and no video, so a scan of a tree full of
+    /// `.mp4` files finds nothing and would otherwise look like "there is nothing here". The sheet names the
+    /// number of images it read instead.
+    private func finishSimilar(_ outcome: Result<SimilarScanSession.Result, any Error>) {
+        stopTimer()
+        bar.stopAnimation(nil)
+        task = nil
+
+        switch outcome {
+        case .failure(is CancellationError):
+            window?.close()
+        case .failure(let error):
+            presentFailure(String(describing: error))
+        case .success(let result):
+            if let failure = result.saveFailure {
+                presentFailure(failure)
+                return
+            }
+            if !result.unreadable.isEmpty {
+                let alert = NSAlert()
+                alert.alertStyle = .informational
+                alert.messageText = Strings.string("scan.unreadableImages.title")
+                alert.informativeText = String(
+                    format: Strings.string("scan.unreadableImages.body"),
+                    result.unreadable.count, result.hashedCount)
+                alert.addButton(withTitle: Strings.string("button.ok"))
+                alert.runModal()
+            }
+            onSimilarFinished?(result.scan)
+            window?.close()
         }
     }
 
@@ -565,6 +656,13 @@ final class ScanPanelController: NSWindowController {
     func requestForSelftest() -> ScanSession.Request? { request }
     var isFolderScanForSelftest: Bool { isFolderScan }
     var thresholdForSelftest: Double { threshold }
+    var imageThresholdForSelftest: Int { imageThreshold }
+
+    func chooseSimilarDetectorForSelftest() {
+        detectorPopup.selectItem(at: 2)
+        detectorChanged(nil)
+    }
+
     func chooseFolderDetectorForSelftest() {
         detectorPopup.selectItem(at: 1)
         detectorChanged(nil)

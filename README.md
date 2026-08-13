@@ -16,7 +16,7 @@ deshacer.
 | Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
 | Simular, aplicar a la Papelera y deshacer la sesión | **funciona** |
 | Detector de carpetas: escanea, lista y muestra los pares | **funciona**, sin aplicar todavía |
-| Detector perceptual de imagen: hash, índice y escaneo que guarda | **funciona**, sin UI |
+| Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Detector perceptual de video | **no existe todavía** |
 
 O sea: para **duplicados exactos el ciclo está completo** y no hace falta el CLI — escanear, revisar,
@@ -218,7 +218,7 @@ make help       # lista todos los targets
 ```
 
 Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.md). El catálogo de los
-28 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
+29 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ## Si algo no funciona

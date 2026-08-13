@@ -48,6 +48,7 @@ La segunda columna de la tabla no es aspiracional. Cada línea se ejecutó.
 | `scan-window` | La ventana escanea 60 archivos en 20 grupos y el documento se lee de vuelta; una raíz mala se rehúsa antes de trabajar; **un escaneo cancelado no escribe nada** | tres roturas: `check` siempre ok, no guardar, guardar antes del último chequeo de cancelación |
 | `apply-window` | El ciclo destructivo completo por las ventanas reales: nada se mueve sin dry-run vigente, la hoja lista exactamente lo que se mueve, **un archivo que cambió desde el escaneo se deja en paz**, aplicar consume la autorización, y deshacer devuelve byte-idéntico | cuatro roturas: sin comparar digests, simular sin avanzar el flujo, aplicar sin consumir la autorización, `removalPlan` incluyendo grupos sin decidir |
 | `lifecycle` | Una app sin ventanas recupera su biblioteca con un reopen, y cerrar la última ventana cierra la app | dos roturas: reopen que no muestra nada, y seguir vivo sin ventanas |
+| `similar-window` | El detector perceptual de punta a punta: la ventana lo ofrece con umbral **en bits**, un escaneo real de archivos reales encuentra el par y vuelve del store, la biblioteca lo lista, y el visor pone **dos archivos distintos** lado a lado | tres roturas: la sesión no guarda (`notFound(kind: .similarScans…)`), la biblioteca siempre lee los resúmenes exactos, mostrar `file_a` en los dos paneles |
 | `phash` | El hash perceptual en el build de release: un uniforme da **solo el bit del DC** y sus otros 63 coeficientes son **exactamente cero**, un JPEG q=0.9 no mueve el hash más allá del umbral del CLI, el archivo y sus muestras en memoria coinciden, y una inversión sí se aleja | dos roturas: quitar la cuantización a `UInt8` tras el resample (`ab2adcaad8aad8a8` en vez del bit del DC), transformar con la matriz de la base en vez de con Accelerate (`bc41a9b8a9a90046`) |
 | `folder-window` | El detector de carpetas de punta a punta: la ventana lo ofrece, un escaneo real encuentra el par con sus números exactos, la biblioteca lo lista, el visor nombra el traslape y la diferencia, y **todo par guardado queda orientado por bytes** —`folder_b` es la que `rav duplicate folders-move` borra | cuatro roturas: la sesión no guarda, la biblioteca siempre lee los resúmenes exactos, `similarity` escrita como entero, y orientar por los índices del árbol (`folder_a` sale `…/wen/s`) |
 | `about` | El panel muestra fecha de compilación y número de build de verdad | quitar la sustitución de `__BUILD_NUMBER__` |
@@ -72,7 +73,7 @@ Importa porque el corpus del usuario tiene 119 escaneos que no se pueden perder.
 
 ## CI los corre, y cómo se pagó
 
-`.github/workflows/ci.yml` corre los 28 modos en cada pull request, después de compilar y **antes** del
+`.github/workflows/ci.yml` corre los 29 modos en cada pull request, después de compilar y **antes** del
 paso de cobertura.
 
 El orden y la configuración son las dos razones por las que esto cuesta poco:
@@ -82,7 +83,7 @@ El orden y la configuración son las dos razones por las que esto cuesta poco:
 - **Antes de la cobertura.** `swift test --enable-code-coverage` recompila el debug con
   instrumentación, o sea que correr los selftests después pagaría un tercer build.
 
-Medido: 14.5 s el build y **8.1 s los 28 modos** en local; en el runner el paso agregó **26 segundos**
+Medido: 14.5 s el build y **9.0 s los 29 modos** en local; en el runner el paso agregó **26 segundos**
 al total (1m06s → 1m32s). La razón por la que esto no estaba en CI era una suposición de que hacía
 falta compilar en release. No hacía falta.
 

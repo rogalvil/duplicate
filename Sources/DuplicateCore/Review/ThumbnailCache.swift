@@ -13,22 +13,49 @@ import Foundation
 /// legitimately render differently, and a cache keyed on the digest alone would show one under the other's
 /// name. Rare in a duplicate group; free to get right.
 public struct ThumbnailKey: Hashable, Sendable {
-    public let digest: Digest32
+
+    /// What makes two requests the same request.
+    ///
+    /// **The perceptual detector is why this is not always a digest.** Two files in a similar pair are
+    /// *different* pictures -- that is the entire point of finding them -- so sharing a thumbnail between them
+    /// would draw one over the other, which for a side-by-side comparison is the worst possible bug: it would
+    /// make every pair look like a perfect match. There, the path is the identity.
+    public enum Identity: Hashable, Sendable {
+        /// Files known to be byte-identical. One thumbnail serves the group.
+        case content(Digest32)
+        /// One particular file. Used when nothing guarantees two files share content.
+        case path(String)
+    }
+
+    public let identity: Identity
     /// Lowercased, without the dot. Empty when the file has none.
     public let pathExtension: String
     /// Pixels, not points -- a cache shared between a Retina and a non-Retina screen must not confuse them.
     public let pixelSize: Int
 
-    public init(digest: Digest32, pathExtension: String, pixelSize: Int) {
-        self.digest = digest
+    public init(identity: Identity, pathExtension: String, pixelSize: Int) {
+        self.identity = identity
         self.pathExtension = pathExtension.lowercased()
         self.pixelSize = pixelSize
+    }
+
+    public init(digest: Digest32, pathExtension: String, pixelSize: Int) {
+        self.init(identity: .content(digest), pathExtension: pathExtension, pixelSize: pixelSize)
     }
 
     /// The key for one file of a group whose content digest is already known.
     public init(digest: Digest32, path: String, pixelSize: Int) {
         self.init(
-            digest: digest,
+            identity: .content(digest),
+            pathExtension: ThumbnailPolicy.pathExtension(of: path),
+            pixelSize: pixelSize
+        )
+    }
+
+    /// The key for a file that is only itself.
+    public init(path: String, pixelSize: Int) {
+        self.init(
+            identity: .path(path),
             pathExtension: ThumbnailPolicy.pathExtension(of: path),
             pixelSize: pixelSize
         )

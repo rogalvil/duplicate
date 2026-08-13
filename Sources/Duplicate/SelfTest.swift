@@ -34,6 +34,7 @@ enum SelfTest {
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
+            "similar-window",
         ]
 
         let modes: [String]
@@ -78,6 +79,7 @@ enum SelfTest {
                 case "lifecycle": try checkLifecycle()
                 case "folder-window": try await checkFolderWindow()
                 case "phash": try checkPerceptualHash()
+                case "similar-window": try await checkSimilarWindow()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -3436,6 +3438,118 @@ enum SelfTest {
         )
         print("  the library lists it and the viewer names the overlap and the difference")
         print("  every saved pair is oriented by bytes, which is what folders-move deletes on")
+    }
+
+    // MARK: - similar-window
+
+    /// Drives the perceptual detector from the scan window through to the pair viewer.
+    ///
+    /// What it asserts: the window offers the third detector with a threshold **in bits**, a real scan of real
+    /// image files finds the pair and reads back through the store, the library switches to the perceptual
+    /// list and shows it, and the viewer puts the two files side by side -- **with different paths in the two
+    /// panes**, which is the one thing this viewer cannot get wrong.
+    ///
+    /// Writes only under `/tmp`.
+    ///
+    /// Proof of teeth: three breaks, each named beside its assertion.
+    @MainActor
+    private static func checkSimilarWindow() async throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-similar-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let tree = root + "/tree"
+        try FileManager.default.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let store = ScanStore(state: state)
+
+        // Two pictures of the same thing and one of something else. `wen` / `wen 2` because the byte order and
+        // the walk order disagree there, so the pair's orientation is exercised rather than assumed.
+        _ = try SyntheticImage.write(
+            .rampWithCorner, width: 120, height: 120, format: .png, to: tree + "/wen.png")
+        try FileManager.default.createDirectory(
+            atPath: tree + "/wen 2", withIntermediateDirectories: true)
+        _ = try SyntheticImage.write(
+            .rampWithCorner, width: 120, height: 120, format: .jpeg(quality: 0.9),
+            to: tree + "/wen 2/copy.jpg")
+        _ = try SyntheticImage.write(
+            .checkerboard(square: 3), width: 120, height: 120, format: .png,
+            to: tree + "/other.png")
+
+        // 1. The window offers the detector, and its threshold is in bits rather than percent.
+        // Teeth: leave the threshold menu on the folder values and the request carries 0.9 instead of 5.
+        let panel = ScanPanelController(stateDirectory: state)
+        defer { panel.window?.close() }
+        panel.setRootForSelftest(tree)
+        panel.chooseSimilarDetectorForSelftest()
+        try expect(
+            panel.imageThresholdForSelftest == 5,
+            "the default image threshold is \(panel.imageThresholdForSelftest), wanted the CLI's 5"
+        )
+
+        // 2. A real scan through the session the window uses.
+        // Teeth: drop the `store.save(scan)` from `SimilarScanSession.run` and the reload fails.
+        let session = SimilarScanSession(
+            store: store, trashResolver: FixedTrashRootResolver([root + "/faketrash"]))
+        let instant = ScanIdentifier.Instant(
+            year: 2026, month: 8, day: 13, hour: 12, minute: 0, second: 0, microsecond: 0)
+        let result = try await session.run(
+            SimilarScanSession.Request(root: tree), instant: instant)
+        try expect(result.saveFailure == nil, "the perceptual scan could not be saved")
+        try expect(
+            result.hashedCount == 3, "\(result.hashedCount) images hashed, wanted 3")
+
+        let reloaded = try store.loadSimilarScan(id: instant.identifier)
+        try expect(reloaded == result.scan, "the document did not round-trip through the store")
+        let pair = try expectSome(reloaded.pairs.first, "no pair was found between the two copies")
+        try expect(pair.mediaKind == .image, "the pair is not an image pair")
+        try expect(
+            pair.fileA.contains("wen 2/copy.jpg"),
+            "file_a is \(pair.fileA), wanted the byte-smaller path"
+        )
+        try expect(reloaded.pairCount(of: .video) == 0, "this build cannot produce a video pair")
+
+        // 3. The library switches to the perceptual list and shows it.
+        // Teeth: have `loadFromDisk` always read the exact summaries and the count stays 0.
+        let library = LibraryWindowController(stateDirectory: state)
+        defer { library.window?.close() }
+        try expect(library.showingSimilarScans == false, "the library starts on images")
+        library.showSimilarScansForSelftest()
+        try expect(library.showingSimilarScans, "switching to images did not take")
+        try await waitOnMainActor(
+            until: { library.similarRowCount == 1 },
+            what: "the perceptual scan to reach the table")
+
+        // 4. The viewer shows both sides, and they are **different files**.
+        let viewer = SimilarPairWindowController(scan: reloaded)
+        defer { viewer.window?.close() }
+        try expect(
+            viewer.pairRowCount == reloaded.pairs.count,
+            "the viewer lists \(viewer.pairRowCount) of \(reloaded.pairs.count) pairs"
+        )
+        viewer.selectPairForSelftest(0)
+        try expect(!viewer.headerText.contains("similar.header"), "the header shows a key literal")
+        // Teeth: show `pair.fileA` in both panes and this fails naming the doubled path. **What it does not
+        // test** is the thumbnail cache key, because the pane's text comes from the path it was handed rather
+        // than from the cache -- keying the cache on content would draw one picture twice and leave these
+        // strings correct. That property is a unit test on `ThumbnailKey` instead, where it can be asserted
+        // rather than inferred from a bitmap `quicklookd` may not have delivered yet.
+        try expect(
+            viewer.leftPaneText != viewer.rightPaneText,
+            "both panes show \(viewer.leftPaneText)"
+        )
+        try expect(viewer.leftPaneText == pair.fileA, "the left pane is not file_a")
+        try expect(viewer.rightPaneText == pair.fileB, "the right pane is not file_b")
+        try expect(!viewer.footerText.isEmpty, "the footer is empty")
+
+        let fit = viewer.requiredContentSize
+        try expect(
+            fit.height <= 700 && fit.width <= 1100,
+            "the viewer layout demands \(Int(fit.width))x\(Int(fit.height))"
+        )
+
+        print(
+            "  a perceptual scan of 3 images: \(reloaded.pairCount) pair, "
+                + "\(result.classCount) hash classes, \(result.examinedPairs) class pairs examined")
+        print("  the library lists it and the viewer shows two different files side by side")
     }
 
     // MARK: - phash

@@ -49,7 +49,19 @@ final class QuickLookThumbnailer {
     /// same turn of the run loop as the selection change, and only fall to an async request on a miss.
     /// Without that split, selecting a row the user already visited flickers.
     func cached(path: String, digest: Digest32, pixelSize: Int) -> CGImage? {
-        let key = ThumbnailKey(digest: digest, path: path, pixelSize: pixelSize)
+        cached(key: ThumbnailKey(digest: digest, path: path, pixelSize: pixelSize))
+    }
+
+    /// The same, for a file that is only itself.
+    ///
+    /// **The perceptual pair viewer must not share a thumbnail between its two files.** They are different
+    /// pictures by construction, and drawing one over the other would make every pair look like a perfect
+    /// match -- the one bug a side-by-side comparison cannot afford.
+    func cached(path: String, pixelSize: Int) -> CGImage? {
+        cached(key: ThumbnailKey(path: path, pixelSize: pixelSize))
+    }
+
+    private func cached(key: ThumbnailKey) -> CGImage? {
         if let image = cache.value(for: key) {
             hits += 1
             return image
@@ -62,7 +74,18 @@ final class QuickLookThumbnailer {
     /// - Returns: `nil` only when the file is gone -- there is no icon for a path that does not exist, and
     ///   inventing one would say the file is fine.
     func thumbnail(path: String, digest: Digest32, pixelSize: Int) async -> CGImage? {
-        let key = ThumbnailKey(digest: digest, path: path, pixelSize: pixelSize)
+        await thumbnail(
+            path: path, key: ThumbnailKey(digest: digest, path: path, pixelSize: pixelSize),
+            pixelSize: pixelSize)
+    }
+
+    /// Renders one particular file, keyed on its path.
+    func thumbnail(path: String, pixelSize: Int) async -> CGImage? {
+        await thumbnail(
+            path: path, key: ThumbnailKey(path: path, pixelSize: pixelSize), pixelSize: pixelSize)
+    }
+
+    private func thumbnail(path: String, key: ThumbnailKey, pixelSize: Int) async -> CGImage? {
         if let image = cache.value(for: key) {
             hits += 1
             return image

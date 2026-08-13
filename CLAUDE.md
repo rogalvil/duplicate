@@ -302,6 +302,14 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El setup de `vDSP.DCT` cuesta 1 µs**, no lo que el plan supuso: 1,000 setups de tamaño 32 en 1.0 ms. No hay
   que reusarlo por worker, y así el tipo se queda siendo un valor sin discusión de `Sendable`. Su método es
   `transform(_:result:)`, no `output:`.
+- **La clave de un thumbnail no siempre es el digest.** En un grupo exacto los archivos son idénticos por
+  construcción y uno solo sirve para todos; en un par perceptual son **fotos distintas** —es lo que el detector
+  encontró— y compartir la miniatura dibujaría una encima de la otra, o sea el peor bug posible en una vista
+  lado a lado: haría que todos los pares se vieran idénticos. Por eso `ThumbnailKey.Identity` es `.content` o
+  `.path`.
+- **El umbral de cada detector es otra cantidad en otra unidad**: carpetas es Dice en porcentaje, imágenes es
+  distancia de Hamming en bits sobre 64. Un solo menú mostrando "90%" para los dos serían dos significados
+  detrás de un número, así que los ítems se reconstruyen al cambiar de detector.
 - **En `similar-scans`, `img_threshold` es entero y `vid_threshold` es float, en el mismo documento** — medido
   en los 31 reales, sin excepción. Es el mismo par de errores opuestos que en carpetas: escribir `10.0` rompe
   los 31, y escribir `similarity` como entero rompe 22 (los otros 9 documentos no tienen pares).
