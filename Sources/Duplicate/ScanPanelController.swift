@@ -13,6 +13,8 @@ import DuplicateCore
 final class ScanPanelController: NSWindowController {
     /// Called with the scan that was saved, so the library can select it.
     var onFinished: ((DuplicateScan) -> Void)?
+    /// Called with the folder scan that was saved.
+    var onFolderFinished: ((FolderScan) -> Void)?
 
     private let stateDirectory: StateDirectory
     private let session: ScanSession
@@ -27,6 +29,10 @@ final class ScanPanelController: NSWindowController {
     private let chooseButton = NSButton()
     private let recentPopup = NSPopUpButton()
     private let recentRoots = RecentRootsStore()
+    /// Which detector to run. Exact files, or similar folders.
+    private let detectorPopup = NSPopUpButton()
+    private let thresholdPopup = NSPopUpButton()
+    private let folderSession: FolderScanSession
     private let hiddenToggle = NSButton()
     private let packagesToggle = NSButton()
     private let cacheToggle = NSButton()
@@ -44,6 +50,7 @@ final class ScanPanelController: NSWindowController {
     init(stateDirectory: StateDirectory) {
         self.stateDirectory = stateDirectory
         self.session = ScanSession(store: ScanStore(state: stateDirectory))
+        self.folderSession = FolderScanSession(store: ScanStore(state: stateDirectory))
         self.optionsStack = NSStackView()
         self.progressStack = NSStackView()
 
@@ -80,6 +87,21 @@ final class ScanPanelController: NSWindowController {
         chooseButton.bezelStyle = .rounded
         chooseButton.target = self
         chooseButton.action = #selector(chooseRoot(_:))
+
+        detectorPopup.target = self
+        detectorPopup.action = #selector(detectorChanged(_:))
+        detectorPopup.addItem(withTitle: Strings.string("scan.detector.exact"))
+        detectorPopup.addItem(withTitle: Strings.string("scan.detector.folders"))
+        detectorPopup.selectItem(at: 0)
+
+        for value in [0.95, 0.9, 0.8, 0.7] {
+            thresholdPopup.addItem(
+                withTitle: String(
+                    format: Strings.string("scan.threshold.value"), Int(value * 100)))
+            thresholdPopup.lastItem?.representedObject = value
+        }
+        thresholdPopup.selectItem(at: 1)
+        thresholdPopup.isHidden = true
 
         // Recent roots, so a second scan of the same folder is a click rather than a walk through the open
         // panel. Hidden entirely when there are none, because an empty popup is worse than no popup.
@@ -159,6 +181,14 @@ final class ScanPanelController: NSWindowController {
         optionsStack.orientation = .vertical
         optionsStack.alignment = .leading
         optionsStack.spacing = 10
+        let detectorRow = NSStackView(views: [
+            NSTextField(labelWithString: Strings.string("scan.detector")), detectorPopup,
+            thresholdPopup,
+        ])
+        detectorRow.orientation = .horizontal
+        detectorRow.spacing = 8
+
+        optionsStack.addArrangedSubview(detectorRow)
         optionsStack.addArrangedSubview(rootRow)
         for view in optionRows { optionsStack.addArrangedSubview(view) }
         optionsStack.addArrangedSubview(sizeRow)
@@ -294,6 +324,17 @@ final class ScanPanelController: NSWindowController {
             root: root, policy: policy, usesCache: cacheToggle.state == .on)
     }
 
+    @objc private func detectorChanged(_ sender: Any?) {
+        // The threshold only means something for folders, so it is only offered there.
+        thresholdPopup.isHidden = detectorPopup.indexOfSelectedItem == 0
+    }
+
+    private var isFolderScan: Bool { detectorPopup.indexOfSelectedItem == 1 }
+
+    private var threshold: Double {
+        (thresholdPopup.selectedItem?.representedObject as? Double) ?? 0.9
+    }
+
     @objc private func startScan(_ sender: Any?) {
         guard let request else { return }
         // Remembered here rather than on success: a scan the user started is one they meant to start, and a
@@ -306,19 +347,71 @@ final class ScanPanelController: NSWindowController {
         bar.startAnimation(nil)
         startTimer()
 
-        let session = self.session
         let counters = self.counters
-        task = Task { [weak self] in
-            let result: Result<ScanSession.Result, any Error>
-            do {
-                result = .success(
-                    try await session.run(request, at: Date(), progress: counters))
-            } catch {
-                result = .failure(error)
+        if isFolderScan {
+            let folderSession = self.folderSession
+            let folderRequest = FolderScanSession.Request(
+                root: request.root, threshold: threshold, policy: request.policy,
+                usesCache: request.usesCache
+            )
+            task = Task { [weak self] in
+                let outcome: Result<FolderScanSession.Result, any Error>
+                do {
+                    outcome = .success(
+                        try await folderSession.run(folderRequest, at: Date(), progress: counters))
+                } catch {
+                    outcome = .failure(error)
+                }
+                await MainActor.run { [weak self] in
+                    self?.finishFolder(outcome)
+                }
             }
-            await MainActor.run { [weak self] in
-                self?.finish(result)
+        } else {
+            let session = self.session
+            task = Task { [weak self] in
+                let result: Result<ScanSession.Result, any Error>
+                do {
+                    result = .success(
+                        try await session.run(request, at: Date(), progress: counters))
+                } catch {
+                    result = .failure(error)
+                }
+                await MainActor.run { [weak self] in
+                    self?.finish(result)
+                }
             }
+        }
+    }
+
+    /// The folder detector's completion. Same shape as the exact one, different result type.
+    private func finishFolder(_ outcome: Result<FolderScanSession.Result, any Error>) {
+        stopTimer()
+        bar.stopAnimation(nil)
+        task = nil
+
+        switch outcome {
+        case .failure(is CancellationError):
+            window?.close()
+        case .failure(let error):
+            presentFailure(String(describing: error))
+        case .success(let result):
+            if let failure = result.saveFailure {
+                presentFailure(failure)
+                return
+            }
+            // A truncated class means the answer is incomplete, and saying so is the whole point of
+            // tracking it rather than returning quietly wrong results.
+            if let worst = result.truncated.max(by: { $0.fileCount < $1.fileCount }) {
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = Strings.string("scan.truncated.title")
+                alert.informativeText = String(
+                    format: Strings.string("scan.truncated.body"), worst.fileCount, worst.basename)
+                alert.addButton(withTitle: Strings.string("button.ok"))
+                alert.runModal()
+            }
+            onFolderFinished?(result.scan)
+            window?.close()
         }
     }
 
@@ -470,6 +563,12 @@ final class ScanPanelController: NSWindowController {
     func cancelForSelftest() { cancelScan(nil) }
     func refreshProgressForSelftest() { refreshProgress() }
     func requestForSelftest() -> ScanSession.Request? { request }
+    var isFolderScanForSelftest: Bool { isFolderScan }
+    var thresholdForSelftest: Double { threshold }
+    func chooseFolderDetectorForSelftest() {
+        detectorPopup.selectItem(at: 1)
+        detectorChanged(nil)
+    }
 
     /// Waits for the running scan to end, however it ends.
     func awaitCompletionForSelftest() async {

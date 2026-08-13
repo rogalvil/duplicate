@@ -37,6 +37,52 @@ public struct ScanStore: Sendable {
         return try DuplicateScanCodec.decode(JSONReader.parse(data))
     }
 
+    // MARK: - Folder scans
+
+    @discardableResult
+    public func save(_ scan: FolderScan) throws -> String {
+        try state.create(.folderScans)
+        let path = try state.filePath(for: .folderScans, id: scan.scanID)
+        let data = try JSONWriter.document(FolderScanCodec.encode(scan))
+        try data.write(to: URL(filePath: path), options: .atomic)
+        return path
+    }
+
+    public func loadFolderScan(id: String) throws -> FolderScan {
+        let path = try state.filePath(for: .folderScans, id: id)
+        guard let data = FileManager.default.contents(atPath: path) else {
+            throw StoreError.notFound(kind: .folderScans, id: id)
+        }
+        return try FolderScanCodec.decode(JSONReader.parse(data))
+    }
+
+    /// A summary of one folder scan for a list.
+    public struct FolderSummary: Sendable, Hashable {
+        public let scanID: String
+        public let root: String
+        public let createdAt: String
+        public let threshold: Double
+        public let pairCount: Int
+        public let involvedFolderCount: Int
+        public let hasRelativePaths: Bool
+    }
+
+    /// Summaries for every readable folder scan, newest first.
+    public func folderSummaries() -> [FolderSummary] {
+        identifiers(in: .folderScans).compactMap { id in
+            guard let scan = try? loadFolderScan(id: id) else { return nil }
+            return FolderSummary(
+                scanID: scan.scanID,
+                root: scan.root,
+                createdAt: scan.createdAt,
+                threshold: scan.threshold,
+                pairCount: scan.pairCount,
+                involvedFolderCount: scan.involvedFolderCount,
+                hasRelativePaths: scan.hasRelativePaths
+            )
+        }
+    }
+
     // MARK: - Decisions
 
     @discardableResult

@@ -62,27 +62,37 @@ public struct DirectoryTree: Sendable {
     ///
     /// - Parameter root: paths not under it are ignored rather than guessed at.
     public static func build(root: String, files: [TreeFile]) -> DirectoryTree {
-        let rootPath = RealPath.trimmingTrailingSlashes(root)
+        // **Canonicalised by splitting on `/`, not by `NSString` path methods.**
+        //
+        // `deletingLastPathComponent` collapses a double slash and the root string does not, so a root of
+        // `…/T//tree` and a file of `…/T//tree/a/x.bin` produced a parent of `…/T/tree/a` -- single slash --
+        // and the prefix test dropped every file. `NSTemporaryDirectory()` ends in a slash, so this is not a
+        // corner case: it silently produced an empty tree and a scan that found nothing.
+        //
+        // Both sides now go through the same splitter, so they cannot disagree about the same path.
+        let rootPath = canonical(root)
 
         // Group files by their directory, splitting on `/` over raw bytes -- never normalising, like
         // everywhere else here.
         var filesByDirectory: [String: [TreeFile]] = [:]
         var directories: Set<String> = [rootPath]
-        for file in files {
-            let directory = (file.path as NSString).deletingLastPathComponent
+        for original in files {
+            let path = canonical(original.path)
+            let file = TreeFile(path: path, digest: original.digest)
+            let directory = parentPath(of: path)
             guard directory == rootPath || directory.hasPrefix(rootPath + "/") else { continue }
             filesByDirectory[directory, default: []].append(file)
             // Every ancestor up to the root is a directory in its own right.
             var current = directory
             while current != rootPath, current.count > rootPath.count {
                 directories.insert(current)
-                current = (current as NSString).deletingLastPathComponent
+                current = parentPath(of: current)
             }
         }
 
         var childrenOf: [String: [String]] = [:]
         for directory in directories where directory != rootPath {
-            let parent = (directory as NSString).deletingLastPathComponent
+            let parent = parentPath(of: directory)
             childrenOf[parent, default: []].append(directory)
         }
         for key in childrenOf.keys {
@@ -131,6 +141,24 @@ public struct DirectoryTree: Sendable {
 
         _ = visit(rootPath, parent: nil, depth: 0)
         return DirectoryTree(nodes: nodes, files: laidOutFiles, indexByPath: indexByPath)
+    }
+
+    /// A path with duplicate and trailing slashes removed, built by splitting on `/`.
+    ///
+    /// Never normalises anything else: no case folding, no Unicode normalisation, no symlink resolution.
+    /// Only the slashes, which is the one thing two spellings of the same path can differ in without being
+    /// different paths.
+    static func canonical(_ path: String) -> String {
+        let components = path.split(separator: "/", omittingEmptySubsequences: true)
+        let joined = components.joined(separator: "/")
+        return path.hasPrefix("/") ? "/" + joined : joined
+    }
+
+    /// The parent of a canonical path.
+    static func parentPath(of path: String) -> String {
+        guard let slash = path.lastIndex(of: "/") else { return path }
+        if slash == path.startIndex { return "/" }
+        return String(path[path.startIndex..<slash])
     }
 
     /// Whether `ancestor` is at or above `descendant`.
