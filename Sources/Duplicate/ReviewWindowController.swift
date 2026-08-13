@@ -64,6 +64,8 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
     private let undo = UndoManager()
     private var applySheet: ApplySheetController?
+    /// What the decisions file that was loaded looks like next to the scan.
+    private var provenance: DecisionsProvenance = .none
 
     private let previewPane = PreviewPane()
     private let thumbnailer = QuickLookThumbnailer()
@@ -96,10 +98,16 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         window.center()
         // Per scan, so reviewing two scans does not make them fight over one saved frame.
         window.setFrameAutosaveName("ReviewWindow")
+        // **A window with a minimum, rather than one that collapses.** Dragged below what the layout needs,
+        // AutoLayout starts breaking constraints and the detail pane vanishes entirely -- seen in a real
+        // screenshot: a squashed window with an empty right half and no footer. `minSize` makes the window
+        // stop instead.
+        window.minSize = NSSize(width: 820, height: 480)
         super.init(window: window)
 
         window.delegate = self
         self.savedDecisions = state.decisionsForSaving
+        self.provenance = DecisionsProvenance.classify(scan: scan, priorDecisions: prior)
         buildContent()
         selectGroup(0)
     }
@@ -107,6 +115,49 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("not used: this window is built in code, there is no nib")
+    }
+
+    /// Asks about an imported decisions file that covers every group.
+    ///
+    /// **The CLI writes one, always** -- 55 of the 56 files in this user's corpus hold exactly one decision
+    /// per group. Loading it silently makes every group show a check mark, which reads as a review that
+    /// happened; pressing Simulate then plans over groups nobody opened.
+    ///
+    /// Neither refusing to load it nor discarding it silently would be better: both are the app deciding for
+    /// the user. So it asks, once, when the window opens.
+    func presentImportWarningIfNeeded() {
+        guard provenance.deservesAWarning, let window else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(
+            format: Strings.string("review.imported.title"), provenance.decidedCount)
+        alert.informativeText = Strings.string("review.imported.body")
+        alert.addButton(withTitle: Strings.string("review.imported.keep"))
+        alert.addButton(withTitle: Strings.string("review.imported.discard"))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertSecondButtonReturn, let self else { return }
+            MainActor.assumeIsolated {
+                // Cleared in memory only. Nothing is written until the user saves or applies, so changing
+                // their mind costs closing the window without saving.
+                self.clearAllDecisionsForImport()
+            }
+        }
+    }
+
+    /// Drops every decision that came from the file, leaving a review that has not started.
+    private func clearAllDecisionsForImport() {
+        let before = state
+        for index in 0..<state.groupCount {
+            state.go(to: index)
+            state.clearDecision()
+        }
+        state.go(to: 0)
+        provenance = .none
+        undo.registerUndo(withTarget: self) { controller in
+            MainActor.assumeIsolated { controller.mutate { $0 = before } }
+        }
+        flow.decisionsChanged(hasAny: false)
+        selectGroup(0)
     }
 
     // MARK: - Layout
@@ -656,6 +707,8 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var canUndoReview: Bool { undo.canUndo }
     var openApplySheet: ApplySheetController? { applySheet }
     var canSimulateFromButton: Bool { simulateButton.isEnabled }
+    var importedProvenance: DecisionsProvenance { provenance }
+    func discardImportedForSelftest() { clearAllDecisionsForImport() }
     var footerButtonCount: Int { 1 }
     var simulateButtonTitle: String { simulateButton.title }
     /// Whether this review's apply sheet is moving files right now.

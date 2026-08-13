@@ -214,3 +214,7 @@
 "library.delete.title" = "¿Borrar el escaneo %@?";
 "library.delete.body" = "Solo se quita el registro del escaneo y la revisión guardada. Ningún archivo que este escaneo encontró se toca. La carpeta se puede volver a escanear cuando quieras.";
 "library.delete.confirm" = "Borrar el registro";
+"review.imported.title" = "Este escaneo ya trae una decisión para los %d grupos";
+"review.imported.body" = "El CLI de rav duplicate escribe una decisión para cada grupo, incluidos los que nadie abrió, rellenada con su propia corazonada. Así que estas marcas pueden no ser elecciones tuyas. Revisar de todos modos las deja como punto de partida; empezar de cero las quita. En ningún caso se escribe nada hasta que guardes o apliques.";
+"review.imported.keep" = "Revisar de todos modos";
+"review.imported.discard" = "Empezar de cero";

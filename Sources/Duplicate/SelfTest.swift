@@ -2172,8 +2172,66 @@ enum SelfTest {
         try expect(
             reopened.reviewFlow.isAvailable(.apply) == false, "apply is offered with no dry run")
 
+        // 11. **A decisions file that covers every group is flagged, not trusted.**
+        //
+        // The CLI writes one for every group including the ones nobody opened. Measured on this user's
+        // corpus: 55 of 56 files are like that, and the only partial one is the file this app wrote. Loading
+        // it silently makes every group show a check mark, and pressing Simulate then plans over groups
+        // nobody looked at.
+        //
+        // Teeth: make `DecisionsProvenance.classify` return `.partial` for full coverage, or drop the
+        // `>= 5` threshold guard, and the assertions below fail.
+        let wideID = "20260812-160000-000000"
+        let wideGroups = (0..<6).map { index in
+            DuplicateGroup(
+                size: Int64(1000 + index),
+                digest: digest(String(index)),
+                files: [tree + "/wide\(index)-a", tree + "/wide\(index)-b"]
+            )
+        }
+        let wide = DuplicateScan(
+            scanID: wideID, root: tree,
+            createdAt: "2026-08-12T16:00:00.000000Z", groups: wideGroups
+        )
+        try store.save(wide)
+        // A decisions file shaped exactly like the CLI's: one entry per group.
+        try store.save(
+            DecisionsDocument(
+                scanID: wideID,
+                createdAt: "2026-08-12T16:01:00.000000Z",
+                decisions: wideGroups.map { ($0.key, [$0.files[0]]) }
+            )
+        )
+
+        let imported = ReviewWindowController(scan: wide, stateDirectory: state)
+        defer { imported.window?.close() }
+        try expect(
+            imported.importedProvenance == .coversEveryGroup(groups: 6),
+            "an all-groups decisions file read as \(imported.importedProvenance)"
+        )
+        try expect(
+            imported.importedProvenance.deservesAWarning,
+            "a file covering all six groups is not worth warning about"
+        )
+        try expect(imported.reviewState.tally.decided == 6, "the import did not rehydrate")
+
+        // Starting over clears them, in memory: nothing is written until the user saves or applies.
+        imported.discardImportedForSelftest()
+        try expect(
+            imported.reviewState.tally.decided == 0,
+            "\(imported.reviewState.tally.decided) groups stayed decided after starting over"
+        )
+        try expect(
+            imported.reviewState.tally.undecided == 6, "the groups are not back to undecided")
+        // And the file on disk is untouched until something saves it.
+        try expect(
+            try store.loadDecisions(scanID: wideID).decisions.count == 6,
+            "starting over rewrote the file before the user asked"
+        )
+
         print("  3 groups over a real tree: preview is not a decision, keep-nothing refused")
         print("  the keeper's own storage is not offered; 2 of 3 saved, the skip is not")
+        print("  a decisions file covering all 6 groups is flagged, and starting over clears it")
     }
 
     // MARK: - preview
@@ -2628,6 +2686,16 @@ enum SelfTest {
         let review = ReviewWindowController(scan: scan, stateDirectory: state)
         defer { review.window?.close() }
         await review.awaitPresenceForSelftest()
+
+        // 0. **A decisions file that covers every group is flagged, not trusted.**
+        //
+        // The CLI writes one for every group including the unopened ones -- 55 of the 56 files in this
+        // user's corpus are like that. Rehydrating silently makes every group show a check mark, and
+        // pressing Simulate then plans over groups nobody looked at.
+        //
+        // Teeth: make `DecisionsProvenance.classify` always return `.none` and the flag below is false.
+        try expect(
+            review.importedProvenance == .none, "a fresh scan imported decisions from nowhere")
 
         // 1. **Nothing to simulate before anything is decided**, and nothing to apply either.
         //

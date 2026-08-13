@@ -434,6 +434,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
             MainActor.assumeIsolated { self?.reviewWindows[summary.scanID] = nil }
         }
         controller.showWindow(nil)
+        controller.presentImportWarningIfNeeded()
     }
 
     private func presentLoadFailure(_ summary: ScanStore.Summary, error: any Error) {
@@ -491,7 +492,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
             MainActor.assumeIsolated {
-                try? ScanStore(state: self.stateDirectory).delete(id: summary.scanID)
+                _ = try? ScanStore(state: self.stateDirectory).delete(id: summary.scanID)
                 self.loadFromDisk()
             }
         }
