@@ -236,6 +236,19 @@ struct DirectoryTreeTests {
         #expect(tree.comparableIndices.count == tree.nodes.count - 1)
     }
 
+    /// **A double slash is the same path, and it used to empty the tree.**
+    ///
+    /// `NSTemporaryDirectory()` ends in a slash, so a root built by concatenation really does contain `//`.
+    /// The old code took the parent with `NSString.deletingLastPathComponent`, which collapses it, while the
+    /// root string kept it -- so the prefix test dropped every file and the scan found nothing, silently.
+    @Test("A root with duplicate slashes still finds its files")
+    func toleratesDuplicateSlashes() {
+        let tree = DirectoryTree.build(
+            root: "/r//sub/", files: [file("/r//sub/a/x.bin", "x"), file("/r/sub/b/y.bin", "y")])
+        #expect(tree.files.count == 2)
+        #expect(tree.nodes.map(\.path) == ["/r/sub", "/r/sub/a", "/r/sub/b"])
+    }
+
     @Test("A path outside the root is ignored")
     func ignoresOutsiders() {
         let tree = DirectoryTree.build(

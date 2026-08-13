@@ -48,6 +48,7 @@ La segunda columna de la tabla no es aspiracional. Cada línea se ejecutó.
 | `scan-window` | La ventana escanea 60 archivos en 20 grupos y el documento se lee de vuelta; una raíz mala se rehúsa antes de trabajar; **un escaneo cancelado no escribe nada** | tres roturas: `check` siempre ok, no guardar, guardar antes del último chequeo de cancelación |
 | `apply-window` | El ciclo destructivo completo por las ventanas reales: nada se mueve sin dry-run vigente, la hoja lista exactamente lo que se mueve, **un archivo que cambió desde el escaneo se deja en paz**, aplicar consume la autorización, y deshacer devuelve byte-idéntico | cuatro roturas: sin comparar digests, simular sin avanzar el flujo, aplicar sin consumir la autorización, `removalPlan` incluyendo grupos sin decidir |
 | `lifecycle` | Una app sin ventanas recupera su biblioteca con un reopen, y cerrar la última ventana cierra la app | dos roturas: reopen que no muestra nada, y seguir vivo sin ventanas |
+| `folder-window` | El detector de carpetas de punta a punta: la ventana lo ofrece, un escaneo real encuentra el par con sus números exactos, la biblioteca lo lista, y el visor nombra el traslape y la diferencia | tres roturas: la sesión no guarda, la biblioteca siempre lee los resúmenes exactos, `similarity` escrita como entero |
 | `about` | El panel muestra fecha de compilación y número de build de verdad | quitar la sustitución de `__BUILD_NUMBER__` |
 | `icon` | El `.icns` está en el bundle y trae las siete resoluciones | quitar el `cp Resources/AppIcon.icns` del Makefile |
 
@@ -70,7 +71,7 @@ Importa porque el corpus del usuario tiene 119 escaneos que no se pueden perder.
 
 ## CI los corre, y cómo se pagó
 
-`.github/workflows/ci.yml` corre los 26 modos en cada pull request, después de compilar y **antes** del
+`.github/workflows/ci.yml` corre los 27 modos en cada pull request, después de compilar y **antes** del
 paso de cobertura.
 
 El orden y la configuración son las dos razones por las que esto cuesta poco:
@@ -80,13 +81,13 @@ El orden y la configuración son las dos razones por las que esto cuesta poco:
 - **Antes de la cobertura.** `swift test --enable-code-coverage` recompila el debug con
   instrumentación, o sea que correr los selftests después pagaría un tercer build.
 
-Medido: 14.5 s el build y **10.6 s los 26 modos** en local; en el runner el paso agregó **26 segundos**
+Medido: 14.5 s el build y **10.6 s los 27 modos** en local; en el runner el paso agregó **26 segundos**
 al total (1m06s → 1m32s). La razón por la que esto no estaba en CI era una suposición de que hacía
 falta compilar en release. No hacía falta.
 
 ### Qué pasa en el runner
 
-**Los 26 pasan**, incluidos los que parecían dudosos y por eso se probaron antes de excluirlos:
+**Los 27 pasan**, incluidos los que parecían dudosos y por eso se probaron antes de excluirlos:
 
 | Modo | Duda | Qué pasó de verdad |
 |---|---|---|

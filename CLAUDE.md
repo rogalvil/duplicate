@@ -266,6 +266,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   archivos tienen exactamente una decisión por grupo**, y el único parcial es el que escribió esta app. La
   app los carga —son el formato compartido— y avisa: ni rehusarlos ni tirarlos en silencio serían mejores,
   los dos son la app decidiendo por el usuario.
+- **`NSString.deletingLastPathComponent` colapsa un doble slash y una cadena de root no.** Un root de
+  `…/T//tree` con archivos de `…/T//tree/a/x.bin` daba un padre de `…/T/tree/a` —un solo slash— y el test
+  de prefijo tiraba **todos** los archivos: árbol vacío, escaneo que no encuentra nada, en silencio. Y
+  `NSTemporaryDirectory()` termina en slash, así que no es un caso raro. `DirectoryTree` canonicaliza
+  partiendo por `/` los dos lados, y solo los slashes: nada de case folding, normalización Unicode ni
+  symlinks.
+- **El detector de carpetas hashea *todos* los archivos**, no solo los que colisionan por tamaño — 244 de
+  10,506 en un árbol medido, 986 de 15,242 en otro. Ahí la caché de hashes deja de ser optimización y es
+  la diferencia entre minutos y segundos en la segunda corrida.
+- **`threshold` es float y los conteos son enteros, en el mismo documento.** Escribir `5.0` donde el CLI
+  pone `5` rompe la comparación byte a byte igual que escribir `1` donde pone `1.0`. Los dos errores
+  existen y son opuestos; hay un test para cada uno.
 - **El resultado del chequeo de disco se guarda en `Caches`, con su fecha, y nada destructivo lo cree.**
   Tarda lo suficiente para no valer repetirlo, y conserva casi todo su valor —un escaneo de mayo cuyos
   archivos ya no están seguirá sin tenerlos mañana— pero solo es cierto en el instante en que se tomó. El

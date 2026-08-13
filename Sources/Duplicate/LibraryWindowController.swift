@@ -22,6 +22,18 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     /// already opened instead of starting a second review of the same scan against the same file.
     private var reviewWindows: [String: ReviewWindowController] = [:]
     private var scanPanel: ScanPanelController?
+    private var folderWindows: [String: FolderPairWindowController] = [:]
+    /// Which detector's scans the table is showing.
+    private var showingFolders = false
+    private var folderRows: [ScanStore.FolderSummary] = []
+    private let kindControl = NSSegmentedControl(
+        labels: [
+            Strings.string("library.kind.files"), Strings.string("library.kind.folders"),
+        ],
+        trackingMode: .selectOne,
+        target: nil,
+        action: nil
+    )
 
     /// Bumped per load so a slow read that lands after a newer one is dropped.
     ///
@@ -76,6 +88,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         window.delegate = self
         buildContent()
         buildToolbar()
+        rebuildColumns()
         reloadRows()
         loadFromDisk()
         startWatching()
@@ -159,6 +172,10 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
         window.toolbarStyle = .unified
+
+        kindControl.selectedSegment = 0
+        kindControl.target = self
+        kindControl.action = #selector(kindChanged(_:))
 
         searchField.target = self
         searchField.action = #selector(filterChanged(_:))
@@ -244,12 +261,26 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     ///
     /// The per-scan figures stay: each one is about one scan and is honest about its own bounds.
     private func updateFooter() {
+        if showingFolders {
+            footer.stringValue = String(
+                format: Strings.string("library.footer.folders"),
+                folderRows.count, folderRows.reduce(0) { $0 + $1.pairCount }
+            )
+            return
+        }
         let totals = library.totals
         footer.stringValue = String(
             format: Strings.string("library.footer"), totals.scanCount, rows.count)
     }
 
     private func updateEmptyState() {
+        if showingFolders {
+            emptyState.isHidden = !folderRows.isEmpty || !hasLoadedOnce
+            if folderRows.isEmpty {
+                emptyState.stringValue = Strings.string("library.empty.folders")
+            }
+            return
+        }
         emptyState.isHidden = !rows.isEmpty || !hasLoadedOnce
         guard rows.isEmpty else { return }
         emptyState.stringValue =
@@ -313,6 +344,30 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         loadFromDisk()
     }
 
+    /// Switches between the two detectors' scans.
+    ///
+    /// One table with different columns rather than two windows: they are the same question asked two ways,
+    /// and a second window would make the user find it.
+    @objc private func kindChanged(_ sender: Any?) {
+        showingFolders = kindControl.selectedSegment == 1
+        rebuildColumns()
+        loadFromDisk()
+    }
+
+    /// Rebuilds the columns for the detector being shown.
+    private func rebuildColumns() {
+        for column in tableView.tableColumns { tableView.removeTableColumn(column) }
+        let columns: [Column] = showingFolders ? Self.folderColumns : Self.columns
+        for column in columns {
+            let tableColumn = NSTableColumn(identifier: column.identifier)
+            tableColumn.title = Strings.string(column.titleKey)
+            tableColumn.width = column.width
+            tableColumn.minWidth = column.minimumWidth
+            if column.isNumeric { tableColumn.headerCell.alignment = .right }
+            tableView.addTableColumn(tableColumn)
+        }
+    }
+
     /// Opens the scan window, or raises the one already open.
     ///
     /// One at a time on purpose: two concurrent scans would contend for the same hash cache and the same
@@ -324,6 +379,12 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
             return
         }
         let panel = ScanPanelController(stateDirectory: stateDirectory)
+        panel.onFolderFinished = { [weak self] _ in
+            guard let self else { return }
+            // Land on the detector that just produced something, or the new scan is invisible.
+            self.kindControl.selectedSegment = 1
+            self.kindChanged(nil)
+        }
         panel.onFinished = { [weak self] scan in
             // The watcher would find it anyway; this selects it so the user lands on what they just made.
             self?.loadFromDisk()
@@ -386,13 +447,17 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         loadGeneration += 1
         let generation = loadGeneration
         let store = ScanStore(state: stateDirectory)
+        let folders = showingFolders
         Task.detached(priority: .userInitiated) {
-            let fresh = store.summaries()
+            let fresh = folders ? [] : store.summaries()
+            let freshFolders = folders ? store.folderSummaries() : []
             await MainActor.run { [weak self] in
                 guard let self, generation == self.loadGeneration else { return }
                 let changed = self.library.adopt(fresh)
+                let foldersChanged = self.folderRows != freshFolders
+                self.folderRows = freshFolders
                 self.hasLoadedOnce = true
-                if changed {
+                if changed || foldersChanged {
                     self.reloadRows()
                 } else {
                     // Nothing moved, but the first read still has to reveal the empty state.
@@ -407,6 +472,10 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     /// Two windows reviewing the same scan would both write `decisions/<scan_id>.json`, and the last one
     /// to save would silently drop the other's work.
     @objc private func reviewScan(_ sender: Any?) {
+        if showingFolders {
+            openFolderScan()
+            return
+        }
         guard let summary = clickedSummary() else { return }
         if let existing = reviewWindows[summary.scanID] {
             existing.showWindow(nil)
@@ -436,6 +505,28 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         }
         controller.showWindow(nil)
         controller.presentImportWarningIfNeeded()
+    }
+
+    /// Opens a folder scan's pairs.
+    private func openFolderScan() {
+        let clicked = tableView.clickedRow >= 0 ? tableView.clickedRow : tableView.selectedRow
+        guard folderRows.indices.contains(clicked) else { return }
+        let summary = folderRows[clicked]
+        if let existing = folderWindows[summary.scanID] {
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard let scan = try? ScanStore(state: stateDirectory).loadFolderScan(id: summary.scanID)
+        else { return }
+        let controller = FolderPairWindowController(scan: scan)
+        folderWindows[summary.scanID] = controller
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: controller.window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.folderWindows[summary.scanID] = nil }
+        }
+        controller.showWindow(nil)
     }
 
     private func presentLoadFailure(_ summary: ScanStore.Summary, error: any Error) {
@@ -548,6 +639,13 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     var footerText: String { footer.stringValue }
     var emptyStateText: String? { emptyState.isHidden ? nil : emptyState.stringValue }
     var watcherCount: Int { watchers.count }
+    var showingFolderScans: Bool { showingFolders }
+    var folderRowCount: Int { folderRows.count }
+
+    func showFolderScansForSelftest() {
+        kindControl.selectedSegment = 1
+        kindChanged(nil)
+    }
 
     /// The smallest size this window's constraints allow. See the review window for why this is asserted.
     var requiredContentSize: NSSize {
@@ -584,6 +682,17 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         }
     }
 
+    /// The folder detector's columns. A folder scan has no bytes to reclaim -- what it has is how alike two
+    /// trees are and how much of them differs, which is what decides whether a pair is worth opening.
+    private static let folderColumns: [Column] = [
+        Column("root", "library.column.root", width: 300, minimum: 120),
+        Column("created", "library.column.created", width: 150, minimum: 90),
+        Column("threshold", "library.column.threshold", width: 100, numeric: true),
+        Column("pairs", "library.column.pairs", width: 80, numeric: true),
+        Column("folders", "library.column.folders", width: 90, numeric: true),
+        Column("state", "library.column.state", width: 90),
+    ]
+
     private static let columns: [Column] = [
         Column("root", "library.column.root", width: 320, minimum: 120),
         Column("created", "library.column.created", width: 150, minimum: 90),
@@ -598,12 +707,13 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
 
 extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        rows.count
+        showingFolders ? folderRows.count : rows.count
     }
 
     func tableView(
         _ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int
     ) -> NSView? {
+        if showingFolders { return folderCell(column: tableColumn, row: row) }
         guard let tableColumn, rows.indices.contains(row) else { return nil }
         let summary = rows[row]
         let identifier = tableColumn.identifier
@@ -655,13 +765,51 @@ extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
         return cell
     }
 
+    /// One row of a folder scan.
+    private func folderCell(column: NSTableColumn?, row: Int) -> NSView? {
+        guard let column, folderRows.indices.contains(row) else { return nil }
+        let summary = folderRows[row]
+        let cell =
+            tableView.makeView(withIdentifier: column.identifier, owner: self) as? NSTableCellView
+            ?? makeCell(identifier: column.identifier)
+        guard let field = cell.textField else { return cell }
+
+        switch column.identifier.rawValue {
+        case "root":
+            field.stringValue = summary.root
+            field.lineBreakMode = .byTruncatingHead
+            field.toolTip = summary.root
+        case "created":
+            if let date = ScanIdentifier.date(from: summary.scanID) {
+                field.stringValue = dateFormatter.string(from: date)
+            } else {
+                field.stringValue = summary.createdAt
+            }
+        case "threshold":
+            field.stringValue = String(format: "%d%%", Int(summary.threshold * 100))
+        case "pairs":
+            field.stringValue = summary.pairCount.formatted()
+        case "folders":
+            field.stringValue = summary.involvedFolderCount.formatted()
+        case "state":
+            field.stringValue =
+                summary.hasRelativePaths ? Strings.string("library.state.relativePaths") : ""
+            field.textColor = summary.hasRelativePaths ? .systemOrange : .labelColor
+        default:
+            field.stringValue = ""
+        }
+        return cell
+    }
+
     private func makeCell(identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
         let cell = NSTableCellView()
         cell.identifier = identifier
         let field = NSTextField(labelWithString: "")
         field.translatesAutoresizingMaskIntoConstraints = false
         field.lineBreakMode = .byTruncatingTail
-        let numeric = Self.columns.first { $0.identifier == identifier }?.isNumeric ?? false
+        let numeric =
+            (Self.columns + Self.folderColumns).first { $0.identifier == identifier }?.isNumeric
+            ?? false
         if numeric {
             field.alignment = .right
             // Monospaced digits, because a proportional numeral in a column of counts makes the digits
@@ -686,11 +834,12 @@ extension LibraryWindowController: NSToolbarDelegate {
     private static let refreshItem = NSToolbarItem.Identifier("refresh")
     private static let newScanItem = NSToolbarItem.Identifier("newScan")
     private static let reviewItem = NSToolbarItem.Identifier("review")
+    private static let kindItem = NSToolbarItem.Identifier("kind")
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
-            Self.newScanItem, Self.reviewItem, Self.refreshItem, Self.sortItem, .flexibleSpace,
-            .init("search"),
+            Self.newScanItem, Self.reviewItem, Self.refreshItem, Self.kindItem, Self.sortItem,
+            .flexibleSpace, .init("search"),
         ]
     }
 
@@ -725,6 +874,11 @@ extension LibraryWindowController: NSToolbarDelegate {
             item.action = #selector(reviewScan(_:))
             // Greyed out with no row selected, rather than opening nothing.
             item.autovalidates = true
+            return item
+        case Self.kindItem:
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = Strings.string("library.toolbar.kind")
+            item.view = kindControl
             return item
         case Self.refreshItem:
             let item = NSToolbarItem(itemIdentifier: identifier)

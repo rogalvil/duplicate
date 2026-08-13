@@ -33,7 +33,7 @@ enum SelfTest {
             "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
-            "fdlimit", "scan-window", "apply-window", "lifecycle",
+            "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window",
         ]
 
         let modes: [String]
@@ -76,6 +76,7 @@ enum SelfTest {
                 case "scan-window": try await checkScanWindow()
                 case "apply-window": try await checkApplyWindow()
                 case "lifecycle": try checkLifecycle()
+                case "folder-window": try await checkFolderWindow()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -480,6 +481,67 @@ enum SelfTest {
         } else {
             print("  \(decoded) scans decoded and re-encoded byte-identically")
             print("  \(groups) groups, \(files) files, \(relative) scans with relative paths")
+        }
+        try checkTypedFolderRoundTrip(arguments: arguments)
+    }
+
+    /// The same typed round-trip for the folder documents.
+    ///
+    /// The previous change could not do this -- it had no codec yet -- and the four real documents on this
+    /// machine are what would catch a wrong number type. Read-only.
+    ///
+    /// Proof of teeth: write `similarity` as an int and every document with an identical pair differs.
+    private static func checkTypedFolderRoundTrip(arguments: [String]) throws {
+        let state = StateDirectory.current()
+        let root = value(for: "--folder-dir", in: arguments) ?? state.path(for: .folderScans)
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: root) else {
+            print("  SKIPPED: \(root) is not readable")
+            return
+        }
+
+        var decoded = 0
+        var pairs = 0
+        var identicalPairs = 0
+        var failures: [String] = []
+        for name in names.sorted() where name.hasSuffix(".json") {
+            guard let data = FileManager.default.contents(atPath: root + "/" + name) else {
+                continue
+            }
+            do {
+                let scan = try FolderScanCodec.decode(JSONReader.parse(data))
+                let reencoded = try JSONWriter.document(FolderScanCodec.encode(scan))
+                guard reencoded == data else {
+                    let offset = zip(data, reencoded).enumerated()
+                        .first { $0.element.0 != $0.element.1 }?.offset
+                    failures.append(
+                        "\(name): differs at byte \(offset.map(String.init) ?? "the end")")
+                    continue
+                }
+                guard name == scan.scanID + ".json" else {
+                    failures.append("\(name): holds scan_id \(scan.scanID)")
+                    continue
+                }
+                decoded += 1
+                pairs += scan.pairs.count
+                identicalPairs += scan.pairs.filter { $0.similarity == 1.0 }.count
+            } catch {
+                failures.append("\(name): \(error)")
+            }
+        }
+
+        guard failures.isEmpty else {
+            throw SelfTestFailure(
+                "\(failures.count) folder documents failed:\n    "
+                    + failures.prefix(10).joined(separator: "\n    ")
+            )
+        }
+        if decoded == 0 {
+            print("  SKIPPED: no folder scans in \(root)")
+        } else {
+            print(
+                "  \(decoded) folder scans re-encoded byte-identically: \(pairs) pairs, "
+                    + "\(identicalPairs) of them exactly 1.0"
+            )
         }
     }
 
@@ -3151,6 +3213,139 @@ enum SelfTest {
 
         delegate.closeLibraryForSelftest()
         print("  a windowless app reopens its library; the last window closing quits")
+    }
+
+    // MARK: - folder-window
+
+    /// Drives the folder detector from the scan window through to the pair viewer.
+    ///
+    /// What it asserts: the scan window offers the detector and its threshold; a real scan of a real tree
+    /// finds the pair and **the document reads back through the store**; the library switches to the folder
+    /// list and shows it; and the viewer names the overlap and the difference.
+    ///
+    /// Writes only under `/tmp`, including the hash cache.
+    ///
+    /// Proof of teeth: three breaks, each named beside its assertion.
+    @MainActor
+    private static func checkFolderWindow() async throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-folders-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let tree = root + "/tree"
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let store = ScanStore(state: state)
+
+        func make(_ relative: String, _ contents: String) throws {
+            let path = tree + "/" + relative
+            try FileManager.default.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true
+            )
+            try Data(contents.utf8).write(to: URL(filePath: path))
+        }
+
+        // Two near-copies: three files in common, one extra on one side, one edited.
+        for folder in ["albumA", "albumB"] {
+            try make("\(folder)/01.txt", "first")
+            try make("\(folder)/02.txt", "second")
+            try make("\(folder)/sub/03.txt", "third")
+        }
+        try make("albumA/only-here.txt", "extra")
+        try make("albumB/04.txt", "fourth")
+        try make("albumA/04.txt", "fourth-edited")
+
+        // 1. The window offers the detector, and the threshold only for folders.
+        // Teeth: never show `thresholdPopup` and the threshold read below is the default anyway -- so this
+        // asserts the request instead, which is what actually reaches the session.
+        let panel = ScanPanelController(stateDirectory: state)
+        defer { panel.window?.close() }
+        panel.setRootForSelftest(tree)
+        try expect(
+            panel.isFolderScanForSelftest == false, "the panel starts on the folder detector")
+        panel.chooseFolderDetectorForSelftest()
+        try expect(panel.isFolderScanForSelftest, "choosing folders did not take")
+        try expect(
+            panel.thresholdForSelftest == 0.9,
+            "the default threshold is \(panel.thresholdForSelftest), wanted the CLI's 0.9"
+        )
+
+        // 2. A real scan through the session the window uses.
+        // Teeth: drop the `store.save(scan)` from `FolderScanSession.run` and the reload fails.
+        let session = FolderScanSession(
+            store: store,
+            trashResolver: FixedTrashRootResolver([root + "/faketrash"]),
+            cacheURL: URL(filePath: root + "/hashes.v1")
+        )
+        let instant = ScanIdentifier.Instant(
+            year: 2026, month: 8, day: 13, hour: 12, minute: 0, second: 0, microsecond: 0)
+        let result = try await session.run(
+            // 0.6, not 0.7: the album pair is 3 identical files of 5 against 4, so 2*3/9 = 0.667. An
+            // earlier version asked for 0.7 and asserted the pair would be found -- the comment next to it
+            // even said 0.667. The fixture was right and the threshold was wrong.
+            FolderScanSession.Request(root: tree, threshold: 0.6), instant: instant)
+
+        try expect(result.saveFailure == nil, "the folder scan could not be saved")
+        let reloaded = try store.loadFolderScan(id: instant.identifier)
+        try expect(
+            reloaded == result.scan, "the folder document did not round-trip through the store")
+        let pair = try expectSome(
+            reloaded.pairs.first {
+                $0.folderA.hasSuffix("albumA") || $0.folderB.hasSuffix("albumA")
+            },
+            "no pair mentions albumA"
+        )
+        try expect(pair.matching == 3, "\(pair.matching) files matched, wanted 3")
+        try expect(
+            abs(pair.similarity - 6.0 / 9.0) < 1e-12,
+            "the album pair reads \(pair.similarity), wanted 6/9"
+        )
+        try expect(pair.changed == ["04.txt"], "changed reads \(pair.changed)")
+        try expect(pair.onlyInA == ["only-here.txt"], "onlyInA reads \(pair.onlyInA)")
+        try expect(
+            !pair.onlyInA.isEmpty || !pair.onlyInB.isEmpty || !pair.changed.isEmpty,
+            "a pair with a known difference reports none"
+        )
+
+        // 3. The library switches to the folder list and shows it.
+        // Teeth: have `loadFromDisk` always read the exact summaries and the folder count stays 0.
+        let library = LibraryWindowController(stateDirectory: state)
+        defer { library.window?.close() }
+        try expect(library.showingFolderScans == false, "the library starts on folders")
+        library.showFolderScansForSelftest()
+        try expect(library.showingFolderScans, "switching to folders did not take")
+        try await waitOnMainActor(
+            until: { library.folderRowCount == 1 }, what: "the folder scan to reach the table")
+
+        // 4. The viewer names the overlap and the difference.
+        let viewer = FolderPairWindowController(scan: reloaded)
+        defer { viewer.window?.close() }
+        try expect(
+            viewer.pairRowCount == reloaded.pairs.count,
+            "the viewer lists \(viewer.pairRowCount) of \(reloaded.pairs.count) pairs"
+        )
+        viewer.selectPairForSelftest(0)
+        try expect(!viewer.headerText.contains("folders.header"), "the header shows a key literal")
+        try expect(!viewer.detailText.isEmpty, "the detail pane is empty for a real pair")
+        try expect(
+            viewer.footerText.contains("60"),
+            "the footer reads \(viewer.footerText), which does not mention the threshold"
+        )
+        // The percentage is shown to two decimals: 0.95 and 0.9473 are different answers.
+        let shown = try expectSome(
+            viewer.cellTextForSelftest(row: 0, column: "similarity"), "no similarity cell")
+        try expect(shown.contains("."), "the similarity reads \(shown), with no decimals")
+
+        // And the layout fits on a screen, like every other window here.
+        let fit = viewer.requiredContentSize
+        try expect(
+            fit.height <= 700 && fit.width <= 1100,
+            "the viewer layout demands \(Int(fit.width))x\(Int(fit.height))"
+        )
+
+        print(
+            "  a folder scan of 2 near-copies: \(reloaded.pairs.count) pairs, "
+                + "\(result.folderCount) folders compared, \(result.examinedPairs) examined"
+        )
+        print("  the library lists it and the viewer names the overlap and the difference")
     }
 
     // MARK: - about
