@@ -110,6 +110,12 @@ final class SimilarPairWindowController: NSWindowController {
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
             scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 150),
+            // **A cap, not a minimum.** Without it the table takes every extra point of height and the two
+            // pictures stay at their 220-point floor -- which is what shipped: a full-width window with a
+            // thumbnail the size of a postage stamp under it. The comparison is the reason this window
+            // exists, so the list is the part that gets bounded.
+            scroll.heightAnchor.constraint(
+                lessThanOrEqualTo: container.heightAnchor, multiplier: 0.42),
             panes.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
             panes.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
             panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
@@ -131,12 +137,23 @@ final class SimilarPairWindowController: NSWindowController {
             return
         }
         // Two decimals, for the same reason as folders: 0.95 and 0.9473 are different answers and rounding
-        // both to 95% hides one of them. For an image the distance is the honest unit, so it is shown too.
-        headerLabel.stringValue = String(
-            format: Strings.string("similar.header"),
-            pair.similarity * 100,
-            Int(((1.0 - pair.similarity) * 64.0).rounded())
-        )
+        // both to 95% hides one of them.
+        //
+        // **And the second number is not the same quantity for the two kinds.** An image similarity is
+        // `1 - hamming/64`, so bits are the honest unit. A video similarity is the *fraction of sampled frames
+        // that matched* -- there is no 64-bit distance behind it, and printing "0 of 64 bits differ" under a
+        // video pair, which is what shipped a moment ago, states a measurement that was never taken.
+        switch pair.mediaKind {
+        case .image:
+            headerLabel.stringValue = String(
+                format: Strings.string("similar.header.image"),
+                pair.similarity * 100,
+                Int(((1.0 - pair.similarity) * 64.0).rounded())
+            )
+        case .video:
+            headerLabel.stringValue = String(
+                format: Strings.string("similar.header.video"), pair.similarity * 100)
+        }
         leftPane.show(path: pair.fileA, thumbnailer: thumbnailer)
         rightPane.show(path: pair.fileB, thumbnailer: thumbnailer)
     }
@@ -164,6 +181,7 @@ final class SimilarPairWindowController: NSWindowController {
     var headerText: String { headerLabel.stringValue }
     var footerText: String { footerLabel.stringValue }
     var leftPaneText: String { leftPane.pathText }
+    var leftStateForSelftest: String { leftPane.stateText }
     var rightPaneText: String { rightPane.pathText }
     var requiredContentSize: NSSize {
         window?.contentView?.layoutSubtreeIfNeeded()
@@ -240,6 +258,7 @@ final class SimilarSidePane: NSView {
     private let imageView = NSImageView()
     private let nameLabel = NSTextField(labelWithString: "")
     private let pathLabel = NSTextField(labelWithString: "")
+    private let stateLabel = NSTextField(labelWithString: "")
     private var currentPath: String?
 
     override init(frame frameRect: NSRect) {
@@ -263,12 +282,15 @@ final class SimilarSidePane: NSView {
         nameLabel.font = .systemFont(ofSize: 12, weight: .medium)
         pathLabel.font = .systemFont(ofSize: 10)
         pathLabel.textColor = .secondaryLabelColor
-        for label in [nameLabel, pathLabel] {
+        stateLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        stateLabel.textColor = .systemOrange
+        stateLabel.isHidden = true
+        for label in [nameLabel, pathLabel, stateLabel] {
             label.lineBreakMode = .byTruncatingMiddle
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
 
-        let stack = NSStackView(views: [imageView, nameLabel, pathLabel])
+        let stack = NSStackView(views: [imageView, nameLabel, pathLabel, stateLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
@@ -289,6 +311,8 @@ final class SimilarSidePane: NSView {
         imageView.image = nil
         nameLabel.stringValue = ""
         pathLabel.stringValue = ""
+        stateLabel.stringValue = ""
+        stateLabel.isHidden = true
     }
 
     func show(path: String, thumbnailer: QuickLookThumbnailer) {
@@ -296,6 +320,18 @@ final class SimilarSidePane: NSView {
         nameLabel.stringValue = (path as NSString).lastPathComponent
         pathLabel.stringValue = path
         pathLabel.toolTip = path
+
+        // **An empty pane is ambiguous and this pane is often empty.** Measured on this machine: of the pairs
+        // in the real perceptual scans, one side of the very first one is already gone -- the CLI's May
+        // history has expired. Without this line, "the file is missing" and "the thumbnail has not arrived
+        // yet" look identical, and the user is left comparing one picture against a blank rectangle.
+        let exists = FileManager.default.fileExists(atPath: path)
+        stateLabel.stringValue = exists ? "" : Strings.string("similar.state.missing")
+        stateLabel.isHidden = exists
+        guard exists else {
+            imageView.image = nil
+            return
+        }
 
         let pixels = ThumbnailPolicy.pixelSize(
             points: Double(max(120, bounds.width)),
@@ -314,5 +350,6 @@ final class SimilarSidePane: NSView {
     }
 
     var pathText: String { pathLabel.stringValue }
+    var stateText: String { stateLabel.stringValue }
     var hasImage: Bool { imageView.image != nil }
 }

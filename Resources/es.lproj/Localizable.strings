@@ -267,7 +267,6 @@
 "similar.column.b" = "Comparado con";
 "similar.kind.image" = "Imagen";
 "similar.kind.video" = "Video";
-"similar.header" = "%1$.2f%% parecidas - difieren %2$d de 64 bits";
 "similar.footer" = "%1$d pares de imagen a %2$d bits o menos - %3$d pares de video al %4$d%% de los cuadros";
 "similar.empty" = "Ningún par seleccionado";
 "scan.detector.similar" = "Imágenes parecidas";
@@ -279,3 +278,8 @@
 "scan.unreadableImages.title" = "Algunas imágenes no se pudieron leer";
 "scan.unreadableImages.body" = "Se saltaron %1$d. Se procesaron %2$d imágenes.";
 "library.similarThreshold.value" = "%d bits";
+"library.footer.similar" = "%1$d escaneos perceptuales - %2$d pares de imagen, %3$d de video";
+"library.empty.similar" = "Todavía no hay escaneos perceptuales.\n\nAprieta Comando-N y elige \"Imágenes parecidas\".";
+"similar.header.image" = "%1$.2f%% parecidas - difieren %2$d de 64 bits";
+"similar.header.video" = "%1$.2f%% de los cuadros muestreados coinciden";
+"similar.state.missing" = "Este archivo ya no existe.";

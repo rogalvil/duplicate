@@ -268,7 +268,6 @@
 "similar.column.b" = "Compared with";
 "similar.kind.image" = "Image";
 "similar.kind.video" = "Video";
-"similar.header" = "%1$.2f%% alike - %2$d of 64 bits differ";
 "similar.footer" = "%1$d image pairs within %2$d bits - %3$d video pairs at %4$d%% of frames";
 "similar.empty" = "No pair selected";
 "scan.detector.similar" = "Similar images";
@@ -280,3 +279,8 @@
 "scan.unreadableImages.title" = "Some images could not be read";
 "scan.unreadableImages.body" = "%1$d of them were skipped. %2$d images were hashed.";
 "library.similarThreshold.value" = "%d bits";
+"library.footer.similar" = "%1$d perceptual scans - %2$d image pairs, %3$d video pairs";
+"library.empty.similar" = "No perceptual scans yet.\n\nPress Command-N and choose \"Similar images\".";
+"similar.header.image" = "%1$.2f%% alike - %2$d of 64 bits differ";
+"similar.header.video" = "%1$.2f%% of the sampled frames match";
+"similar.state.missing" = "This file is no longer there.";
