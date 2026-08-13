@@ -16,7 +16,7 @@ deshacer.
 | Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
 | Simular, aplicar a la Papelera y deshacer la sesión | **funciona** |
 | Detector de carpetas: escanea, lista y muestra los pares | **funciona**, sin aplicar todavía |
-| Detector perceptual: hash de imagen | **funciona el hash**, sin escaneo ni UI |
+| Detector perceptual: hash de imagen e índice de parecidos | **funcionan**, sin escaneo ni UI |
 | Detector perceptual de video | **no existe todavía** |
 
 O sea: para **duplicados exactos el ciclo está completo** y no hace falta el CLI — escanear, revisar,

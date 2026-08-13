@@ -120,6 +120,19 @@ public final class DirectoryWatcher: Sendable {
         state.withLock { $0.source != nil }
     }
 
+    /// Whether an event has arrived and its report is still inside the debounce window.
+    ///
+    /// Exposed for the same reason as ``reopenCount``, and it fixes a real flake rather than adding a
+    /// convenience. The test for "stopping swallows a report in flight" used to sleep for a quarter of the
+    /// debounce and assume the event had landed and the report had not. Under load -- measured, while the full
+    /// 577-test suite was running -- the sleep overran the whole window, the report fired before `stop()`, and
+    /// the test failed on a correct watcher. Shortening the sleep would trade a false failure for a **vacuous
+    /// pass**, because a report that never became pending is dropped for the wrong reason. Waiting for this to
+    /// turn true removes the race in both directions.
+    public var hasPendingReport: Bool {
+        state.withLock { $0.pending != nil }
+    }
+
     // MARK: - Private
 
     /// Opens the directory and arms a source. Caller holds the lock.

@@ -703,6 +703,43 @@ frecuencias espaciales más bajas. Un tablero de ajedrez de 8 px en una imagen d
 fuera de ese bloque, así que el hash ve un gris plano y responde lo mismo que para un gris plano. `imagehash`
 responde igual. Hay un test que lo fija con su razón.
 
+### El índice LSH: una cota de palomar, y el colapso que importa más
+
+El CLI compara todos los pares: dos loops anidados sobre cada par de archivos
+(`perceptual.py:229-236, 264-271`). A 50,000 imágenes son 1,250 millones de comparaciones.
+
+**La cota.** Partiendo los 64 bits en `k` bandas: si `popcount(x ^ y) <= T`, los bits que difieren tocan a lo
+más `T` bandas, así que al menos `k - T` bandas son idénticas. Para garantizar **una** idéntica hace falta
+`k >= T + 1`. Al umbral del CLI (5) eso son **seis bandas** de 11, 11, 11, 11, 10 y 10 bits. Indexar cada hash
+por sus seis valores de banda y mirar solo los que comparten uno no puede perder un par dentro del umbral.
+
+Bandas de 11 bits dan 2,048 buckets; ocho bandas de 8 bits darían 256, o sea ocho veces más hashes ajenos por
+bucket y una lista de candidatos llena de trabajo que la comparación exacta tira. `T + 1` es el mínimo que la
+prueba permite, y bandas más anchas son más selectivas.
+
+**Y el colapso de hashes idénticos, que resultó más importante que la asintótica.** Medido sobre 2,779 fotos
+reales: **1,630 clases**, o sea que 1,149 imágenes comparten su hash exacto con otra. Sin colapsar, un bucket
+con diez mil frames negros enumera cincuenta millones de pares; colapsado, la clase entra una vez al índice y
+los pares de adentro no necesitan comparación —son distancia cero por construcción.
+
+**Cada par sale una vez, sin un `Set`.** Un par que choca en varias bandas se acepta solo desde la primera:
+al encontrarlo en la banda `j` se revisan las bandas `0 ..< j` y se salta si alguna también coincide. Son a lo
+más seis comparaciones de dos `UInt64` que ya están en registros, contra hashear el par y hacer crecer un set a
+millones de entradas.
+
+**Medido, contra fuerza bruta sobre los hashes reales:** el mismo conjunto de 4,340 pares, exacto, examinando
+**0.41%** de los 3,860,031 pares posibles. Y sobre conjuntos sintéticos el ahorro se sostiene al crecer:
+
+| n | candidatos | pares posibles | veces menos | tiempo |
+|---|---|---|---|---|
+| 5,000 | 46,422 | 12,497,500 | 269× | 0.00 s |
+| 20,000 | 742,869 | 199,990,000 | 269× | 0.02 s |
+| 50,000 | 4,628,582 | 1,249,975,000 | 270× | 0.13 s |
+
+El plan estimaba ~255× a n=50,000; medido son 270×. **Lo que no se sostiene es la ganancia de tiempo a escala
+chica**: sobre 2,779 hashes el índice tarda 0.003 s y la fuerza bruta 0.004 s. A ese tamaño el cuadrático
+todavía no muerde, y el índice existe para el corpus que no cabe, no para este.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
