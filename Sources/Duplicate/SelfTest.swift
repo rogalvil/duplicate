@@ -1852,7 +1852,11 @@ enum SelfTest {
 
         try expect(
             controller.displayedRowCount == 3, "\(controller.displayedRowCount) rows, wanted 3")
-        try expect(controller.watcherCount == 2, "\(controller.watcherCount) watchers, wanted 2")
+        // **Four, one per directory this window's rows depend on.** It was two -- `scans/` and `decisions/` --
+        // and that was right until the folder and perceptual segments arrived without anyone extending the
+        // watch. This assertion is what caught the change; it is pinned so that adding a fifth kind of scan
+        // and forgetting its watcher fails here instead of showing a stale list.
+        try expect(controller.watcherCount == 4, "\(controller.watcherCount) watchers, wanted 4")
 
         // Newest first, and the root column shows the root.
         try expect(
@@ -3553,7 +3557,21 @@ enum SelfTest {
         try expect(viewer.rightPaneText == pair.fileB, "the right pane is not file_b")
         try expect(!viewer.footerText.isEmpty, "the footer is empty")
 
-        // 5. The header states the right quantity for the kind, and a missing file says so.
+        // 5. A second document appearing on disk reaches the table **without anyone asking it to**.
+        // Teeth: drop `.similarScans` from the watched slots in `startWatching` and this times out -- which is
+        // exactly what shipped, and it reads as "the scan found nothing" rather than "this window is not
+        // looking".
+        let second = SimilarScan(
+            scanID: instant.nextMicrosecond.identifier, root: tree,
+            createdAt: instant.nextMicrosecond.timestamp, imageThreshold: 5, videoThreshold: 0.7,
+            pairs: []
+        )
+        _ = try store.save(second)
+        try await waitOnMainActor(
+            until: { library.similarRowCount == 2 },
+            what: "the watcher to notice a second perceptual scan")
+
+        // 6. The header states the right quantity for the kind, and a missing file says so.
         // Teeth: use the image header for a video pair and this fails naming the bits.
         try expect(
             viewer.headerText.contains("64"),
