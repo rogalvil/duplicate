@@ -241,8 +241,14 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
         filterCountLabel.font = .systemFont(ofSize: 10)
         filterCountLabel.textColor = .secondaryLabelColor
-        for label in [filterCountLabel] {
-            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        filterCountLabel.lineBreakMode = .byTruncatingTail
+        filterCountLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // The checkbox titles were clipped against the sidebar's edge -- "Solo los grupos que todavía
+        // existen" does not fit 240 points. Shorter titles, and the buttons yield rather than demanding
+        // their intrinsic width, which is what pushed the text off the edge instead of truncating it.
+        for button in [undecidedToggle, stillThereToggle] {
+            button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            button.lineBreakMode = .byTruncatingTail
         }
 
         stillThereToggle.setButtonType(.switch)
@@ -610,9 +616,19 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     private func selectGroup(_ index: Int) {
         let changedGroup = index != state.groupIndex || presence == nil
         state.go(to: index)
-        if let row = visible.firstIndex(of: index), groupTable.selectedRow != row {
-            groupTable.selectRowIndexes([row], byExtendingSelection: false)
-            groupTable.scrollRowToVisible(row)
+        if let row = visible.firstIndex(of: index) {
+            if groupTable.selectedRow != row {
+                groupTable.selectRowIndexes([row], byExtendingSelection: false)
+                groupTable.scrollRowToVisible(row)
+            }
+        } else if let next = visible.first(where: { $0 > index }) ?? visible.last {
+            // The group left the filter -- decided, or hidden by a size change. Land on the next one that
+            // is still shown rather than leaving the sidebar pointing at nothing.
+            state.go(to: next)
+            if let row = visible.firstIndex(of: next) {
+                groupTable.selectRowIndexes([row], byExtendingSelection: false)
+                groupTable.scrollRowToVisible(row)
+            }
         }
         if changedGroup {
             // Dropped rather than kept: the previous group's answer says nothing about this one, and
@@ -716,6 +732,11 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             MainActor.assumeIsolated { controller.mutate { $0 = before } }
         }
         flow.decisionsChanged(hasAny: !state.decisionsForSaving.isEmpty)
+        // **Rebuilt, because a decision can change what the filter shows.** With "only what I have not
+        // decided" on, the group just decided leaves the list -- and without rebuilding, the sidebar keeps
+        // showing it while the state has moved on. That is what a real screenshot caught: the sidebar
+        // highlighting "Grupo 31" while the header said "Grupo 32 de 880".
+        rebuildVisibleGroups()
         selectGroup(state.groupIndex)
     }
 
@@ -961,6 +982,21 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var importedProvenance: DecisionsProvenance { provenance }
     var visibleGroupCount: Int { visible.count }
     var visibleGroupIndices: [Int] { visible }
+    /// The scan index the sidebar has highlighted, straight from the table.
+    var selectedSidebarIndex: Int? {
+        let row = groupTable.selectedRow
+        return visible.indices.contains(row) ? visible[row] : nil
+    }
+    /// What the header is describing.
+    var headerGroupIndex: Int { state.groupIndex }
+
+    /// Selects a sidebar row the way a click does, going through the delegate.
+    func clickSidebarRowForSelftest(_ row: Int) {
+        guard visible.indices.contains(row) else { return }
+        groupTable.selectRowIndexes([row], byExtendingSelection: false)
+        tableViewSelectionDidChange(
+            Notification(name: NSTableView.selectionDidChangeNotification, object: groupTable))
+    }
 
     func setFilterForSelftest(minimumSize: Int64, onlyUndecided: Bool) {
         filter.minimumSize = minimumSize
@@ -1150,7 +1186,11 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
         switch column {
         case "file":
             cell.textField?.stringValue = item.displayPath
-            cell.textField?.lineBreakMode = .byTruncatingHead
+            // **Middle truncation, not head or tail.** A real group here was
+            // `grok-video-d4456bb8-…-1d380340c634.png` next to `…_0002.mp4`: they share a 40-character
+            // prefix and differ at the very end, so cutting either end hides the one thing that tells them
+            // apart.
+            cell.textField?.lineBreakMode = .byTruncatingMiddle
             cell.textField?.toolTip = item.path
             cell.textField?.textColor = item.isKept ? .labelColor : .secondaryLabelColor
         case "note":

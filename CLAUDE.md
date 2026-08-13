@@ -266,6 +266,13 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   archivos tienen exactamente una decisión por grupo**, y el único parcial es el que escribió esta app. La
   app los carga —son el formato compartido— y avisa: ni rehusarlos ni tirarlos en silencio serían mejores,
   los dos son la app decidiendo por el usuario.
+- **Con un filtro activo, la fila de la barra lateral es un índice en la lista *visible*, no en el
+  escaneo.** Y cualquier mutación puede cambiar esa lista: decidir un grupo con "sin decidir" encendido lo
+  saca. Sin reconstruir después de mutar, la barra sigue mostrándolo mientras el estado ya avanzó — lo
+  atrapó una captura real: la barra resaltando "Grupo 31" y el encabezado diciendo "Grupo 32 de 880".
+- **Un nombre truncado por el final esconde justo lo que distingue dos duplicados.** Un grupo real era
+  `grok-video-d4456bb8-…-1d380340c634.png` junto a `…_0002.mp4`: comparten 40 caracteres de prefijo y
+  difieren al final. Truncación en el medio.
 - **En AutoLayout el contenido dicta el tamaño de la ventana salvo que se le diga que ceda.** Tres cosas
   distintas pusieron piso al ancho de la ventana de revisión, una tras otra, y las tres se ven igual en
   `fittingSize`: un `NSTableView` reporta como ancho intrínseco **la suma de sus columnas** (718 pt aquí, y
