@@ -266,6 +266,19 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   archivos tienen exactamente una decisión por grupo**, y el único parcial es el que escribió esta app. La
   app los carga —son el formato compartido— y avisa: ni rehusarlos ni tirarlos en silencio serían mejores,
   los dos son la app decidiendo por el usuario.
+- **En AutoLayout el contenido dicta el tamaño de la ventana salvo que se le diga que ceda.** Tres cosas
+  distintas pusieron piso al ancho de la ventana de revisión, una tras otra, y las tres se ven igual en
+  `fittingSize`: un `NSTableView` reporta como ancho intrínseco **la suma de sus columnas** (718 pt aquí, y
+  a través del scroll view eso se volvió requisito); una etiqueta reporta el ancho intrínseco de su texto,
+  y un aviso de 110 caracteres pide ~900 pt; y una etiqueta de ruta con 150 caracteres, lo mismo. La cura
+  es la misma en los tres: bajar `contentCompressionResistancePriority` en horizontal. Un scroll view
+  existe justamente para poder ser más angosto que su contenido.
+- **Un tope de ancho en la vista que *cede* dentro de un `NSSplitView` impide que la ventana crezca.** La
+  división solo puede crecer creciendo la vista que cede; si esa está topada, no hay a dónde poner el
+  ancho extra y la ventana se niega a ensancharse. El tope va en la que **retiene**, o en el contenido.
+- **`Int(window.maxSize.width)` truena.** El default es `CGFloat.greatestFiniteMagnitude` y no cabe en un
+  `Int`: `Swift runtime failure: Double value cannot be converted to Int`. Cinco reportes de crash de un
+  diagnóstico de tres líneas.
 - **Un `imageView` con la altura amarrada a su ancho le pone piso a la ventana.** `height == width` en un
   panel de 1,100 pt de ancho exige 1,100 pt de alto: empuja el resto del layout fuera y **AppKit rehúsa
   achicar la ventana**, porque un constraint requerido es requerido. Un síntoma ("no se deja redimensionar")

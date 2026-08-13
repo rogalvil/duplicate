@@ -207,6 +207,16 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         let fileScroll = NSScrollView()
         fileScroll.documentView = fileTable
         fileScroll.hasVerticalScroller = true
+        // **A scroll view must not inherit its content's width as a requirement.** An `NSTableView` reports
+        // an intrinsic width equal to the sum of its columns -- 718 points here -- and through the scroll
+        // view that became the window's required width, 1,104 points in total. Scrolling is precisely the
+        // thing that makes a narrower view acceptable, so the resistance goes down and the table scrolls
+        // horizontally when it has to.
+        for scroll in [groupScroll, fileScroll] {
+            scroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            scroll.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        }
+        fileTable.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
 
         headerLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         headerLabel.lineBreakMode = .byTruncatingHead
@@ -215,6 +225,17 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         warningLabel.font = .systemFont(ofSize: 11)
         warningLabel.textColor = .systemOrange
         warningLabel.lineBreakMode = .byWordWrapping
+        warningLabel.usesSingleLineMode = false
+        warningLabel.maximumNumberOfLines = 3
+
+        // **Every label in this pane yields.** A sentence like "Solo 0 de los 3 archivos que registró este
+        // grupo siguen existiendo…" is 110 characters, and a label reports its intrinsic width as a
+        // requirement -- which is how the window ended up demanding 1,112 points of width. Text wraps and
+        // truncates; it does not get to decide how wide a window is.
+        for label in [headerLabel, subheaderLabel, warningLabel, tallyLabel] {
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        }
         tallyLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         tallyLabel.textColor = .secondaryLabelColor
 
@@ -225,10 +246,13 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         inner.dividerStyle = .thin
         inner.addArrangedSubview(fileScroll)
         inner.addArrangedSubview(previewPane)
-        // The file list holds its width; the preview yields. Without this the split gives the preview
-        // whatever its content asks for and the list collapses to nothing -- which is what the screenshot
-        // showed: a detail pane with no file table in it at all.
-        inner.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+        // **The preview holds its width; the file list takes the slack.** The first attempt had it the
+        // other way round, and that is what made the window resize only vertically: a split can only grow by
+        // growing the subview that yields, and the one that yielded was capped at 380 points -- so there was
+        // nowhere for extra width to go and the window refused to widen at all.
+        //
+        // This is also the ordinary master-detail arrangement: the list is what benefits from more room.
+        inner.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
         inner.translatesAutoresizingMaskIntoConstraints = false
         previewPane.showPlaceholder()
 
@@ -245,6 +269,8 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         split.dividerStyle = .thin
         split.addArrangedSubview(groupScroll)
         split.addArrangedSubview(detail)
+        // The group sidebar holds its width and the detail takes the slack -- the same reasoning as the
+        // inner split, in the direction a sidebar normally behaves.
         split.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
         split.translatesAutoresizingMaskIntoConstraints = false
 
@@ -280,9 +306,10 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -10),
             inner.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -28),
             inner.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
-            previewPane.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
-            previewPane.widthAnchor.constraint(lessThanOrEqualToConstant: 380),
-            fileScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
+            // A floor, and no ceiling. A ceiling here is what blocked the window from widening; the image
+            // inside is capped on its own, which is what the original bug actually needed.
+            previewPane.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
+            fileScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 300),
         ])
         window.contentView = content
         groupScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 230).isActive = true
