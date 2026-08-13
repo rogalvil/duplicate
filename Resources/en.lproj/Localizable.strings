@@ -227,3 +227,7 @@
 "review.bulk.title" = "Accept the suggestion for %d groups?";
 "review.bulk.body" = "For groups you have not opened, the suggestion is this app's guess: keep the file that is deepest in the folder tree and does not look like a copy. Accepting it here records a decision for each of them, freeing up to %@. Nothing moves until you simulate and apply, and undo puts everything back.";
 "review.bulk.confirm" = "Accept for All of Them";
+"review.filter.stillThere" = "Only groups that still exist";
+"review.filter.checkDisk" = "Check the disk";
+"review.filter.checking" = "Checking %1$d of %2$d groups...";
+"review.filter.checked" = "%1$d of %2$d still have two or more files";

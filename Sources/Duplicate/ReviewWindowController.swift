@@ -71,6 +71,15 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     private let sizeFilterPopup = NSPopUpButton()
     private let undecidedToggle = NSButton()
     private let filterCountLabel = NSTextField(labelWithString: "")
+    private let stillThereToggle = NSButton()
+    private let checkDiskButton = NSButton()
+    /// Whether each group still has two files on disk, once somebody asks. Empty until then, and a group
+    /// missing from it is treated as still a duplicate -- not yet checked is not the same as gone.
+    private var stillDuplicate: [Int: Bool] = [:]
+    private var diskCheck: Task<Void, Never>?
+    /// What the last disk check found, for the filter line.
+    private var diskSummary: String?
+    private var diskTimer: Timer?
     /// What the decisions file that was loaded looks like next to the scan.
     private var provenance: DecisionsProvenance = .none
 
@@ -236,7 +245,23 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
 
-        let filterBar = NSStackView(views: [sizeFilterPopup, undecidedToggle, filterCountLabel])
+        stillThereToggle.setButtonType(.switch)
+        stillThereToggle.title = Strings.string("review.filter.stillThere")
+        stillThereToggle.target = self
+        stillThereToggle.action = #selector(filterChanged(_:))
+        // Off and disabled until the disk has been read: a filter that hides groups because nobody has
+        // looked yet would lose them silently.
+        stillThereToggle.isEnabled = false
+
+        checkDiskButton.title = Strings.string("review.filter.checkDisk")
+        checkDiskButton.bezelStyle = .rounded
+        checkDiskButton.controlSize = .small
+        checkDiskButton.target = self
+        checkDiskButton.action = #selector(toggleDiskCheck(_:))
+
+        let filterBar = NSStackView(views: [
+            sizeFilterPopup, undecidedToggle, stillThereToggle, checkDiskButton, filterCountLabel,
+        ])
         filterBar.orientation = .vertical
         filterBar.alignment = .leading
         filterBar.spacing = 4
@@ -452,10 +477,12 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         visible = filter.matchingIndices(
             in: state.scan,
             decision: { self.state.decision(at: $0) },
-            stillDuplicate: [:]
+            stillDuplicate: stillDuplicate
         )
-        filterCountLabel.stringValue = String(
+        var summary = String(
             format: Strings.string("review.filter.count"), visible.count, state.groupCount)
+        if let diskSummary { summary += "  \u{00B7}  " + diskSummary }
+        filterCountLabel.stringValue = summary
         groupTable.reloadData()
 
         if let row = visible.firstIndex(of: previous) {
@@ -465,11 +492,80 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         }
     }
 
+    /// Reads the filesystem for every group, or stops a check already running.
+    ///
+    /// **Off the main thread and cancellable**, because it is a `stat` per file: 2,259 for one of this
+    /// user's scans and 9,949 for another, on an external drive that may have spun down. A window that
+    /// stopped responding for that long would be worse than not offering the filter.
+    @objc private func toggleDiskCheck(_ sender: Any?) {
+        if let running = diskCheck {
+            running.cancel()
+            diskCheck = nil
+            checkDiskButton.title = Strings.string("review.filter.checkDisk")
+            rebuildVisibleGroups()
+            return
+        }
+
+        let scan = state.scan
+        checkDiskButton.title = Strings.string("button.cancel")
+        let progress = AppliedCounter()
+
+        diskCheck = Task { [weak self] in
+            let outcome = await Task.detached(priority: .userInitiated) {
+                try? ScanPresence.check(scan: scan) { done, _ in progress.set(done) }
+            }.value
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.diskCheck = nil
+                self.checkDiskButton.title = Strings.string("review.filter.checkDisk")
+                guard let outcome else {
+                    // Cancelled. Whatever was learned is dropped rather than half-applied: a partial map
+                    // would hide groups that were simply never reached.
+                    self.rebuildVisibleGroups()
+                    return
+                }
+                self.stillDuplicate = outcome.stillDuplicate
+                self.stillThereToggle.isEnabled = true
+                self.diskSummary = String(
+                    format: Strings.string("review.filter.checked"),
+                    outcome.stillDuplicateCount, outcome.checkedCount
+                )
+                self.rebuildVisibleGroups()
+            }
+        }
+
+        startDiskCheckTimer(reading: progress)
+    }
+
+    /// Ten reads a second, like every other progress in this app.
+    ///
+    /// The work item is `@MainActor`-isolated and the timer is stored rather than captured: a `Timer`
+    /// closure is nonisolated, and handing it itself to invalidate is a data race the compiler rejects.
+    private func startDiskCheckTimer(reading progress: AppliedCounter) {
+        diskTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                guard self.diskCheck != nil else {
+                    self.diskTimer?.invalidate()
+                    self.diskTimer = nil
+                    return
+                }
+                self.filterCountLabel.stringValue = String(
+                    format: Strings.string("review.filter.checking"),
+                    progress.value, self.state.groupCount
+                )
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        diskTimer = timer
+    }
+
     @objc private func filterChanged(_ sender: Any?) {
         let index = sizeFilterPopup.indexOfSelectedItem
         filter.minimumSize =
             GroupFilter.sizeChoices.indices.contains(index) ? GroupFilter.sizeChoices[index] : 0
         filter.onlyUndecided = undecidedToggle.state == .on
+        filter.onlyStillDuplicates = stillThereToggle.state == .on
         rebuildVisibleGroups()
         refreshDetail()
     }
@@ -873,6 +969,22 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         refreshDetail()
     }
 
+    var diskCheckedCount: Int { stillDuplicate.count }
+    var canFilterByPresence: Bool { stillThereToggle.isEnabled }
+
+    /// Runs the disk check and waits for it, for a selftest.
+    func checkDiskForSelftest() async {
+        toggleDiskCheck(nil)
+        for _ in 0..<400 where diskCheck != nil {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+    }
+
+    func setPresenceFilterForSelftest(_ on: Bool) {
+        stillThereToggle.state = on ? .on : .off
+        filterChanged(nil)
+    }
+
     func confirmAllVisibleForSelftest() {
         let indices = visible
         mutate { $0.confirmAll(indices) }
@@ -1093,6 +1205,12 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
 extension ReviewWindowController: NSWindowDelegate {
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
         undo
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // A scan of 9,949 paths must not keep running for a window that is gone.
+        diskCheck?.cancel()
+        diskTimer?.invalidate()
     }
 
     /// Asks before losing a review.
