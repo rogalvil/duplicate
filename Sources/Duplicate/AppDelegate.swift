@@ -11,10 +11,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // **The library is the app's home, and it comes back rather than letting the app disappear.**
+        //
+        // Two complaints from real use pulled in opposite directions: first the app stayed alive with no
+        // window and no way back, so closing the last window was made to quit; then it quit when a review
+        // window was closed after the library already was, which reads as closing by itself.
+        //
+        // Both are answered by one rule: closing anything that is not the library brings the library back,
+        // so the app is always either showing its home or gone on purpose. Quitting stays an explicit act --
+        // closing the library, or Command-Q.
+        // `NotificationCenter` hands the block a non-Sendable `self`, so the observer stays a plain
+        // selector on this object rather than a closure capturing it.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: nil
+        )
+
         Log.app.info(
             "state directory resolved to \(self.stateDirectory.duplicateRootPath, privacy: .public)"
         )
         showLibrary()
+    }
+
+    @MainActor
+    @objc private func windowWillClose(_ note: Notification) {
+        guard let closing = note.object as? NSWindow else { return }
+        guard closing !== libraryWindow?.window else { return }
+        // A sheet closing is not a window closing.
+        guard closing.sheetParent == nil else { return }
+        let othersVisible = NSApp.windows.contains {
+            $0 !== closing && $0.isVisible && $0.sheetParent == nil && !($0 is NSPanel)
+        }
+        if !othersVisible { showLibrary() }
     }
 
     /// Opens the library, or raises the one already open.

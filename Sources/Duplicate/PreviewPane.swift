@@ -58,6 +58,14 @@ final class PreviewPane: NSView {
         pathLabel.lineBreakMode = .byTruncatingMiddle
         pathLabel.isSelectable = true
         pathLabel.maximumNumberOfLines = 2
+        // **Low compression resistance, or a long path widens the whole window.** Without this the label
+        // demands its intrinsic width -- a path from this user's corpus is 150 characters -- and the
+        // layout's required width jumped to 1,110 points, which is the same class of bug as the square
+        // image: content dictating the window instead of the other way round.
+        for label in [pathLabel, detailLabel, nameLabel] {
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        }
         detailLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         detailLabel.textColor = .secondaryLabelColor
         stateLabel.font = .systemFont(ofSize: 11)
@@ -95,7 +103,15 @@ final class PreviewPane: NSView {
             placeholder.centerXAnchor.constraint(equalTo: centerXAnchor),
             placeholder.centerYAnchor.constraint(equalTo: centerYAnchor),
             placeholder.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -24),
+            // **The labels are capped, not the pane.** Capping the pane is what blocked the window from
+            // widening; leaving both uncapped let a 150-character path from this user's corpus dictate a
+            // required width of 1,109 points. A ceiling on the text is the one that costs nothing: the full
+            // path is still in the tooltip, and middle truncation keeps both ends.
             pathLabel.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor, constant: -16),
+            pathLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
+            nameLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
+            detailLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
+            stateLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
         ])
     }
 
