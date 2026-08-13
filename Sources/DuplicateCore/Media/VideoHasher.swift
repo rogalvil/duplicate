@@ -93,9 +93,19 @@ public struct VideoHasher: Sendable {
 
         let stamps = VideoFrameSampler.timestamps(
             duration: seconds, count: configuration.frameCount)
+        // **Marks past the end are dropped, and that is a divergence that had to be measured to be seen.**
+        // `ffmpeg` returns nothing for a timestamp past the end, so the CLI hashes fewer frames for a short
+        // clip -- four of eight for half a second. `AVAssetImageGenerator` with a one-second tolerance is
+        // *helpful* instead: it hands back the nearest frame it has, so the same clip came back with eight
+        // hashes, the last frame repeated four times. Measured, not predicted.
+        //
+        // That silently changes the frame ratio the 0.70 threshold is applied to, so the marks are filtered
+        // here rather than left to the tolerance. With an unknown duration there is nothing to filter against,
+        // and the failures do the counting instead.
+        let usable = seconds > 0 ? stamps.filter { $0 < seconds } : stamps
         var hashes: [PerceptualHash] = []
-        var missed = 0
-        for stamp in stamps {
+        var missed = stamps.count - usable.count
+        for stamp in usable {
             try Task.checkCancellation()
             let time = CMTime(seconds: stamp, preferredTimescale: 600)
             guard let image = try? await generator.image(at: time).image,

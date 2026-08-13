@@ -3489,6 +3489,20 @@ enum SelfTest {
             panel.imageThresholdForSelftest == 5,
             "the default image threshold is \(panel.imageThresholdForSelftest), wanted the CLI's 5"
         )
+        // Video is on by default like the CLI, and the toggle only appears for this detector.
+        // Teeth: leave `videoToggle.isHidden` alone in `detectorChanged` and it never shows.
+        try expect(panel.includesVideoForSelftest, "video is off by default")
+        try expect(
+            panel.isVideoToggleVisibleForSelftest,
+            "the video toggle is hidden for the video detector")
+
+        // 1b. A real video scan, through the session the window uses.
+        let movie = try await SyntheticMovie.write(
+            SyntheticMovie.Specification(seconds: 6, pattern: .movingBlock), to: tree + "/clip.mp4")
+        _ = try await SyntheticMovie.write(
+            SyntheticMovie.Specification(seconds: 6, pattern: .movingBlock),
+            to: tree + "/wen 2/clip.mp4")
+        _ = movie
 
         // 2. A real scan through the session the window uses.
         // Teeth: drop the `store.save(scan)` from `SimilarScanSession.run` and the reload fails.
@@ -3500,17 +3514,36 @@ enum SelfTest {
             SimilarScanSession.Request(root: tree), instant: instant)
         try expect(result.saveFailure == nil, "the perceptual scan could not be saved")
         try expect(
-            result.hashedCount == 3, "\(result.hashedCount) images hashed, wanted 3")
+            result.hashedCount == 5,
+            "\(result.hashedCount) files hashed, wanted 3 images and 2 videos")
+        try expect(result.videoCount == 2, "\(result.videoCount) videos hashed, wanted 2")
 
         let reloaded = try store.loadSimilarScan(id: instant.identifier)
         try expect(reloaded == result.scan, "the document did not round-trip through the store")
-        let pair = try expectSome(reloaded.pairs.first, "no pair was found between the two copies")
-        try expect(pair.mediaKind == .image, "the pair is not an image pair")
+        // **By kind, not by position.** Both pairs score 1.0 now that the clip is in the tree, so which one
+        // sorts first is decided by path bytes -- `pairs.first` was an image pair before video existed and is
+        // a video pair today.
+        let pair = try expectSome(
+            reloaded.pairs.first { $0.mediaKind == .image },
+            "no image pair was found between the two copies")
         try expect(
             pair.fileA.contains("wen 2/copy.jpg"),
             "file_a is \(pair.fileA), wanted the byte-smaller path"
         )
-        try expect(reloaded.pairCount(of: .video) == 0, "this build cannot produce a video pair")
+        // The two copies of the clip, found as a video pair and oriented by bytes like every other pair.
+        // Teeth: compare videos with `similarity` instead of `orientedSimilarity` and the answer depends on
+        // which one the walk reached first.
+        try expect(
+            reloaded.pairCount(of: .video) == 1,
+            "\(reloaded.pairCount(of: .video)) video pairs, wanted 1")
+        let videoPair = try expectSome(
+            reloaded.pairs.first { $0.mediaKind == .video }, "no video pair")
+        // Stated as the property rather than as a literal: an earlier version of this line named
+        // `wen 2/clip.mp4` and was wrong, because `tree/clip.mp4` starts with a `c` and sorts first. The rule
+        // is what matters, and hard-coding one side of it hides a fixture change.
+        try expect(
+            PathOrder.lessThan(videoPair.fileA, videoPair.fileB),
+            "the video pair reads \(videoPair.fileA) before \(videoPair.fileB)")
 
         // 3. The library switches to the perceptual list and shows it.
         // Teeth: have `loadFromDisk` always read the exact summaries and the count stays 0.
@@ -3554,8 +3587,18 @@ enum SelfTest {
             viewer.leftPaneText != viewer.rightPaneText,
             "both panes show \(viewer.leftPaneText)"
         )
-        try expect(viewer.leftPaneText == pair.fileA, "the left pane is not file_a")
-        try expect(viewer.rightPaneText == pair.fileB, "the right pane is not file_b")
+        // Row 0, whichever pair that is now -- both score 1.0 and the tie is broken by path bytes, so naming
+        // the image pair here would break again the next time a fixture is added.
+        let firstRow = try expectSome(reloaded.pairs.first, "no pairs at all")
+        try expect(viewer.leftPaneText == firstRow.fileA, "the left pane is not file_a")
+        try expect(viewer.rightPaneText == firstRow.fileB, "the right pane is not file_b")
+
+        // **Select by kind, not by index.** Three assertions in this mode assumed row 0 was an image pair, and
+        // all three broke the moment a video landed in the fixture -- the sort is by similarity, and both pairs
+        // are 1.0.
+        let imageRow = try expectSome(
+            reloaded.pairs.firstIndex { $0.mediaKind == .image }, "no image pair in the document")
+        viewer.selectPairForSelftest(imageRow)
         try expect(!viewer.footerText.isEmpty, "the footer is empty")
 
         // 5. A second document appearing on disk reaches the table **without anyone asking it to**.
@@ -3610,7 +3653,8 @@ enum SelfTest {
         )
 
         print(
-            "  a perceptual scan of 3 images: \(reloaded.pairCount) pair, "
+            "  a perceptual scan of 3 images and 2 clips: \(reloaded.pairCount) pairs "
+                + "(\(reloaded.pairCount(of: .image)) image, \(reloaded.pairCount(of: .video)) video), "
                 + "\(result.classCount) hash classes, \(result.examinedPairs) class pairs examined")
         print("  the library lists it and the viewer shows two different files side by side")
     }

@@ -284,3 +284,4 @@
 "similar.header.image" = "%1$.2f%% alike - %2$d of 64 bits differ";
 "similar.header.video" = "%1$.2f%% of the sampled frames match";
 "similar.state.missing" = "This file is no longer there.";
+"scan.includeVideo" = "Include videos (slower)";

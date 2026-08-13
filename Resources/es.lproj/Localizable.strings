@@ -283,3 +283,4 @@
 "similar.header.image" = "%1$.2f%% parecidas - difieren %2$d de 64 bits";
 "similar.header.video" = "%1$.2f%% de los cuadros muestreados coinciden";
 "similar.state.missing" = "Este archivo ya no existe.";
+"scan.includeVideo" = "Incluir videos (más lento)";
