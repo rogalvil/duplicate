@@ -146,12 +146,7 @@ public struct ImageHasher: Sendable {
 
     // MARK: - Decoding
 
-    /// Decodes to grey samples: ImageIO thumbnail, drawn into a known byte layout, then Pillow's luma.
-    ///
-    /// Drawn into an explicit sRGB RGBX context rather than read from the `CGImage` directly, because a
-    /// `CGImage` can arrive in any layout -- planar, 16-bit, CMYK, premultiplied, with its own colour space --
-    /// and reading its bytes without normalising would make the hash depend on how the file happened to be
-    /// encoded.
+    /// Decodes to grey samples: an ImageIO thumbnail, then ``grey(from:path:)``.
     func decodeGrey(fileURL: URL) throws -> (grey: [Float], width: Int, height: Int) {
         let path = fileURL.path
         let sourceOptions: [CFString: Any] = [kCGImageSourceShouldCache: false]
@@ -180,6 +175,28 @@ public struct ImageHasher: Sendable {
             throw MediaHashingError.decodeFailed(path: path)
         }
 
+        return try grey(from: image, path: path)
+    }
+
+    /// Hashes a `CGImage` that is already in memory.
+    ///
+    /// This is what the video path uses: a frame comes back from `AVAssetImageGenerator` as a `CGImage`, and
+    /// writing it to a temporary file only to decode it again -- which is what shelling out to `ffmpeg` forces
+    /// the CLI to do, eight JPEGs per video into a temp directory -- would be slower and would put the
+    /// encoder's quantisation between the frame and its hash.
+    public func hash(image: CGImage) throws -> PerceptualHash {
+        let decoded = try grey(from: image, path: "<in memory>")
+        return hash(grey: decoded.grey, width: decoded.width, height: decoded.height)
+    }
+
+    /// Draws into a known byte layout and applies Pillow's luma.
+    ///
+    /// Drawn into an explicit sRGB RGBX context rather than read from the `CGImage` directly, because a
+    /// `CGImage` can arrive in any layout -- planar, 16-bit, CMYK, premultiplied, with its own colour space --
+    /// and reading its bytes without normalising would make the hash depend on how the file happened to be
+    /// encoded, or on which decoder produced the frame.
+    func grey(from image: CGImage, path: String) throws -> (grey: [Float], width: Int, height: Int)
+    {
         let width = image.width
         let height = image.height
         guard width > 0, height > 0 else { throw MediaHashingError.emptyImage(path: path) }

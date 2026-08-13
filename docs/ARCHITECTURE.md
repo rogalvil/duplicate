@@ -726,6 +726,35 @@ los otros nueve mil.
 imágenes en 18 s. La caché de SHA-256 no sirve —es otra clave y otro valor— y la del pHash necesita la versión
 del pipeline estampada, o serviría números que significan otra cosa.
 
+### El video: dos subprocesos menos y una rama que desaparece
+
+El CLI llama a `ffprobe` por la duración y a `ffmpeg` por los cuadros, y **`ffmpeg` escribe ocho JPEG en un
+directorio temporal** que después vuelve a leer. Cada cuadro pasa por un encode y un decode JPEG antes de que
+alguien lo hashee, a `-q:v 2`, sin más razón que la de que un subproceso no puede devolver un bitmap. Aquí el
+cuadro llega como `CGImage` y entra directo al hash.
+
+**Y toda la rama de fast-seek colapsa en una propiedad.** `perceptual.py:26,119-131` parte por un tamaño de
+200 MB y usa otra extracción para archivos grandes, porque `ffmpeg -ss` antes de `-i` busca barato al sync
+sample y después de `-i` decodifica hacia adelante. `requestedTimeToleranceBefore/After` **es** ese switch. La
+tolerancia laxa es además la mejor respuesta: dos copias del mismo archivo caen en el mismo keyframe, y un
+re-encode con otro GOP cae ligeramente distinto — la variación que el ratio de 0.70 existe para absorber.
+
+`dynamicRangePolicy` se pone explícito aunque el header diga que ya es el default: "el default es lo que
+quiero" es algo que cambia en una actualización de OS, y un video HDR decodificado en espacio HDR da otros
+valores de píxel y otro hash para la misma imagen.
+
+**La comparación se porta con sus dos rarezas.** `video_similarity` recorre los cuadros de A, pregunta si cada
+uno encontró pareja en B, y divide entre `max(|A|, |B|)`:
+
+- **es asimétrica** — ocho cuadros de una escena quieta contra un clip de un cuadro de la misma escena dan
+  `8/8 = 1.0` en un sentido y `1/8 = 0.125` en el otro;
+- **el `break` codicioso infla** — un solo cuadro de B puede ser la pareja de todos los de A.
+
+Ninguna se arregla: el umbral de 0.70 tiene su significado de esta aritmética, y hacer el número más estricto
+en silencio reclasificaría cada par de un corpus escaneado con el CLI mientras cada etiqueta en pantalla
+conserva su nombre. Lo que sí se fija es **cuál lado se recorre**: la ruta menor por bytes. En el CLI eso sale
+del orden de `os.walk`, así que el mismo par puede caer de los dos lados del umbral entre corridas.
+
 ### El índice LSH: una cota de palomar, y el colapso que importa más
 
 El CLI compara todos los pares: dos loops anidados sobre cada par de archivos

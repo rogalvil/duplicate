@@ -317,6 +317,28 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   que nunca se hizo. El encabezado cambia de texto según `media_type`.
 - **Un panel vacío no distingue "el archivo ya no está" de "la miniatura todavía no llega".** Y en el corpus
   real pasa seguido: de los pares perceptuales, un lado del primero ya no existe. El panel lo dice.
+- **La aritmética de muestreo de video se preserva exacta, y no es pedantería.** `interval = max(dur/(n+1), 0.1)`
+  y cuadros en `interval·(i+1)`: el umbral de 0.70 se calibró contra *ese* muestreo, así que muestrear distinto
+  cambia en silencio lo que el umbral significa mientras cada número en pantalla conserva su nombre. El `n+1`
+  es lo que mantiene las muestras lejos de los dos extremos, que es donde un video suele estar negro. Y en un
+  clip corto **algunas marcas caen pasado el final** —a medio segundo, cuatro de ocho— y eso también se
+  preserva: el CLI hashea las que sí y compara sobre menos cuadros.
+- **Toda la rama de fast-seek del CLI colapsa en `requestedTimeTolerance`.** El split por 200 MB existe porque
+  `ffmpeg -ss` antes de `-i` busca barato al sync sample y después de `-i` decodifica hacia adelante; esa
+  propiedad **es** la tolerancia. Y la tolerancia laxa es además la respuesta *mejor*: dos copias del mismo
+  archivo caen en el mismo keyframe, y un re-encode con otro GOP cae distinto — justo la variación que el 0.70
+  existe para absorber.
+- **`video_similarity` es asimétrica y su `break` codicioso infla.** Ocho cuadros de una escena quieta contra un
+  clip de un cuadro de la misma escena dan **1.0 en un sentido y 0.125 en el otro**, y un solo cuadro de B
+  puede ser la pareja de todos los de A. Se preserva —el umbral se calibró contra eso— pero **cuál lado se
+  recorre se fija por bytes**, o el resultado dependería del orden de `os.walk` y el mismo par podría caer de
+  los dos lados del umbral entre corridas.
+- **El video depende de que un cuadro plano hashee determinista.** Es la razón de fondo de la cuantización tras
+  el resample: sin ella, dos cuadros negros de videos distintos darían ruido distinto y el ratio de cuadros
+  compararía números ajenos.
+- **Los fixtures de video son H.264 baseline y fallan ruidosamente.** Un runner `macos-15` es una VM y puede no
+  tener encoder HEVC. Si ni H.264 hay, `SyntheticMovie.write` lanza: una prueba de video que pasa porque no
+  hasheó nada es peor que una que falla.
 - **La clave de un thumbnail no siempre es el digest.** En un grupo exacto los archivos son idénticos por
   construcción y uno solo sirve para todos; en un par perceptual son **fotos distintas** —es lo que el detector
   encontró— y compartir la miniatura dibujaría una encima de la otra, o sea el peor bug posible en una vista
