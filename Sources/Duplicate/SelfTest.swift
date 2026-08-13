@@ -2300,6 +2300,68 @@ enum SelfTest {
         try expect(
             atScale.reviewState.decision(at: 3) == .undecided, "the smallest group was decided too")
 
+        // 13. **The filter that matters most for an old scan: what still exists.**
+        //
+        // Measured on this user's corpus, a sample of twelve May scans found 73 of 10,934 paths still on
+        // disk -- 0.67%. Without this, reviewing one of those scans is hundreds of rows about files that are
+        // already gone.
+        //
+        // The check is asked for, not automatic, because it is a `stat` per file: 2,259 for one of those
+        // scans and 9,949 for another.
+        //
+        // Teeth: have `ScanPresence.check` report every group as still a duplicate and the filtered count
+        // fails; leave `stillThereToggle` enabled from the start and the "not until asked" assertion does.
+        let staleID = "20260812-180000-000000"
+        let alive = tree + "/alive-a"
+        let alive2 = tree + "/alive-b"
+        try Data(repeating: 0x41, count: 4096).write(to: URL(filePath: alive))
+        try Data(repeating: 0x41, count: 4096).write(to: URL(filePath: alive2))
+        let staleScan = DuplicateScan(
+            scanID: staleID, root: tree,
+            createdAt: "2026-08-12T18:00:00.000000Z",
+            groups: [
+                // Still there.
+                DuplicateGroup(size: 4096, digest: digest("a"), files: [alive, alive2]),
+                // Both gone, like most of a May scan.
+                DuplicateGroup(
+                    size: 900, digest: digest("b"),
+                    files: [tree + "/ghost-a", tree + "/ghost-b"]),
+                DuplicateGroup(
+                    size: 800, digest: digest("c"),
+                    files: [tree + "/ghost-c", tree + "/ghost-d"]),
+            ]
+        )
+        try store.save(staleScan)
+
+        let staleReview = ReviewWindowController(scan: staleScan, stateDirectory: state)
+        defer { staleReview.window?.close() }
+
+        // **Not until asked.** A filter that hid groups because nobody had looked at the disk yet would
+        // lose them silently.
+        try expect(
+            staleReview.canFilterByPresence == false,
+            "the presence filter is offered before the disk was read"
+        )
+        try expect(staleReview.visibleGroupCount == 3, "the unchecked sidebar hides groups")
+
+        await staleReview.checkDiskForSelftest()
+        try expect(
+            staleReview.diskCheckedCount == 3,
+            "\(staleReview.diskCheckedCount) groups checked, wanted 3"
+        )
+        try expect(staleReview.canFilterByPresence, "the filter is still disabled after checking")
+
+        staleReview.setPresenceFilterForSelftest(true)
+        try expect(
+            staleReview.visibleGroupIndices == [0],
+            "the presence filter shows \(staleReview.visibleGroupIndices), wanted only the live group"
+        )
+        // And the hidden ones are still there, untouched.
+        try expect(
+            staleReview.reviewState.tally.decided == 0, "checking the disk decided something")
+        try expect(
+            staleReview.reviewState.groupCount == 3, "the scan lost groups when they were hidden")
+
         // And with "only undecided" on, the ones just decided drop out of the list.
         atScale.setFilterForSelftest(minimumSize: 0, onlyUndecided: true)
         try expect(
@@ -2313,6 +2375,7 @@ enum SelfTest {
         print(
             "  the sidebar narrows to 2 of 4 groups, and confirming those leaves the rest untouched"
         )
+        print("  checking the disk hides the 2 groups whose files are gone, and decides nothing")
     }
 
     // MARK: - preview

@@ -580,6 +580,20 @@ de menú **no tiene atajo de teclado**: un atajo para esto sería un atajo para 
 Y `confirmAll` no mueve el cursor, a diferencia de `confirm()`: avanzar 800 veces dejaría al usuario en un
 grupo que nadie pidió ver.
 
+### El filtro que más sirve para un escaneo viejo, y por qué se pide
+
+De las tres formas de estrechar la lista, la que más cambia lo que ves en este corpus es **cuáles todavía
+existen**: una muestra de doce escaneos de mayo encontró **73 de 10,934 rutas todavía en disco, 0.67%**.
+Sin eso, revisar uno de esos escaneos son cientos de filas sobre archivos ya borrados.
+
+Y es la única que **no puede correr sola**: es un `stat` por archivo — 2,259 para uno de esos escaneos,
+9,949 para otro, sobre un disco externo que pudo haberse dormido. Así que es un botón, corre fuera del
+hilo principal, reporta progreso a 10 Hz y se puede cancelar. Cancelarla **tira** lo que aprendió en vez
+de aplicarlo a medias: un mapa parcial escondería grupos a los que simplemente nunca llegó.
+
+Hasta que alguien lo pida, la casilla está deshabilitada y ningún grupo se esconde. **No revisado y
+ausente son cosas distintas**, y esconder por la primera perdería grupos en silencio.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
