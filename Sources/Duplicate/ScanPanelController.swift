@@ -25,6 +25,8 @@ final class ScanPanelController: NSWindowController {
 
     private let rootLabel = NSTextField(labelWithString: "")
     private let chooseButton = NSButton()
+    private let recentPopup = NSPopUpButton()
+    private let recentRoots = RecentRootsStore()
     private let hiddenToggle = NSButton()
     private let packagesToggle = NSButton()
     private let cacheToggle = NSButton()
@@ -46,7 +48,7 @@ final class ScanPanelController: NSWindowController {
         self.progressStack = NSStackView()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 320),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -78,29 +80,65 @@ final class ScanPanelController: NSWindowController {
         chooseButton.target = self
         chooseButton.action = #selector(chooseRoot(_:))
 
-        for (button, key, on) in [
-            (hiddenToggle, "scan.option.hidden", false),
-            (packagesToggle, "scan.option.packages", false),
-            (cacheToggle, "scan.option.cache", true),
+        // Recent roots, so a second scan of the same folder is a click rather than a walk through the open
+        // panel. Hidden entirely when there are none, because an empty popup is worse than no popup.
+        recentPopup.target = self
+        recentPopup.action = #selector(recentChosen(_:))
+        rebuildRecentMenu()
+
+        // **Short titles with the reason underneath.** The first version put the whole reason in the title,
+        // which produced labels like "Incluir archivos ocultos (el CLI lo hace; una carpeta de .DS_Store
+        // idénticos entierra los hallazgos reales)" -- a doc comment pretending to be a checkbox, clipped
+        // against the window edge. The reason still matters, so it stays; it just stops being the label.
+        var optionRows: [NSView] = []
+        for (button, titleKey, whyKey, on) in [
+            (hiddenToggle, "scan.option.hidden", "scan.option.hidden.why", false),
+            (packagesToggle, "scan.option.packages", "scan.option.packages.why", false),
+            (cacheToggle, "scan.option.cache", "scan.option.cache.why", true),
         ] {
             button.setButtonType(.switch)
-            button.title = Strings.string(key)
+            button.title = Strings.string(titleKey)
             button.state = on ? .on : .off
+
+            let why = NSTextField(wrappingLabelWithString: Strings.string(whyKey))
+            why.font = .systemFont(ofSize: 11)
+            why.textColor = .secondaryLabelColor
+            why.translatesAutoresizingMaskIntoConstraints = false
+            why.widthAnchor.constraint(equalToConstant: 540).isActive = true
+
+            let row = NSStackView(views: [button, why])
+            row.orientation = .vertical
+            row.alignment = .leading
+            row.spacing = 1
+            // The reason is indented under its checkbox so it reads as belonging to it.
+            row.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+            why.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            optionRows.append(row)
         }
 
-        minimumSizeField.stringValue = "1"
-        minimumSizeField.placeholderString = "1"
+        // **The CLI's default, unchanged.** Showing "1 KB" here was the first attempt and it was wrong:
+        // it reads as copy but it is a behaviour change -- the scan-window selftest caught it, because a
+        // 6-byte file stopped being counted. What the field needed was a unit that says units are accepted,
+        // not a different threshold. A default worth changing is worth changing on purpose, in its own
+        // change, with the README saying so.
+        minimumSizeField.stringValue = "1 B"
+        minimumSizeField.placeholderString = "1 B"
         minimumSizeField.alignment = .right
         minimumSizeField.widthAnchor.constraint(equalToConstant: 90).isActive = true
+        let sizeHint = NSTextField(labelWithString: Strings.string("scan.option.minimumSize.hint"))
+        sizeHint.font = .systemFont(ofSize: 11)
+        sizeHint.textColor = .secondaryLabelColor
         let sizeRow = NSStackView(views: [
             NSTextField(labelWithString: Strings.string("scan.option.minimumSize")),
             minimumSizeField,
+            sizeHint,
         ])
         sizeRow.orientation = .horizontal
         sizeRow.spacing = 8
 
         startButton.title = Strings.string("scan.start")
         startButton.bezelStyle = .rounded
+        startButton.controlSize = .large
         startButton.keyEquivalent = "\r"
         startButton.target = self
         startButton.action = #selector(startScan(_:))
@@ -108,20 +146,21 @@ final class ScanPanelController: NSWindowController {
 
         cancelButton.title = Strings.string("button.cancel")
         cancelButton.bezelStyle = .rounded
+        cancelButton.controlSize = .large
         cancelButton.keyEquivalent = "\u{1b}"
         cancelButton.target = self
         cancelButton.action = #selector(cancelScan(_:))
 
-        let rootRow = NSStackView(views: [chooseButton, rootLabel])
+        let rootRow = NSStackView(views: [recentPopup, chooseButton, rootLabel])
         rootRow.orientation = .horizontal
         rootRow.spacing = 8
 
         optionsStack.orientation = .vertical
         optionsStack.alignment = .leading
-        optionsStack.spacing = 8
-        for view in [rootRow, hiddenToggle, packagesToggle, cacheToggle, sizeRow] {
-            optionsStack.addArrangedSubview(view)
-        }
+        optionsStack.spacing = 10
+        optionsStack.addArrangedSubview(rootRow)
+        for view in optionRows { optionsStack.addArrangedSubview(view) }
+        optionsStack.addArrangedSubview(sizeRow)
 
         bar.style = .bar
         bar.isIndeterminate = true
@@ -141,7 +180,9 @@ final class ScanPanelController: NSWindowController {
             progressStack.addArrangedSubview(view)
         }
 
-        let buttons = NSStackView(views: [cancelButton, startButton])
+        // Right-aligned, which is where a Mac user looks for the action of a sheet.
+        let buttonSpacer = NSView()
+        let buttons = NSStackView(views: [buttonSpacer, cancelButton, startButton])
         buttons.orientation = .horizontal
         buttons.spacing = 10
 
@@ -159,9 +200,10 @@ final class ScanPanelController: NSWindowController {
             content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            bar.widthAnchor.constraint(equalToConstant: 460),
-            rootLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
-            pathLabel.widthAnchor.constraint(equalToConstant: 460),
+            bar.widthAnchor.constraint(equalToConstant: 560),
+            rootLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 330),
+            pathLabel.widthAnchor.constraint(equalToConstant: 560),
+            buttons.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -40),
         ])
         window.contentView = container
     }
@@ -192,6 +234,34 @@ final class ScanPanelController: NSWindowController {
         panel.prompt = Strings.string("scan.chooseFolder.prompt")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         setRoot(url.path(percentEncoded: false))
+    }
+
+    /// Fills the recent-roots popup, or hides it when there is nothing to offer.
+    ///
+    /// Only folders that exist right now are listed: an unmounted external drive stays in the file so it
+    /// comes back when the drive does, but offering it as scannable would be a click that fails.
+    private func rebuildRecentMenu() {
+        let roots = recentRoots.available()
+        recentPopup.isHidden = roots.isEmpty
+        recentPopup.removeAllItems()
+        guard !roots.isEmpty else { return }
+        recentPopup.addItem(withTitle: Strings.string("scan.recent.placeholder"))
+        for root in roots {
+            // Elided in the middle: the head says which volume and the tail says which folder.
+            let item = NSMenuItem(
+                title: PathElision.elide(root.path, leading: 2, trailing: 2),
+                action: nil, keyEquivalent: ""
+            )
+            item.toolTip = root.path
+            item.representedObject = root.path
+            recentPopup.menu?.addItem(item)
+        }
+        recentPopup.selectItem(at: 0)
+    }
+
+    @objc private func recentChosen(_ sender: NSPopUpButton) {
+        guard let path = sender.selectedItem?.representedObject as? String else { return }
+        setRoot(path)
     }
 
     private func setRoot(_ path: String) {
@@ -225,6 +295,10 @@ final class ScanPanelController: NSWindowController {
 
     @objc private func startScan(_ sender: Any?) {
         guard let request else { return }
+        // Remembered here rather than on success: a scan the user started is one they meant to start, and a
+        // cancelled scan of the right folder should still put it at the top of the list.
+        recentRoots.remember(request.root, at: ScanIdentifier.timestamp(from: Date()))
+
         counters = ProgressCounters()
         startedAt = ContinuousClock.now
         showProgress()

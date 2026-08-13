@@ -195,6 +195,12 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
             action: #selector(copyIdentifier(_:)),
             keyEquivalent: ""
         )
+        menu.addItem(.separator())
+        menu.addItem(
+            withTitle: Strings.string("library.action.delete"),
+            action: #selector(deleteScan(_:)),
+            keyEquivalent: ""
+        )
         for item in menu.items { item.target = self }
         return menu
     }
@@ -228,14 +234,18 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         updateEmptyState()
     }
 
+    /// The footer counts scans, and deliberately **does not** add up their reclaimable bytes.
+    ///
+    /// It used to, and the number was a lie of a specific kind: scans overlap -- this library holds twenty
+    /// scans of the same folder from one afternoon -- so summing them counts the same duplicate twenty
+    /// times. It read "up to 422.5 GB reclaimable" over a corpus where a sample of twelve scans found 0.67%
+    /// of their paths still on disk. A number nobody can act on, in the most reassuring place on screen.
+    ///
+    /// The per-scan figures stay: each one is about one scan and is honest about its own bounds.
     private func updateFooter() {
         let totals = library.totals
-        let size = ByteSize.format(totals.reclaimableBytes)
-        let key = totals.isReclaimExact ? "library.footer" : "library.footer.upperBound"
         footer.stringValue = String(
-            format: Strings.string(key),
-            totals.scanCount, totals.groupCount, totals.fileCount, size
-        )
+            format: Strings.string("library.footer"), totals.scanCount, rows.count)
     }
 
     private func updateEmptyState() {
@@ -459,6 +469,32 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
             let path = try? stateDirectory.filePath(for: .scans, id: summary.scanID)
         else { return }
         Reveal.item(at: path)
+    }
+
+    /// Removes a scan from the library.
+    ///
+    /// **Only the record, never the files it lists.** Says so in the sheet, because "delete" next to a list
+    /// of duplicate files is a word that has to be disambiguated before it is clicked, not after.
+    ///
+    /// This exists because the library filled up: 119 scans from four days in May, most of them describing
+    /// folders that no longer exist, with no way to clear any of them.
+    @objc private func deleteScan(_ sender: Any?) {
+        guard let summary = clickedSummary() else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(
+            format: Strings.string("library.delete.title"), summary.scanID)
+        alert.informativeText = Strings.string("library.delete.body")
+        alert.addButton(withTitle: Strings.string("library.delete.confirm"))
+        alert.addButton(withTitle: Strings.string("button.cancel"))
+        guard let window else { return }
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            MainActor.assumeIsolated {
+                try? ScanStore(state: self.stateDirectory).delete(id: summary.scanID)
+                self.loadFromDisk()
+            }
+        }
     }
 
     @objc private func copyIdentifier(_ sender: Any?) {

@@ -118,23 +118,29 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         groupTable.delegate = self
         groupTable.headerView = nil
         groupTable.style = .sourceList
-        groupTable.rowHeight = 34
+        // Two lines per row, so the size and the file count stop competing with the group number for a
+        // width that never fit them: the first screenshot of this window read "Grupo 864 - 41.1 KB - 2 ar…".
+        groupTable.rowHeight = 40
         groupTable.allowsEmptySelection = false
         let groupColumn = NSTableColumn(identifier: .init("group"))
-        groupColumn.width = 210
+        groupColumn.width = 230
         groupTable.addTableColumn(groupColumn)
 
         fileTable.dataSource = self
         fileTable.delegate = self
         fileTable.rowHeight = 26
-        fileTable.usesAlternatingRowBackgroundColors = true
+        // No stripes: a group holds two to eight files, and alternating backgrounds over a mostly empty
+        // table draw a ladder of empty rows that reads as broken.
+        fileTable.usesAlternatingRowBackgroundColors = false
         fileTable.allowsEmptySelection = false
         fileTable.onToggle = { [weak self] in self?.toggleSelectedFile() }
         fileTable.onConfirm = { [weak self] in self?.confirmGroup(nil) }
         fileTable.target = self
         fileTable.doubleAction = #selector(revealSelectedFile(_:))
         for (name, key, width) in [
-            ("keep", "review.column.keep", CGFloat(46)),
+            // 46 points clipped the header to "Cons…". A column header that cannot show its own name is a
+            // column nobody can interpret.
+            ("keep", "review.column.keep", CGFloat(78)),
             ("file", "review.column.file", CGFloat(430)),
             ("note", "review.column.note", CGFloat(210)),
         ] {
@@ -223,7 +229,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             previewPane.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
         ])
         window.contentView = content
-        groupScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
+        groupScroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 230).isActive = true
     }
 
     // MARK: - Presentation
@@ -271,9 +277,15 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         } else if presentation.hasSharedStorage {
             warningLabel.stringValue = Strings.string("review.warning.sharedStorage")
         } else if presentation.decision == .undecided {
+            // **Not orange.** This is the normal state of a group nobody has opened yet, so colouring it
+            // like a hazard spends the one colour that should mean "look at this" on the most common case.
             warningLabel.stringValue = Strings.string("review.warning.preview")
+            warningLabel.textColor = .secondaryLabelColor
         } else {
             warningLabel.stringValue = ""
+        }
+        if presentation.decision != .undecided || presentation.keptCount == 0 {
+            warningLabel.textColor = .systemOrange
         }
 
         let tally = state.tally
@@ -737,10 +749,12 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
     private func groupCell(row: Int) -> NSView? {
         guard state.scan.groups.indices.contains(row) else { return nil }
         let group = state.scan.groups[row]
+        let identifier = NSUserInterfaceItemIdentifier("group")
         let cell =
-            groupTable.makeView(withIdentifier: .init("group"), owner: self) as? NSTableCellView
-            ?? makeLabelCell(.init("group"))
-        // Symbol, not a word: this cell is 210 points wide and holds a path already.
+            groupTable.makeView(withIdentifier: identifier, owner: self) as? GroupRowView
+            ?? GroupRowView(identifier: identifier)
+
+        // Symbol, not a word: this column is 230 points wide and the second line already carries numbers.
         let mark: String
         switch state.decision(at: row) {
         case .decided: mark = "\u{2713} "
@@ -748,13 +762,17 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
         case .skipped: mark = "\u{2192} "
         case .undecided: mark = ""
         }
-        cell.textField?.stringValue =
+        cell.titleField.stringValue =
             mark
             + String(
-                format: Strings.string("review.group.row"), row + 1,
-                ByteSize.format(group.size), group.files.count)
-        cell.textField?.textColor =
-            state.decision(at: row).isActionable ? .labelColor : .secondaryLabelColor
+                format: Strings.string("review.group.title"), row + 1)
+        cell.detailField.stringValue = String(
+            format: Strings.string("review.group.detail"),
+            ByteSize.format(group.size), group.files.count
+        )
+        cell.titleField.textColor =
+            state.decision(at: row).isActionable ? .labelColor : .labelColor
+        cell.detailField.textColor = .secondaryLabelColor
         return cell
     }
 
