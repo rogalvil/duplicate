@@ -594,6 +594,48 @@ de aplicarlo a medias: un mapa parcial escondería grupos a los que simplemente 
 Hasta que alguien lo pida, la casilla está deshabilitada y ningún grupo se esconde. **No revisado y
 ausente son cosas distintas**, y esconder por la primera perdería grupos en silencio.
 
+### Carpetas: el rediseño con prueba, y su peor caso honesto
+
+El CLI arma un diccionario `{ruta relativa → digest}` para **cada** directorio y compara los `D²` pares
+(`folder_duplicates.py:144-169`). Eso hashea cada archivo una vez por directorio ancestro —un archivo a
+ocho niveles se hashea ocho veces— y guarda `Θ(N·d)` cadenas.
+
+**La reformulación que lo colapsa a una pasada.** Un elemento de `FP(a) ∩ FP(b)` es un par de archivos con
+digest igual *y* ruta relativa igual. Una ruta relativa siempre termina en el nombre del archivo, así que
+**rutas relativas iguales fuerzan basenames iguales**. Por lo tanto solo pares de archivos que comparten
+digest *y* basename pueden aportar algo a cualquier par de directorios.
+
+**Y el conteo es exacto, no una cota.** Para dos archivos de esa clase, sea `K` la cantidad de componentes
+del sufijo común más largo de sus rutas. El par aporta exactamente 1 a `matching(a, b)` para exactamente
+los `K` pares de ancestros a profundidades 1…K, y para ningún otro.
+
+> **Prueba de completitud.** Si `Dice(a,b) ≥ t > 0` entonces `matching(a,b) ≥ 1`, así que existen
+> `fa ∈ subtree(a)`, `fb ∈ subtree(b)` con digests y rutas relativas iguales. Rutas relativas iguales
+> implican basenames iguales, así que el par vive en alguna clase `(digest, basename)` de tamaño ≥ 2 y se
+> enumera. Rutas relativas iguales de `k` componentes implican que el sufijo común es de al menos `k`, o
+> sea `k ≤ K`, y el loop interno alcanza `(a, b)` en su paso `k`. Ningún par por encima de un umbral
+> positivo se pierde. ∎
+
+**La poda por tamaño, con su derivación.** De `Dice = 2M/(|A|+|B|) ≥ t` y `M ≤ min(|A|,|B|)` sale
+`|B|/|A| ≤ (2−t)/t`. A `t = 0.9` eso es **1.2222**: cualquier par cuyos conteos de archivos difieran más
+del 22% se descarta con un test entero. La derivación es lo que hace sano el descarte — y hay un test que
+recorre todos los pares de conteos hasta 40 comprobando que **la cota nunca descarta un par que sí podría
+alcanzar el umbral**.
+
+**Dos propiedades del árbol cargan el resto.** Los intervalos de Euler vuelven la pregunta de ancestría una
+comparación entera, en vez del `relative_to` dentro de un `try/except` que el CLI hace por par. Y el orden
+depth-first hace que los archivos de cualquier subárbol sean un **rango contiguo**, que es lo que permite
+comparar un sobreviviente leyendo dos slices en vez de armar dos diccionarios.
+
+**El peor caso, dicho en voz alta.** Una clase `(digest, basename)` grande es cuadrática en su propio
+tamaño: diez mil `__init__.py` idénticos dan cincuenta millones de pares. Hay un tope de 512 por clase, y
+cuando se aplica **el resultado lo reporta con el nombre de la clase que se truncó**, en vez de devolver
+respuestas silenciosamente incompletas.
+
+**Y una divergencia deliberada:** los empates de similitud se ordenan por bytes de las dos rutas. El CLI los
+deja en orden de `os.walk`, que no es reproducible entre máquinas; la alternativa a un orden determinista es
+un archivo que cambia entre corridas.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
