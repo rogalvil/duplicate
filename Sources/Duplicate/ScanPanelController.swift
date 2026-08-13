@@ -55,6 +55,7 @@ final class ScanPanelController: NSWindowController {
         )
         window.title = Strings.string("scan.window.title")
         window.center()
+        window.minSize = NSSize(width: 620, height: 300)
         super.init(window: window)
         window.delegate = self
         build()
@@ -457,6 +458,12 @@ final class ScanPanelController: NSWindowController {
     var countsText: String { countsLabel.stringValue }
     var isShowingProgress: Bool { !progressStack.isHidden }
     var canStart: Bool { startButton.isEnabled }
+
+    /// The smallest size this window's constraints allow. See the review window for why this is asserted.
+    var requiredContentSize: NSSize {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return window?.contentView?.fittingSize ?? .zero
+    }
 
     func setRootForSelftest(_ path: String) { setRoot(path) }
     func startForSelftest() { startScan(nil) }

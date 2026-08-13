@@ -266,6 +266,15 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   archivos tienen exactamente una decisión por grupo**, y el único parcial es el que escribió esta app. La
   app los carga —son el formato compartido— y avisa: ni rehusarlos ni tirarlos en silencio serían mejores,
   los dos son la app decidiendo por el usuario.
+- **Un `imageView` con la altura amarrada a su ancho le pone piso a la ventana.** `height == width` en un
+  panel de 1,100 pt de ancho exige 1,100 pt de alto: empuja el resto del layout fuera y **AppKit rehúsa
+  achicar la ventana**, porque un constraint requerido es requerido. Un síntoma ("no se deja redimensionar")
+  y el otro ("no veo la tabla ni la imagen") tenían esa única causa.
+- **`fittingSize` es la propiedad de layout que sí se puede afirmar.** Es el tamaño mínimo que los
+  constraints exigen, o sea exactamente lo que decide si una ventana se puede achicar. La aserción falla con
+  `996 points of height` contra el código que se envió y pasa con el arreglo. Las tres ventanas la llevan.
+- **Un selftest que lee texto de celdas no ve un problema de layout.** Los modos pasaban con el bug
+  enviado. Que una ventana muestre lo correcto y sea inusable son cosas distintas.
 - **Una ventana necesita `minSize`, no confiar en sus constraints.** Arrastrada por debajo de lo que el
   layout necesita, AutoLayout empieza a romper constraints y el panel de detalle desaparece entero — visto
   en una captura real: ventana aplastada, mitad derecha vacía, sin pie.
