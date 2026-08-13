@@ -258,5 +258,6 @@
 "folders.onlyIn" = "Only in %@:";
 "folders.changedHeader" = "Same name, different contents:";
 "folders.identical" = "These two folders hold exactly the same files.";
+"folders.orientation" = "\"Compared with\" is the side rav duplicate folders-move quarantines";
 "folders.action.revealA" = "Open the First Folder";
 "folders.action.revealB" = "Open the Second Folder";

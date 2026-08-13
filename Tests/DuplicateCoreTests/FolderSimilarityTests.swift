@@ -448,4 +448,64 @@ struct FolderSimilarityTests {
         // All three pairs are 1.0, so the tie-break decides: byte order on the paths.
         #expect(first.map(\.folderA) == ["/r/a", "/r/a", "/r/b"])
     }
+
+    /// **`folderA` is the byte-smaller path, and a folder gets deleted on the strength of it.**
+    /// `rav duplicate folders-move` keeps `folder_a` and quarantines `folder_b`, and the document is the
+    /// shared format, so orientation is not cosmetic.
+    ///
+    /// The fixture is the shape that exposes it: a directory whose name is a **prefix of a sibling's**.
+    /// A depth-first index order visits `wen` before `wen 2` because the shorter name sorts first, while
+    /// byte order on the deeper paths puts `wen 2/s` first -- the space (0x20) beats the slash (0x2F).
+    /// So the two orders disagree, and taking orientation from the node indices takes it from the walk.
+    ///
+    /// Those are the user's real folder names. Sixty random seeds in the differential test never produced
+    /// a prefix sibling, so the property held there by luck.
+    @Test("folderA is the byte-smaller path, not the one the walk saw first")
+    func orientsPairsByBytes() throws {
+        let files = [
+            file("/r/wen/s/f.bin", "same"),
+            file("/r/wen 2/s/f.bin", "same"),
+        ]
+        let tree = DirectoryTree.build(root: "/r", files: files)
+        // The walk order the fix must not follow.
+        let indexOfWen = try #require(tree.nodes.firstIndex { $0.path == "/r/wen/s" })
+        let indexOfWen2 = try #require(tree.nodes.firstIndex { $0.path == "/r/wen 2/s" })
+        #expect(indexOfWen < indexOfWen2, "the fixture no longer exercises the disagreement")
+        #expect(PathOrder.lessThan("/r/wen 2/s", "/r/wen/s"), "byte order should disagree here")
+
+        let pairs = try FolderSimilarity.find(in: tree, threshold: 0.9).pairs
+        let deep = try #require(pairs.first { $0.folderA.hasSuffix("/s") })
+        #expect(deep.folderA == "/r/wen 2/s")
+        #expect(deep.folderB == "/r/wen/s")
+        // And every pair agrees, including the shallow one where the two orders happen to coincide.
+        #expect(pairs.allSatisfy { PathOrder.lessThan($0.folderA, $0.folderB) })
+    }
+
+    /// The lists have to follow the orientation, or `only_in_a` would name files that are in `folder_b`.
+    @Test("only_in_a follows folderA after the swap")
+    func swapsTheListsWithTheOrientation() throws {
+        let files = [
+            file("/r/wen/s/f.bin", "same"),
+            file("/r/wen 2/s/f.bin", "same"),
+            // Only in the byte-smaller folder, which the walk visits second.
+            file("/r/wen 2/s/extra.bin", "extra"),
+        ]
+        let tree = DirectoryTree.build(root: "/r", files: files)
+        let pairs = try FolderSimilarity.find(in: tree, threshold: 0.6).pairs
+        let deep = try #require(pairs.first { $0.folderA.hasSuffix("/s") })
+        #expect(deep.folderA == "/r/wen 2/s")
+        #expect(deep.onlyInA == ["extra.bin"])
+        #expect(deep.onlyInB.isEmpty)
+        #expect(deep.totalA == 2)
+        #expect(deep.totalB == 1)
+    }
+
+    /// Over the random corpus, as a property rather than one fixture.
+    @Test("Every pair of every random tree is oriented by bytes", arguments: 1...60)
+    func orientsEveryRandomPair(seed: Int) throws {
+        let files = randomTree(seed: UInt64(seed))
+        let tree = DirectoryTree.build(root: "/r", files: files)
+        let pairs = try FolderSimilarity.find(in: tree, threshold: 0.5).pairs
+        #expect(pairs.allSatisfy { PathOrder.lessThan($0.folderA, $0.folderB) })
+    }
 }

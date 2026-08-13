@@ -257,5 +257,6 @@
 "folders.onlyIn" = "Solo en %@:";
 "folders.changedHeader" = "Mismo nombre, contenido distinto:";
 "folders.identical" = "Estas dos carpetas tienen exactamente los mismos archivos.";
+"folders.orientation" = "«Comparada con» es el lado que rav duplicate folders-move manda a cuarentena";
 "folders.action.revealA" = "Abrir la primera carpeta";
 "folders.action.revealB" = "Abrir la segunda carpeta";

@@ -636,6 +636,16 @@ respuestas silenciosamente incompletas.
 deja en orden de `os.walk`, que no es reproducible entre máquinas; la alternativa a un orden determinista es
 un archivo que cambia entre corridas.
 
+**Dentro de un par, la orientación también se normaliza por bytes, y eso no es cosmético.**
+`rav duplicate folders-move` conserva `folder_a` y manda `folder_b` a cuarentena, así que en un documento
+compartido cuál ruta va en cuál campo decide cuál carpeta se destruye. Tomarla de los índices del árbol la
+tomaba del orden de enumeración del recorrido, que nada promete reproducir en otra máquina ni después de
+mover un archivo. Ninguna de las dos es semánticamente la sobreviviente —la del CLI es orden de `os.walk`—
+pero arbitraria y reproducible le gana a arbitraria y dependiente del enumerador cuando un comando borra uno
+de los dos lados. Medido contra el CLI sobre un árbol real: **el mismo conjunto de 42 pares, y los 42 al
+revés** antes del arreglo. Lo destapa una carpeta cuyo nombre es prefijo del de su hermana, que sesenta
+árboles aleatorios del test diferencial nunca produjeron.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
