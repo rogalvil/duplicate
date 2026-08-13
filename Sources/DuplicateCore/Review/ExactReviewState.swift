@@ -194,6 +194,16 @@ public struct ExactReviewState: Sendable {
         return advance()
     }
 
+    /// Sets a decision for one group directly.
+    ///
+    /// Internal to the module: the bulk confirm needs to record a decision without the cursor movement that
+    /// `confirm()` performs, and nothing outside Core should be able to write a decision without going
+    /// through an action that has a name.
+    mutating func setDecision(_ value: GroupDecision, at index: Int) {
+        guard scan.groups.indices.contains(index) else { return }
+        decisions[index] = value
+    }
+
     /// Marks the group undecided again, undoing a decision or a skip.
     public mutating func clearDecision() {
         decisions[groupIndex] = .undecided

@@ -553,6 +553,33 @@ ilegible:
   escaneos y ya; las cifras por escaneo siguen, y esas sí son honestas sobre sus propias cotas.
 - **No había forma de borrar un escaneo**, y la biblioteca tenía 119 de cuatro días de mayo.
 
+### 880 grupos, y la línea que no se cruza
+
+El escaneo real de este usuario tiene **880 grupos**, y revisarlos de uno en uno no lo hace nadie. La
+salida obvia —un botón que acepta la sugerencia en todos— es exactamente el defecto del CLI, el que hizo
+que esta app tenga tri-estado: ahí cada grupo recibe una decisión como efecto secundario de salir, sin
+preguntar y sin mostrar nada.
+
+La observación que resuelve el problema es que **la mayoría de esos 880 no merece una decisión**. En ese
+escaneo los grupos van de 20.5 MB a 346 B, y la cola es donde vive el conteo: decidir los veinte más
+grandes recupera casi todo el espacio, y el resto puede quedarse sin decidir para siempre sin costar nada.
+
+Así que hay dos piezas, y las dos son de Core:
+
+- **`GroupFilter`** estrecha la lista por tamaño y por estado de decisión. **Estrechar no decide nada**:
+  los grupos que desaparecen quedan exactamente como estaban, sin decidir, sin escribir, sin accionar.
+  Los tamaños que ofrece son números redondos que una persona reconoce —"1 MB o más"— y no percentiles:
+  "el 12% más grande" no es una decisión que alguien pueda tomar sobre su propio disco.
+- **`confirmAll`** acepta lo que está en pantalla para los grupos seleccionados. Para uno que nadie abrió,
+  eso es la sugerencia del heurístico.
+
+**La diferencia con el CLI no es el resultado para un grupo, es que esto es un acto.** El usuario
+selecciona un conjunto, ve cuántos son y cuántos bytes representan, y una hoja se lo dice antes. El ítem
+de menú **no tiene atajo de teclado**: un atajo para esto sería un atajo para "decidir 800 cosas".
+
+Y `confirmAll` no mueve el cursor, a diferencia de `confirm()`: avanzar 800 veces dejaría al usuario en un
+grupo que nadie pidió ver.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice

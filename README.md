@@ -115,6 +115,8 @@ Doble clic en un escaneo abre su revisión. En la revisión:
 | `⌘⇧K` | salta el grupo sin decidir |
 | `⌘[` `⌘]` | grupo anterior y siguiente |
 | `⌘R` | muestra el archivo en Finder |
+| — | el filtro de la barra lateral estrecha por tamaño y por "sin decidir"; estrechar no decide nada |
+| — | selección múltiple + Grupo > Aceptar la sugerencia en los seleccionados (sin atajo, a propósito) |
 | `⌘Z` | deshace la última decisión |
 | `⌘S` | guarda las decisiones (también se guardan solas al simular y al cerrar) |
 | `⌘⇧D` | simula y abre la hoja de aplicar — o el botón del pie |
