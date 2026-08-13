@@ -171,4 +171,7 @@ public enum ScanDecodingError: Error, Equatable, Sendable {
     case malformedDigest(String, index: Int)
     case negativeSize(Int64, index: Int)
     case emptyPath(index: Int, position: Int)
+    /// A `media_type` this build does not know. Refused rather than guessed: the value decides which threshold
+    /// the pair was judged against.
+    case unknownMediaType(String)
 }

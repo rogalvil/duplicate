@@ -29,7 +29,7 @@ La segunda columna de la tabla no es aspiracional. Cada línea se ejecutó.
 | `l10n` | Las dos tablas cubren las mismas claves; toda clave usada en código existe; toda clave declarada se usa | borrar una línea de `es.lproj`, o escribir mal una clave en `Strings.string` |
 | `menu` | Ningún par de ítems comparte atajo y modificadores; ningún submenú vacío; alguien manda `undo:` y las acciones de revisión | dar el mismo atajo a dos ítems |
 | `json-roundtrip` | Los **226 documentos reales** del usuario re-codifican byte a byte, por el árbol genérico | cambiar el indent de 2 a 4 → falla en el byte 2 |
-| `scans` | Los **119 escaneos reales** pasan por el modelo tipado y vuelven idénticos; el nombre del archivo coincide con el `scan_id` | renombrar la clave `sha256` a `digest` en el codec |
+| `scans` | Los **120 escaneos exactos**, los **4 de carpetas** y los **31 perceptuales** reales pasan por su modelo tipado y vuelven byte-idénticos; el nombre del archivo coincide con el `scan_id` de adentro | cuatro roturas: renombrar la clave `sha256` a `digest`, escribir `similarity` de carpetas como entero (4 fallan), `img_threshold` como float (31 fallan), `similarity` perceptual como entero (22 fallan, los otros 9 documentos no tienen pares) |
 | `decisions` | Los **55 archivos de decisiones reales** re-codifican byte a byte | quitar `created_at` del encoder → los 55 difieren en el byte 44 |
 | `digest` | El hasher coincide con `shasum -a 256` en el chunk de producción (1 MiB) sobre 7 tamaños | quitar el último chunk del loop de lectura |
 | `walk-permissions` | Un directorio `chmod 000` en medio no detiene el recorrido, y se reporta como inaccesible | pasar `errorHandler: nil` → `inaccessiblePaths` vuelve vacío |

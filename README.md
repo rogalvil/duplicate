@@ -16,14 +16,15 @@ deshacer.
 | Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
 | Simular, aplicar a la Papelera y deshacer la sesión | **funciona** |
 | Detector de carpetas: escanea, lista y muestra los pares | **funciona**, sin aplicar todavía |
-| Detector perceptual: hash de imagen e índice de parecidos | **funcionan**, sin escaneo ni UI |
+| Detector perceptual de imagen: hash, índice y escaneo que guarda | **funciona**, sin UI |
 | Detector perceptual de video | **no existe todavía** |
 
 O sea: para **duplicados exactos el ciclo está completo** y no hace falta el CLI — escanear, revisar,
-simular, aplicar, deshacer. Del perceptual existe el hash de imagen, medido contra `imagehash` sobre 2,779
-fotos reales: **90.4% idéntico bit a bit**, 99.2% dentro de dos bits, y las 16 excepciones son justo las 16
-imágenes con etiqueta de rotación EXIF, que es la divergencia elegida a propósito. Falta el escaneo, la UI y
-todo el video.
+simular, aplicar, deshacer. Del perceptual, un escaneo de imágenes ya corre y guarda un documento que el
+CLI lee byte a byte; el hash está medido contra `imagehash` sobre 2,779 fotos reales: **90.4% idéntico bit a
+bit**, 99.2% dentro de dos bits, y las 16 excepciones son justo las 16 imágenes con etiqueta de rotación EXIF,
+que es la divergencia elegida a propósito. Falta la UI y **todo el video**: un escaneo de esta app escribe
+`vid_threshold` y ningún par de video, y eso cambia lo que encuentra, no cómo se ve.
 
 ## Requisitos
 
