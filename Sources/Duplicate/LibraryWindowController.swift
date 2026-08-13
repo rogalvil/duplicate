@@ -23,12 +23,27 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     private var reviewWindows: [String: ReviewWindowController] = [:]
     private var scanPanel: ScanPanelController?
     private var folderWindows: [String: FolderPairWindowController] = [:]
+    private var similarWindows: [String: SimilarPairWindowController] = [:]
+
     /// Which detector's scans the table is showing.
-    private var showingFolders = false
+    ///
+    /// One table with three sets of columns rather than three windows: they are the same question asked three
+    /// ways, and separate windows would make the user go find them.
+    enum LibraryKind: Int {
+        case files = 0
+        case folders = 1
+        case similar = 2
+    }
+
+    private var showingKind: LibraryKind = .files
+    private var showingFolders: Bool { showingKind == .folders }
+    private var showingSimilar: Bool { showingKind == .similar }
     private var folderRows: [ScanStore.FolderSummary] = []
+    private var similarRows: [ScanStore.SimilarSummary] = []
     private let kindControl = NSSegmentedControl(
         labels: [
             Strings.string("library.kind.files"), Strings.string("library.kind.folders"),
+            Strings.string("library.kind.similar"),
         ],
         trackingMode: .selectOne,
         target: nil,
@@ -349,7 +364,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     /// One table with different columns rather than two windows: they are the same question asked two ways,
     /// and a second window would make the user find it.
     @objc private func kindChanged(_ sender: Any?) {
-        showingFolders = kindControl.selectedSegment == 1
+        showingKind = LibraryKind(rawValue: kindControl.selectedSegment) ?? .files
         rebuildColumns()
         loadFromDisk()
     }
@@ -357,7 +372,12 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     /// Rebuilds the columns for the detector being shown.
     private func rebuildColumns() {
         for column in tableView.tableColumns { tableView.removeTableColumn(column) }
-        let columns: [Column] = showingFolders ? Self.folderColumns : Self.columns
+        let columns: [Column] =
+            switch showingKind {
+            case .files: Self.columns
+            case .folders: Self.folderColumns
+            case .similar: Self.similarColumns
+            }
         for column in columns {
             let tableColumn = NSTableColumn(identifier: column.identifier)
             tableColumn.title = Strings.string(column.titleKey)
@@ -382,7 +402,12 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         panel.onFolderFinished = { [weak self] _ in
             guard let self else { return }
             // Land on the detector that just produced something, or the new scan is invisible.
-            self.kindControl.selectedSegment = 1
+            self.kindControl.selectedSegment = LibraryKind.folders.rawValue
+            self.kindChanged(nil)
+        }
+        panel.onSimilarFinished = { [weak self] _ in
+            guard let self else { return }
+            self.kindControl.selectedSegment = LibraryKind.similar.rawValue
             self.kindChanged(nil)
         }
         panel.onFinished = { [weak self] scan in
@@ -447,17 +472,20 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         loadGeneration += 1
         let generation = loadGeneration
         let store = ScanStore(state: stateDirectory)
-        let folders = showingFolders
+        let kind = showingKind
         Task.detached(priority: .userInitiated) {
-            let fresh = folders ? [] : store.summaries()
-            let freshFolders = folders ? store.folderSummaries() : []
+            let fresh = kind == .files ? store.summaries() : []
+            let freshFolders = kind == .folders ? store.folderSummaries() : []
+            let freshSimilar = kind == .similar ? store.similarSummaries() : []
             await MainActor.run { [weak self] in
                 guard let self, generation == self.loadGeneration else { return }
                 let changed = self.library.adopt(fresh)
                 let foldersChanged = self.folderRows != freshFolders
+                let similarChanged = self.similarRows != freshSimilar
                 self.folderRows = freshFolders
+                self.similarRows = freshSimilar
                 self.hasLoadedOnce = true
-                if changed || foldersChanged {
+                if changed || foldersChanged || similarChanged {
                     self.reloadRows()
                 } else {
                     // Nothing moved, but the first read still has to reveal the empty state.
@@ -474,6 +502,10 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     @objc private func reviewScan(_ sender: Any?) {
         if showingFolders {
             openFolderScan()
+            return
+        }
+        if showingSimilar {
+            openSimilarScan()
             return
         }
         guard let summary = clickedSummary() else { return }
@@ -505,6 +537,28 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         }
         controller.showWindow(nil)
         controller.presentImportWarningIfNeeded()
+    }
+
+    /// Opens a perceptual scan's pairs, side by side.
+    private func openSimilarScan() {
+        let clicked = tableView.clickedRow >= 0 ? tableView.clickedRow : tableView.selectedRow
+        guard similarRows.indices.contains(clicked) else { return }
+        let summary = similarRows[clicked]
+        if let existing = similarWindows[summary.scanID] {
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard let scan = try? ScanStore(state: stateDirectory).loadSimilarScan(id: summary.scanID)
+        else { return }
+        let controller = SimilarPairWindowController(scan: scan)
+        similarWindows[summary.scanID] = controller
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: controller.window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.similarWindows[summary.scanID] = nil }
+        }
+        controller.showWindow(nil)
     }
 
     /// Opens a folder scan's pairs.
@@ -641,6 +695,13 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     var watcherCount: Int { watchers.count }
     var showingFolderScans: Bool { showingFolders }
     var folderRowCount: Int { folderRows.count }
+    var showingSimilarScans: Bool { showingSimilar }
+    var similarRowCount: Int { similarRows.count }
+
+    func showSimilarScansForSelftest() {
+        kindControl.selectedSegment = LibraryKind.similar.rawValue
+        kindChanged(nil)
+    }
 
     func showFolderScansForSelftest() {
         kindControl.selectedSegment = 1
@@ -693,6 +754,18 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         Column("state", "library.column.state", width: 90),
     ]
 
+    /// **The pair counts are split by kind on purpose.** This build produces no video pair at all, so one
+    /// total would read as "this tree has no similar video" when it means "the app did not look".
+    private static let similarColumns: [Column] = [
+        Column("root", "library.column.root", width: 280, minimum: 120),
+        Column("created", "library.column.created", width: 150, minimum: 90),
+        Column("imagePairs", "library.column.similarPairs", width: 80, numeric: true),
+        Column("videoPairs", "similar.kind.video", width: 80, numeric: true),
+        Column("files", "library.column.similarFiles", width: 80, numeric: true),
+        Column("threshold", "library.column.similarThreshold", width: 90, numeric: true),
+        Column("state", "library.column.state", width: 90),
+    ]
+
     private static let columns: [Column] = [
         Column("root", "library.column.root", width: 320, minimum: 120),
         Column("created", "library.column.created", width: 150, minimum: 90),
@@ -707,13 +780,18 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
 
 extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        showingFolders ? folderRows.count : rows.count
+        switch showingKind {
+        case .files: rows.count
+        case .folders: folderRows.count
+        case .similar: similarRows.count
+        }
     }
 
     func tableView(
         _ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int
     ) -> NSView? {
         if showingFolders { return folderCell(column: tableColumn, row: row) }
+        if showingSimilar { return similarCell(column: tableColumn, row: row) }
         guard let tableColumn, rows.indices.contains(row) else { return nil }
         let summary = rows[row]
         let identifier = tableColumn.identifier
@@ -758,6 +836,51 @@ extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
                 field.textColor = .systemOrange
             } else {
                 field.textColor = .labelColor
+            }
+        default:
+            field.stringValue = ""
+        }
+        return cell
+    }
+
+    /// One row of a perceptual scan.
+    private func similarCell(column: NSTableColumn?, row: Int) -> NSView? {
+        guard let column, similarRows.indices.contains(row) else { return nil }
+        let summary = similarRows[row]
+        let cell =
+            tableView.makeView(withIdentifier: column.identifier, owner: self) as? NSTableCellView
+            ?? makeCell(identifier: column.identifier)
+        guard let field = cell.textField else { return cell }
+        field.textColor = .labelColor
+
+        switch column.identifier.rawValue {
+        case "root":
+            field.stringValue = summary.root
+            field.lineBreakMode = .byTruncatingHead
+            field.toolTip = summary.root
+        case "created":
+            if let date = ScanIdentifier.date(from: summary.scanID) {
+                field.stringValue = dateFormatter.string(from: date)
+            } else {
+                field.stringValue = summary.createdAt
+            }
+            field.toolTip = summary.createdAt
+        case "imagePairs":
+            field.stringValue = summary.imagePairCount.formatted()
+        case "videoPairs":
+            field.stringValue = summary.videoPairCount.formatted()
+        case "files":
+            field.stringValue = summary.involvedFileCount.formatted()
+        case "threshold":
+            // Bits out of 64, which is the unit the CLI's img_threshold is in.
+            field.stringValue = String(
+                format: Strings.string("library.similarThreshold.value"), summary.imageThreshold)
+        case "state":
+            if summary.hasRelativePaths {
+                field.stringValue = Strings.string("library.state.relativePaths")
+                field.textColor = .systemOrange
+            } else {
+                field.stringValue = ""
             }
         default:
             field.stringValue = ""

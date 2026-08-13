@@ -191,3 +191,31 @@ struct LRUCacheTests {
         #expect(cache.count == 2)
     }
 }
+
+@Suite("ThumbnailKey identity")
+struct ThumbnailKeyIdentityTests {
+
+    /// **Two files of a perceptual pair must not share a thumbnail.** They are different pictures by
+    /// construction -- that is what the detector found -- so a shared key would draw one over the other and
+    /// make every pair look like a perfect match. Keying on the path is what prevents it.
+    @Test("A path-keyed thumbnail is distinct per file")
+    func separatesPathsWithIdenticalContent() {
+        let a = ThumbnailKey(path: "/photos/one.jpg", pixelSize: 256)
+        let b = ThumbnailKey(path: "/photos/two.jpg", pixelSize: 256)
+        #expect(a != b)
+        #expect(a == ThumbnailKey(path: "/photos/one.jpg", pixelSize: 256))
+    }
+
+    /// And the exact detector's key still collapses a group, which is the opposite requirement.
+    @Test("A content-keyed thumbnail is shared across a group")
+    func sharesContentKeysAcrossAGroup() {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        bytes[0] = 7
+        let digest = Digest32(bytes: bytes)!
+        let a = ThumbnailKey(digest: digest, path: "/photos/one.jpg", pixelSize: 256)
+        let b = ThumbnailKey(digest: digest, path: "/elsewhere/two.jpg", pixelSize: 256)
+        #expect(a == b)
+        // And the two identities are never equal to each other, whatever the file.
+        #expect(a != ThumbnailKey(path: "/photos/one.jpg", pixelSize: 256))
+    }
+}
