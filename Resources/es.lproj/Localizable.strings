@@ -220,13 +220,13 @@
 "review.imported.discard" = "Empezar de cero";
 "review.filter.anySize" = "Cualquier tamaño";
 "review.filter.atLeast" = "%@ o más";
-"review.filter.onlyUndecided" = "Solo lo que no he decidido";
+"review.filter.onlyUndecided" = "Sin decidir";
 "review.filter.count" = "Mostrando %1$d de %2$d grupos";
 "menu.group.confirmSelected" = "Aceptar la sugerencia en los grupos seleccionados...";
 "review.bulk.title" = "¿Aceptar la sugerencia en %d grupos?";
 "review.bulk.body" = "Para los grupos que no has abierto, la sugerencia es la corazonada de esta app: conservar el archivo más profundo en el árbol de carpetas que no parezca una copia. Aceptarla aquí registra una decisión por cada uno, liberando hasta %@. Nada se mueve hasta que simules y apliques, y deshacer lo devuelve todo.";
 "review.bulk.confirm" = "Aceptar en todos";
-"review.filter.stillThere" = "Solo los grupos que todavía existen";
+"review.filter.stillThere" = "Que todavía existen";
 "review.filter.checkDisk" = "Revisar el disco";
 "review.filter.checking" = "Revisando %1$d de %2$d grupos...";
 "review.filter.checked" = "%1$d de %2$d todavía tienen dos o más archivos";

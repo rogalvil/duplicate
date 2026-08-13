@@ -2362,11 +2362,46 @@ enum SelfTest {
         try expect(
             staleReview.reviewState.groupCount == 3, "the scan lost groups when they were hidden")
 
+        // **The sidebar and the header must name the same group.** A screenshot from real use showed the
+        // sidebar highlighting "Grupo 31" while the header said "Grupo 32 de 880" -- with a filter on, the
+        // row is an index into the visible list and the header reads the scan index, and those are only the
+        // same number when nothing is filtered.
+        //
+        // Teeth: make `tableViewSelectionDidChange` pass the row instead of `visible[row]` and this fails.
+        atScale.setFilterForSelftest(minimumSize: 0, onlyUndecided: true)
+        for row in 0..<atScale.visibleGroupCount {
+            atScale.clickSidebarRowForSelftest(row)
+            try expect(
+                atScale.selectedSidebarIndex == atScale.headerGroupIndex,
+                "row \(row): the sidebar highlights \(atScale.selectedSidebarIndex ?? -1) "
+                    + "and the header describes \(atScale.headerGroupIndex)"
+            )
+        }
+
         // And with "only undecided" on, the ones just decided drop out of the list.
         atScale.setFilterForSelftest(minimumSize: 0, onlyUndecided: true)
         try expect(
             atScale.visibleGroupIndices == [2, 3],
             "the undecided filter shows \(atScale.visibleGroupIndices)"
+        )
+
+        // **A decision must leave the filtered list, and the header must follow.** This is the exact
+        // sequence a real screenshot caught: with "only what I have not decided" on, confirming a group left
+        // the sidebar showing it while the header had already moved to the next one.
+        //
+        // Teeth: drop the `rebuildVisibleGroups()` from `mutate` and the count below stays put.
+        atScale.setFilterForSelftest(minimumSize: 0, onlyUndecided: true)
+        let beforeConfirm = atScale.visibleGroupCount
+        atScale.clickSidebarRowForSelftest(0)
+        atScale.confirmGroup(nil)
+        try expect(
+            atScale.visibleGroupCount == beforeConfirm - 1,
+            "the list still shows \(atScale.visibleGroupCount) of \(beforeConfirm) after deciding one"
+        )
+        try expect(
+            atScale.selectedSidebarIndex == atScale.headerGroupIndex,
+            "after confirming, the sidebar highlights \(atScale.selectedSidebarIndex ?? -1) "
+                + "and the header describes \(atScale.headerGroupIndex)"
         )
 
         print("  3 groups over a real tree: preview is not a decision, keep-nothing refused")
