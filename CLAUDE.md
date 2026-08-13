@@ -278,6 +278,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **`threshold` es float y los conteos son enteros, en el mismo documento.** Escribir `5.0` donde el CLI
   pone `5` rompe la comparación byte a byte igual que escribir `1` donde pone `1.0`. Los dos errores
   existen y son opuestos; hay un test para cada uno.
+- **En un par de carpetas, `folder_b` es la que se borra: `rav duplicate folders-move` conserva `folder_a`
+  y manda la otra a cuarentena.** El documento es formato compartido, así que la orientación no es
+  cosmética — un escaneo que escriba la app se puede aplicar con el CLI. Se normaliza por bytes:
+  `folder_a` es la ruta menor. Tomarla del orden de índices del árbol la tomaba del orden de enumeración,
+  que nada promete reproducir. Medido: mismo conjunto de 42 pares que el CLI sobre un árbol real, y **los
+  42 al revés**. El caso que lo destapa es una carpeta cuyo nombre es **prefijo del de su hermana** (`wen`
+  y `wen 2`): el recorrido visita `wen` primero porque el nombre corto ordena antes, y el orden de bytes
+  pone `wen 2/s` primero porque el espacio (0x20) le gana al slash (0x2F). **Sesenta árboles aleatorios
+  nunca produjeron un hermano-prefijo** — el corpus real lo produjo en el primer intento, y es el
+  recordatorio de que un fixture generado cubre lo que se le ocurrió al generador.
 - **El resultado del chequeo de disco se guarda en `Caches`, con su fecha, y nada destructivo lo cree.**
   Tarda lo suficiente para no valer repetirlo, y conserva casi todo su valor —un escaneo de mayo cuyos
   archivos ya no están seguirá sin tenerlos mañana— pero solo es cierto en el instante en que se tomó. El

@@ -135,7 +135,7 @@ honestamente, así que son dos codecs distintos.
 
 ## Los otros dos formatos de escaneo
 
-Todavía no los escribe esta app, pero se leen y hay que respetarlos:
+`folder-scans` ya lo escribe esta app; `similar-scans` todavía solo se lee. Los dos hay que respetarlos:
 
 ```
 folder-scans:   {scan_id, root, created_at, threshold, pairs[]}
@@ -147,6 +147,24 @@ similar-scans:  {scan_id, root, created_at, img_threshold, vid_threshold, pairs[
 son la distancia de Hamming máxima y el coeficiente de Dice mínimo, dos cosas distintas con dos tipos
 distintos, y emitir `5.0` donde el CLI escribe `5` rompe la comparación byte a byte igual que emitir
 `1` donde escribe `1.0`. Los dos errores existen y son opuestos.
+
+### En un par de carpetas, `folder_b` es la que se borra
+
+`rav duplicate folders-move` **conserva `folder_a` y manda `folder_b` a cuarentena** — lo dice su propia
+ayuda. O sea que en un documento de `folder-scans`, cuál ruta va en cuál campo decide cuál carpeta
+destruye ese comando, y el documento es formato compartido: un escaneo que escriba la app se puede
+aplicar con el CLI.
+
+Ninguna de las dos orientaciones es "la correcta" — la del CLI sale del orden de `os.walk`. Pero la app
+**normaliza por bytes**: `folder_a` es siempre la ruta menor. Arbitraria y reproducible le gana a
+arbitraria y dependiente del enumerador cuando un comando borra uno de los dos lados.
+
+Medido sobre un árbol real de 3,421 archivos: los dos programas encuentran **el mismo conjunto de 42
+pares**, y la app los escribía **los 42 al revés** que el CLI porque tomaba la orientación del orden de
+índices del árbol. El caso que lo destapa es una carpeta cuyo nombre es **prefijo del de su hermana**
+(`wen` y `wen 2`): el recorrido visita `wen` primero porque el nombre corto ordena antes, y el orden de
+bytes pone `wen 2/s` primero porque el espacio (0x20) le gana al slash (0x2F). Sesenta árboles aleatorios
+del test diferencial nunca produjeron un hermano-prefijo, así que la propiedad se sostenía por suerte.
 
 **Ningún pHash aparece en el formato compartido.** `similar-scans` guarda `file_a`, `file_b`,
 `similarity` y `media_type`, no los hashes. Por eso la app no necesita ser bit-idéntica a

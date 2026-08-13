@@ -261,6 +261,14 @@ public enum FolderSimilarity {
     /// Sorted by similarity descending like the CLI, with ties broken on the two paths by bytes. **The CLI
     /// leaves ties in `os.walk` order**, which is not reproducible across machines; a deterministic order
     /// is a divergence in output order only, and the alternative is a file that differs between runs.
+    ///
+    /// **Within a pair, `folderA` is the byte-smaller path, and that is a safety property rather than
+    /// cosmetics.** `rav duplicate folders-move` keeps `folder_a` and moves `folder_b` to quarantine, so
+    /// orientation in a shared document decides which folder a caller destroys. Taking it from the node
+    /// indices would take it from the walk's enumeration order, which nothing promises to reproduce on
+    /// another machine or after the tree changes. Neither side is semantically the survivor -- the CLI's
+    /// own orientation is `os.walk` order -- but arbitrary and reproducible beats arbitrary and
+    /// enumerator-dependent when a command deletes one of the two.
     public static func find(
         in tree: DirectoryTree,
         threshold: Double = 0.9
@@ -284,7 +292,12 @@ public enum FolderSimilarity {
             else { continue }
 
             examined += 1
-            guard let compared = compare(pair.a, pair.b, in: tree),
+            // Orient by bytes before comparing, so `only_in_a` and `only_in_b` follow the same rule as the
+            // two paths and a caller that acts on `folder_b` acts on a reproducible choice.
+            let (first, second) =
+                PathOrder.lessThan(tree.nodes[pair.a].path, tree.nodes[pair.b].path)
+                ? (pair.a, pair.b) : (pair.b, pair.a)
+            guard let compared = compare(first, second, in: tree),
                 compared.similarity >= threshold
             else { continue }
             pairs.append(compared)

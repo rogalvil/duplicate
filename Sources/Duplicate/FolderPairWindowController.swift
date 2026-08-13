@@ -135,14 +135,21 @@ final class FolderPairWindowController: NSWindowController {
         return pairs.indices.contains(row) ? pairs[row] : nil
     }
 
+    /// The count, the threshold, and what the two columns mean to anything that acts on them.
+    ///
+    /// `rav duplicate folders-move` keeps `folder_a` and moves `folder_b` to quarantine. This viewer is
+    /// read-only, so the CLI is the only thing that can act on a pair today -- which makes "which side gets
+    /// destroyed" information the reader needs here, not a footnote for the docs.
+    private func footerString() -> String {
+        String(format: Strings.string("folders.footer"), pairs.count, Int(scan.threshold * 100))
+            + "  ·  " + Strings.string("folders.orientation")
+    }
+
     private func refreshDetail() {
         guard let pair = selectedPair else {
             headerLabel.stringValue = Strings.string("folders.empty")
             detailView.string = ""
-            footerLabel.stringValue = String(
-                format: Strings.string("folders.footer"), pairs.count,
-                Int(scan.threshold * 100)
-            )
+            footerLabel.stringValue = footerString()
             return
         }
         headerLabel.stringValue = String(
@@ -168,8 +175,7 @@ final class FolderPairWindowController: NSWindowController {
         if lines.isEmpty { lines.append(Strings.string("folders.identical")) }
         detailView.string = lines.joined(separator: "\n")
 
-        footerLabel.stringValue = String(
-            format: Strings.string("folders.footer"), pairs.count, Int(scan.threshold * 100))
+        footerLabel.stringValue = footerString()
     }
 
     @objc private func revealA(_ sender: Any?) {

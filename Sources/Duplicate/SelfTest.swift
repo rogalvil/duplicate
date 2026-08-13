@@ -3253,6 +3253,12 @@ enum SelfTest {
         try make("albumB/04.txt", "fourth")
         try make("albumA/04.txt", "fourth-edited")
 
+        // And the shape that decides which folder a caller destroys: a directory whose name is a **prefix
+        // of a sibling's**. These are the user's real folder names, and they make depth-first order and
+        // byte order disagree -- the walk visits `wen` first because the shorter name sorts first, while
+        // `wen 2/s` is the byte-smaller path because the space (0x20) beats the slash (0x2F).
+        for folder in ["wen", "wen 2"] { try make("\(folder)/s/f.txt", "same") }
+
         // 1. The window offers the detector, and the threshold only for folders.
         // Teeth: never show `thresholdPopup` and the threshold read below is the default anyway -- so this
         // asserts the request instead, which is what actually reaches the session.
@@ -3341,11 +3347,29 @@ enum SelfTest {
             "the viewer layout demands \(Int(fit.width))x\(Int(fit.height))"
         )
 
+        // 5. Orientation, in the saved document, is decided by bytes and not by the walk.
+        // `rav duplicate folders-move` keeps `folder_a` and quarantines `folder_b`, so a document this app
+        // writes decides which folder that command destroys.
+        // Teeth: orient by the node indices instead and `folder_a` reads `.../wen/s`.
+        let deep = try expectSome(
+            reloaded.pairs.first { $0.folderA.hasSuffix("/s") && $0.folderB.hasSuffix("/s") },
+            "no pair of the two `s` folders, so orientation is not being exercised"
+        )
+        try expect(
+            deep.folderA.hasSuffix("wen 2/s"),
+            "folder_a is \(deep.folderA), wanted the byte-smaller wen 2/s"
+        )
+        try expect(
+            reloaded.pairs.allSatisfy { PathOrder.lessThan($0.folderA, $0.folderB) },
+            "some pair in the saved document is not oriented by bytes"
+        )
+
         print(
             "  a folder scan of 2 near-copies: \(reloaded.pairs.count) pairs, "
                 + "\(result.folderCount) folders compared, \(result.examinedPairs) examined"
         )
         print("  the library lists it and the viewer names the overlap and the difference")
+        print("  every saved pair is oriented by bytes, which is what folders-move deletes on")
     }
 
     // MARK: - about

@@ -187,6 +187,10 @@ No son accidentes. Cada una arregla algo o evita un riesgo, y cada una cambia lo
   cuántos quedaron sin revisar.
 - **Un archivo que comparte almacenamiento con el que conservas no se ofrece para borrar.** Su casilla
   está deshabilitada y la nota dice por qué.
+- **En un par de carpetas, `folder_a` es siempre la ruta menor por bytes.** El CLI la deja en orden de
+  `os.walk` y `rav duplicate folders-move` **conserva `folder_a` y borra `folder_b`**, así que la
+  orientación decide cuál carpeta se destruye. Sobre el mismo árbol los dos encuentran el mismo
+  conjunto de pares; la app además los orienta igual en cada corrida y en cualquier máquina.
 - **"Descartar el grupo completo" descarta el grupo completo.** El CLI llama a eso "Mover todos" y
   luego lo salta al aplicar porque su lista de conservados queda vacía: una acción destructiva
   etiquetada que en silencio no hace nada.
