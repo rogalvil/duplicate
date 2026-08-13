@@ -288,6 +288,30 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   pone `wen 2/s` primero porque el espacio (0x20) le gana al slash (0x2F). **Sesenta árboles aleatorios
   nunca produjeron un hermano-prefijo** — el corpus real lo produjo en el primer intento, y es el
   recordatorio de que un fixture generado cubre lo que se le ocurrió al generador.
+- **Pillow redondea al convertir a grises, no trunca.** Medido sobre diez triples:
+  `(19595·R + 38470·G + 7471·B + 0x8000) >> 16` acierta los diez y la forma truncada falla tres — `(0,255,0)`
+  da 149 contra 150. El plan decía lo contrario.
+- **El DCT del hash perceptual tiene que cancelar exacto, y solo el de Accelerate lo hace.** Una imagen plana
+  debe dar un coeficiente y 63 ceros; con la matriz de la base quedan ~1e-3 de signo mezclado, la mediana cae
+  entre ellos y prenden **32 bits en vez de 1**. No es precisión: una FFT resta valores iguales y da cero
+  exacto, una suma de 32 cosenos que cancela matemáticamente no lo hace a ninguna precisión. Por eso también se
+  **cuantiza a `UInt8` después del resample**, o el ringing de Lanczos deja la región plana en `255 ± 1e-3` y
+  vuelve el volado. Y por eso los frames negros de dos videos distintos dan el mismo hash, que es de lo que
+  depende el agrupamiento del camino de video. Cuantizar además *entre* las dos pasadas de Lanczos, como hace
+  Pillow, **se midió y empeora** (89.97% contra 90.88%).
+- **El setup de `vDSP.DCT` cuesta 1 µs**, no lo que el plan supuso: 1,000 setups de tamaño 32 en 1.0 ms. No hay
+  que reusarlo por worker, y así el tipo se queda siendo un valor sin discusión de `Sendable`. Su método es
+  `transform(_:result:)`, no `output:`.
+- **Un pHash solo mira las ocho frecuencias más bajas**, así que un tablero de 8 px en una imagen de 128 hashea
+  igual que un gris plano — `imagehash` también. No es bug; hay un test que lo fija con su razón, porque la
+  alternativa es redescubrirlo como reporte de bug.
+- **El tamaño de decode se barrió y 256 está en la meseta.** De 128 a 4096 los pares encontrados no se mueven
+  (0.1% de rango); lo que cambia es la coincidencia con Python. Pedirle 32 px a ImageIO es un desastre (10.9%
+  idéntico) porque a ese tamaño devuelve su reducción más barata. El Jaccard ≥0.98 que pedía el plan **solo se
+  alcanza con decode completo**, a 2.65× el tiempo, y no compra mejores respuestas.
+- **Las únicas divergencias sistemáticas contra `imagehash` son las 16 imágenes con rotación EXIF**, de 2,779.
+  Nosotros aplicamos la orientación y Pillow no: una copia que solo difiere en el flag debería coincidir con su
+  original. Sin ellas el peor caso es de 4 bits.
 - **El resultado del chequeo de disco se guarda en `Caches`, con su fecha, y nada destructivo lo cree.**
   Tarda lo suficiente para no valer repetirlo, y conserva casi todo su valor —un escaneo de mayo cuyos
   archivos ya no están seguirá sin tenerlos mañana— pero solo es cierto en el instante en que se tomó. El

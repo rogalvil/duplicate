@@ -33,7 +33,7 @@ enum SelfTest {
             "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
-            "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window",
+            "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
         ]
 
         let modes: [String]
@@ -77,6 +77,7 @@ enum SelfTest {
                 case "apply-window": try await checkApplyWindow()
                 case "lifecycle": try checkLifecycle()
                 case "folder-window": try await checkFolderWindow()
+                case "phash": try checkPerceptualHash()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -3370,6 +3371,95 @@ enum SelfTest {
         )
         print("  the library lists it and the viewer names the overlap and the difference")
         print("  every saved pair is oriented by bytes, which is what folders-move deletes on")
+    }
+
+    // MARK: - phash
+
+    /// Proves the perceptual hash in the release build, through a real file.
+    ///
+    /// The unit tests cover the arithmetic; this exists because the release build is optimised and the hash's
+    /// most surprising property is a **numerical** one -- a flat image only hashes to one bit if the transform
+    /// cancels exactly -- and `-O` is entitled to reassociate float arithmetic in ways a debug build does not.
+    /// A hash that depends on exact cancellation deserves to be checked where it ships.
+    ///
+    /// Writes only under `/tmp`.
+    ///
+    /// Proof of teeth: three breaks, each named beside its assertion.
+    private static func checkPerceptualHash() throws {
+        let root = NSTemporaryDirectory() + "duplicate-selftest-phash-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: root) }
+
+        let hasher = ImageHasher()
+
+        // 1. The derived answer, which needs the transform to cancel exactly and the resample to quantise.
+        // Teeth: drop the `quantised(...)` call in `ImageHasher.hash` and this reads 32 bits of noise.
+        for level in [7, 128, 255] {
+            let samples = SyntheticImage.samples(.uniform(UInt8(level)), width: 96, height: 96)
+            let hash = hasher.hash(grey: samples.map(Float.init), width: 96, height: 96)
+            try expect(
+                hash.hexString == "8000000000000000",
+                "a uniform image at \(level) hashes to \(hash.hexString), wanted the DC bit alone"
+            )
+        }
+        // And the degenerate case on the other side: no DC either.
+        let black = hasher.hash(
+            grey: SyntheticImage.samples(.uniform(0), width: 96, height: 96).map(Float.init),
+            width: 96, height: 96)
+        try expect(black.bits == 0, "a black image hashes to \(black.hexString)")
+
+        // 2. The transform's exactness, stated directly rather than through a hash.
+        // Teeth: transform through the basis matrix instead and the AC coefficients read ~1e-3.
+        let flat = CosineTransform.forward2D([Float](repeating: 255, count: 32 * 32), size: 32)
+        for row in 0..<8 {
+            for column in 0..<8 where !(row == 0 && column == 0) {
+                try expect(
+                    flat[row * 32 + column] == 0,
+                    "coefficient (\(row),\(column)) of a flat image is \(flat[row * 32 + column])"
+                )
+            }
+        }
+
+        // 3. A real file, and the invariance the hash exists for: a lossy re-encode must not move it.
+        // Teeth: point `decodeMaxPixelSize` at 32 and the JPEG distance leaves the CLI's threshold.
+        let png = try SyntheticImage.write(
+            .rampWithCorner, width: 240, height: 240, format: .png, to: root + "/a.png")
+        let jpeg = try SyntheticImage.write(
+            .rampWithCorner, width: 240, height: 240, format: .jpeg(quality: 0.9),
+            to: root + "/a.jpg")
+        let fromPNG = try hasher.hash(fileURL: URL(filePath: png))
+        let fromJPEG = try hasher.hash(fileURL: URL(filePath: jpeg))
+        let distance = fromPNG.distance(to: fromJPEG)
+        try expect(
+            distance <= 5,
+            "a q=0.9 re-encode moved the hash \(distance) bits, past the CLI's threshold of 5"
+        )
+        // The same picture in memory has to agree with the same picture through ImageIO, or the decode is
+        // changing the answer rather than delivering it. PNG is lossless and 240 is under the decode cap.
+        let inMemory = hasher.hash(
+            grey: SyntheticImage.samples(.rampWithCorner, width: 240, height: 240).map(Float.init),
+            width: 240, height: 240)
+        try expect(
+            inMemory == fromPNG,
+            "the file hashes \(fromPNG.hexString) and its samples hash \(inMemory.hexString)"
+        )
+
+        // And it has to move for a different picture, or none of the above means anything.
+        let inverted = hasher.hash(
+            grey: SyntheticImage.samples(.rampWithCorner, width: 240, height: 240)
+                .map { Float(255 - Int($0)) },
+            width: 240, height: 240)
+        try expect(
+            fromPNG.distance(to: inverted) >= 20,
+            "an inverted image is only \(fromPNG.distance(to: inverted)) bits away"
+        )
+
+        print(
+            "  a flat image hashes to the DC bit alone in the release build, "
+                + "and its 63 other coefficients are exactly zero")
+        print(
+            "  a q=0.9 JPEG moved the hash \(distance) bits; the inversion moved "
+                + "\(fromPNG.distance(to: inverted))")
     }
 
     // MARK: - about

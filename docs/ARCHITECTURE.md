@@ -646,6 +646,63 @@ de los dos lados. Medido contra el CLI sobre un árbol real: **el mismo conjunto
 revés** antes del arreglo. Lo destapa una carpeta cuyo nombre es prefijo del de su hermana, que sesenta
 árboles aleatorios del test diferencial nunca produjeron.
 
+### El hash perceptual: cuatro etapas y una propiedad numérica que decide todo
+
+El pipeline es grises → Lanczos-3 a 32×32 → DCT-II 2D → recortar 8×8 → umbralar contra la mediana de esos 64.
+Cada etapa está anclada a una medición contra la referencia (`imagehash` sobre Pillow 12.2.0), no a lo que
+parecía razonable.
+
+**La conversión a grises: Pillow redondea.** El plan decía que truncaba. Medido sobre diez triples,
+`(19595·R + 38470·G + 7471·B + 0x8000) >> 16` acierta los diez y la forma truncada falla tres —
+`(0,255,0)` da 149 contra los 150 de Pillow. Un tercio de los píxeles de una foto real corrido en uno mueve
+coeficientes del DCT y puede voltear un bit.
+
+**El DCT tiene que cancelar exacto, y eso decidió la implementación.** Una imagen plana transforma a un solo
+coeficiente y 63 ceros; la mediana es cero y solo el bit del DC prende. Pero esos ceros son cero **únicamente
+si la aritmética cancela exactamente**:
+
+| transformada de una constante | max&#124;AC&#124; en el bloque 8×8 |
+|---|---|
+| `vDSP.DCT`, `Float` | **0.0, exacto** |
+| matriz de la base vía `vDSP_mmul`, `Float` | ~1e-3, de signo mezclado |
+| `scipy.fftpack.dct`, `Float64` | **0.0, exacto** |
+
+Y una mediana tomada sobre 63 valores diminutos de signo mezclado **es** uno de ellos, así que la mitad quedan
+arriba: una perturbación de 1e-3 prende **32 bits en vez de 1**, verificado en Python metiéndole ese ruido a
+una constante. La precisión no es lo que lo arregla — las mariposas de una FFT restan valores iguales y dan
+ceros exactos; una suma de 32 cosenos que matemáticamente cancela, no, a ninguna precisión. Así que la forma
+matricial es la definición más clara y la implementación equivocada, y vive en los tests como el oráculo que sí
+es bueno siendo.
+
+Eso importa mucho más allá de un fixture plano: **una barra de letterbox, un fondo sólido, un frame negro.**
+El camino de video se apoya en que frames idénticos den hashes idénticos.
+
+**Por eso también se cuantiza a `UInt8` después del resample.** El ringing de Lanczos y los pesos en `Float`
+dejan una región plana en `255 ± 1e-3` en vez de exactamente 255, y ahí vuelve el volado de los 32 bits.
+Redondear después del resample lo cierra. **Cuantizar también *entre* las dos pasadas —lo que hace Pillow— se
+midió y empeora**: 89.97% de coincidencia exacta contra 90.88%. El instinto del plan de rechazarlo era
+correcto, y ahora tiene número en vez de estética.
+
+**El tamaño de decode se barrió sobre 2,763 fotos reales**, y el barrido mata dos suposiciones: pedirle a
+ImageIO un thumbnail de 32 px es un desastre (10.9% de coincidencia, 2.5% menos pares encontrados), y la
+respuesta de este pipeline **deja de moverse en 128** — 4,329 / 4,332 / 4,328 / 4,331 pares de 128 a 4096, un
+rango de 0.1%. Pasado 256, el decode extra compra coincidencia con Python, no mejores respuestas. La tabla
+completa está en el doc comment de `ImageHasher`.
+
+**Qué tan cerca queda, medido:** 90.4% idéntico bit a bit sobre 2,779 fotos, 99.2% dentro de dos bits. Las 16
+que quedaron a más de cinco bits son **las 16 únicas del corpus con etiqueta de rotación EXIF** — la
+divergencia elegida a propósito, porque una copia que solo difiere en un flag de rotación debería coincidir con
+su original y el `phash` de Pillow diría que no. Sin ellas, el peor caso sobre 2,763 imágenes es de **4 bits**.
+
+**Y el criterio de aceptación del plan no se cumple:** pedía Jaccard ≥ 0.98 del conjunto de pares a distancia
+≤5, y a 256 sale **0.9670**. Solo el decode completo llega (0.9879), a 2.65× el tiempo. Lo que sí se cumple es
+el criterio duro: **cero pares** que una herramienta llame ≤2 y la otra >5.
+
+**Lo que un pHash no puede distinguir**, y conviene saberlo antes de reportarlo como bug: solo mira las ocho
+frecuencias espaciales más bajas. Un tablero de ajedrez de 8 px en una imagen de 128 tiene toda su energía
+fuera de ese bloque, así que el hash ve un gris plano y responde lo mismo que para un gris plano. `imagehash`
+responde igual. Hay un test que lo fija con su razón.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
