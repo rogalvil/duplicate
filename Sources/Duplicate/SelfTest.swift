@@ -3517,6 +3517,19 @@ enum SelfTest {
         try await waitOnMainActor(
             until: { library.similarRowCount == 1 },
             what: "the perceptual scan to reach the table")
+        // **The footer and the empty state have to follow the list they are describing.** They did not: a
+        // screenshot of 31 real perceptual scans showed "0 escaneos - 0 mostrados" under them and the
+        // "no scans yet" placeholder drawn *on top of* the rows, because both were still reading the exact
+        // detector's array. The mode listed the rows and never looked at either.
+        // Teeth: read `rows` instead of `similarRows` in `updateEmptyState` and the placeholder comes back.
+        try expect(
+            library.emptyStateText == nil,
+            "the empty state says \(library.emptyStateText ?? "") over \(library.similarRowCount) rows"
+        )
+        try expect(
+            library.footerText.contains("1"),
+            "the footer reads \(library.footerText) for one scan"
+        )
 
         // 4. The viewer shows both sides, and they are **different files**.
         let viewer = SimilarPairWindowController(scan: reloaded)
@@ -3539,6 +3552,37 @@ enum SelfTest {
         try expect(viewer.leftPaneText == pair.fileA, "the left pane is not file_a")
         try expect(viewer.rightPaneText == pair.fileB, "the right pane is not file_b")
         try expect(!viewer.footerText.isEmpty, "the footer is empty")
+
+        // 5. The header states the right quantity for the kind, and a missing file says so.
+        // Teeth: use the image header for a video pair and this fails naming the bits.
+        try expect(
+            viewer.headerText.contains("64"),
+            "an image pair's header does not mention the 64 bits: \(viewer.headerText)"
+        )
+        let videoScan = SimilarScan(
+            scanID: instant.identifier, root: tree, createdAt: instant.timestamp,
+            imageThreshold: 5, videoThreshold: 0.7,
+            pairs: [
+                SimilarPair(
+                    fileA: tree + "/gone-a.mp4", fileB: tree + "/gone-b.mp4",
+                    similarity: 1.0, mediaKind: .video)
+            ]
+        )
+        let videoViewer = SimilarPairWindowController(scan: videoScan)
+        defer { videoViewer.window?.close() }
+        videoViewer.selectPairForSelftest(0)
+        // A video similarity is a fraction of sampled frames. There is no 64-bit distance behind it, and
+        // printing one would state a measurement that was never taken.
+        try expect(
+            !videoViewer.headerText.contains("64"),
+            "a video pair's header claims a bit distance: \(videoViewer.headerText)"
+        )
+        // And a file that is gone is named as gone rather than left as a blank rectangle -- measured on the
+        // real corpus, one side of the very first pair no longer exists.
+        try expect(
+            !videoViewer.leftStateForSelftest.isEmpty,
+            "a missing file's pane says nothing"
+        )
 
         let fit = viewer.requiredContentSize
         try expect(

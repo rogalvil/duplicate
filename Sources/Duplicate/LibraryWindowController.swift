@@ -276,6 +276,15 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     ///
     /// The per-scan figures stay: each one is about one scan and is honest about its own bounds.
     private func updateFooter() {
+        if showingSimilar {
+            footer.stringValue = String(
+                format: Strings.string("library.footer.similar"),
+                similarRows.count,
+                similarRows.reduce(0) { $0 + $1.imagePairCount },
+                similarRows.reduce(0) { $0 + $1.videoPairCount }
+            )
+            return
+        }
         if showingFolders {
             footer.stringValue = String(
                 format: Strings.string("library.footer.folders"),
@@ -289,6 +298,13 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     }
 
     private func updateEmptyState() {
+        if showingSimilar {
+            emptyState.isHidden = !similarRows.isEmpty || !hasLoadedOnce
+            if similarRows.isEmpty {
+                emptyState.stringValue = Strings.string("library.empty.similar")
+            }
+            return
+        }
         if showingFolders {
             emptyState.isHidden = !folderRows.isEmpty || !hasLoadedOnce
             if folderRows.isEmpty {

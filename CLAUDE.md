@@ -302,6 +302,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El setup de `vDSP.DCT` cuesta 1 µs**, no lo que el plan supuso: 1,000 setups de tamaño 32 en 1.0 ms. No hay
   que reusarlo por worker, y así el tipo se queda siendo un valor sin discusión de `Sendable`. Su método es
   `transform(_:result:)`, no `output:`.
+- **Un estado vacío y un pie que leen otra lista se dibujan encima de la lista que sí hay.** Lo destapó una
+  captura: 31 escaneos perceptuales en pantalla, el pie diciendo "0 escaneos - 0 mostrados" y el placeholder de
+  "todavía no hay escaneos" **encima de las filas**, porque los dos seguían leyendo el arreglo del detector
+  exacto. Un arnés que cuenta filas no ve ninguna de las dos cosas; hay que afirmar sobre el pie y sobre el
+  estado vacío también.
+- **La similitud de un video no es una distancia de bits.** Es la fracción de cuadros muestreados que
+  coinciden, así que imprimir "difieren 0 de 64 bits" bajo un par de video —lo que salió— afirma una medición
+  que nunca se hizo. El encabezado cambia de texto según `media_type`.
+- **Un panel vacío no distingue "el archivo ya no está" de "la miniatura todavía no llega".** Y en el corpus
+  real pasa seguido: de los pares perceptuales, un lado del primero ya no existe. El panel lo dice.
 - **La clave de un thumbnail no siempre es el digest.** En un grupo exacto los archivos son idénticos por
   construcción y uno solo sirve para todos; en un par perceptual son **fotos distintas** —es lo que el detector
   encontró— y compartir la miniatura dibujaría una encima de la otra, o sea el peor bug posible en una vista
