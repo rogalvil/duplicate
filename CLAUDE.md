@@ -302,6 +302,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El setup de `vDSP.DCT` cuesta 1 µs**, no lo que el plan supuso: 1,000 setups de tamaño 32 en 1.0 ms. No hay
   que reusarlo por worker, y así el tipo se queda siendo un valor sin discusión de `Sendable`. Su método es
   `transform(_:result:)`, no `output:`.
+- **En `similar-scans`, `img_threshold` es entero y `vid_threshold` es float, en el mismo documento** — medido
+  en los 31 reales, sin excepción. Es el mismo par de errores opuestos que en carpetas: escribir `10.0` rompe
+  los 31, y escribir `similarity` como entero rompe 22 (los otros 9 documentos no tienen pares).
+- **Un `media_type` desconocido se rechaza, no se adivina.** El valor decide contra cuál umbral se juzgó el par,
+  así que leer uno raro como imagen reportaría mal lo que el escaneo encontró.
+- **`file_a` de un par parecido también es la ruta menor por bytes.** `similar-decisions` guarda `keep_a` o
+  `keep_b` contra una clave `"a||b"`, así que la orientación decide cuál archivo se borra — misma lección que
+  las carpetas, aplicada antes de que costara.
+- **Un escaneo perceptual de esta app no trae pares de video**, y eso cambia lo que encuentra. Se reporta en
+  `scannedKinds` y el resumen separa los conteos de imagen y de video para que un total no lo esconda.
 - **El índice LSH necesita `T + 1` bandas, no `T`.** Es la cota de palomar: con `T` bandas, `T` bits que
   difieren pueden tocar todas, y no queda ninguna idéntica que garantice el encuentro. Medido: bajarlo a `T`
   hace que **6 de 12 semillas pierdan pares** en el test de superconjunto. Y colapsar los hashes idénticos en

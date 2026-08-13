@@ -484,6 +484,71 @@ enum SelfTest {
             print("  \(groups) groups, \(files) files, \(relative) scans with relative paths")
         }
         try checkTypedFolderRoundTrip(arguments: arguments)
+        try checkTypedSimilarRoundTrip(arguments: arguments)
+    }
+
+    /// And the same for the perceptual documents, which carry the opposite pair of number types.
+    ///
+    /// The 31 real documents on this machine hold 1,271 pairs, 1,100 of them at `"similarity": 1.0`, an
+    /// `img_threshold` that is an integer in every one and a `vid_threshold` that is a float in every one.
+    /// Read-only.
+    ///
+    /// Proof of teeth: write `img_threshold` as a double and all 31 differ; write `similarity` as an int and
+    /// every document with an identical pair differs.
+    private static func checkTypedSimilarRoundTrip(arguments: [String]) throws {
+        let state = StateDirectory.current()
+        let root = value(for: "--similar-dir", in: arguments) ?? state.path(for: .similarScans)
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: root) else {
+            print("  SKIPPED: \(root) is not readable")
+            return
+        }
+
+        var decoded = 0
+        var pairs = 0
+        var identicalPairs = 0
+        var videoPairs = 0
+        var failures: [String] = []
+        for name in names.sorted() where name.hasSuffix(".json") {
+            guard let data = FileManager.default.contents(atPath: root + "/" + name) else {
+                continue
+            }
+            do {
+                let scan = try SimilarScanCodec.decode(JSONReader.parse(data))
+                let reencoded = try JSONWriter.document(SimilarScanCodec.encode(scan))
+                guard reencoded == data else {
+                    let offset = zip(data, reencoded).enumerated()
+                        .first { $0.element.0 != $0.element.1 }?.offset
+                    failures.append(
+                        "\(name): differs at byte \(offset.map(String.init) ?? "the end")")
+                    continue
+                }
+                guard name == scan.scanID + ".json" else {
+                    failures.append("\(name): holds scan_id \(scan.scanID)")
+                    continue
+                }
+                decoded += 1
+                pairs += scan.pairCount
+                identicalPairs += scan.pairs.filter { $0.similarity == 1.0 }.count
+                videoPairs += scan.pairCount(of: .video)
+            } catch {
+                failures.append("\(name): \(error)")
+            }
+        }
+
+        guard failures.isEmpty else {
+            throw SelfTestFailure(
+                "\(failures.count) perceptual documents failed:\n    "
+                    + failures.prefix(10).joined(separator: "\n    ")
+            )
+        }
+        if decoded == 0 {
+            print("  SKIPPED: no perceptual scans in \(root)")
+        } else {
+            print(
+                "  \(decoded) perceptual scans re-encoded byte-identically: \(pairs) pairs, "
+                    + "\(identicalPairs) of them exactly 1.0, \(videoPairs) of video"
+            )
+        }
     }
 
     /// The same typed round-trip for the folder documents.

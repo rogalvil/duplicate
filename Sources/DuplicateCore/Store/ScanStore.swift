@@ -83,6 +83,61 @@ public struct ScanStore: Sendable {
         }
     }
 
+    // MARK: - Similar scans
+
+    @discardableResult
+    public func save(_ scan: SimilarScan) throws -> String {
+        try state.create(.similarScans)
+        let path = try state.filePath(for: .similarScans, id: scan.scanID)
+        let data = try JSONWriter.document(SimilarScanCodec.encode(scan))
+        try data.write(to: URL(filePath: path), options: .atomic)
+        return path
+    }
+
+    public func loadSimilarScan(id: String) throws -> SimilarScan {
+        let path = try state.filePath(for: .similarScans, id: id)
+        guard let data = FileManager.default.contents(atPath: path) else {
+            throw StoreError.notFound(kind: .similarScans, id: id)
+        }
+        return try SimilarScanCodec.decode(JSONReader.parse(data))
+    }
+
+    /// A summary of one perceptual scan for a list.
+    public struct SimilarSummary: Sendable, Hashable {
+        public let scanID: String
+        public let root: String
+        public let createdAt: String
+        public let imageThreshold: Int
+        public let videoThreshold: Double
+        public let pairCount: Int
+        public let imagePairCount: Int
+        public let videoPairCount: Int
+        public let involvedFileCount: Int
+        public let hasRelativePaths: Bool
+    }
+
+    /// Summaries for every readable perceptual scan.
+    ///
+    /// The image and video counts are separate because the two are judged against different thresholds and this
+    /// app can only produce one of them so far. A single total would hide which.
+    public func similarSummaries() -> [SimilarSummary] {
+        identifiers(in: .similarScans).compactMap { id in
+            guard let scan = try? loadSimilarScan(id: id) else { return nil }
+            return SimilarSummary(
+                scanID: scan.scanID,
+                root: scan.root,
+                createdAt: scan.createdAt,
+                imageThreshold: scan.imageThreshold,
+                videoThreshold: scan.videoThreshold,
+                pairCount: scan.pairCount,
+                imagePairCount: scan.pairCount(of: .image),
+                videoPairCount: scan.pairCount(of: .video),
+                involvedFileCount: scan.involvedFileCount,
+                hasRelativePaths: scan.hasRelativePaths
+            )
+        }
+    }
+
     // MARK: - Decisions
 
     @discardableResult

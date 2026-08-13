@@ -703,6 +703,29 @@ frecuencias espaciales más bajas. Un tablero de ajedrez de 8 px en una imagen d
 fuera de ese bloque, así que el hash ve un gris plano y responde lo mismo que para un gris plano. `imagehash`
 responde igual. Hay un test que lo fija con su razón.
 
+### El escaneo perceptual, y lo que un documento suyo no dice
+
+El escaneo de imágenes ya corre de punta a punta: recorre, hashea **todas** las imágenes de las extensiones del
+CLI (`jpg`, `jpeg`, `png`, `webp`, `gif`), indexa, verifica y guarda un documento que `rav duplicate similar`
+lee byte a byte — verificado contra los 31 reales de esta máquina, 1,271 pares, 1,100 de ellos en `1.0`.
+
+**Y no trae ni un par de video.** Eso no es un detalle de formato: cambia lo que el escaneo encuentra. El
+documento lleva su `vid_threshold` porque el lector del CLI lo espera y porque un escaneo a otro umbral de video
+es otro escaneo, pero la lista sale sin video. Se reporta en `scannedKinds`, y el resumen de la biblioteca
+separa el conteo de imagen del de video para que un total no lo esconda.
+
+**`file_a` es la ruta menor por bytes**, por la misma razón que en carpetas y aprendida ahí: `similar-decisions`
+guarda `keep_a` o `keep_b` contra una clave `"a||b"` (`similar_review.py:310-315`), así que cuál ruta va en cuál
+campo es sobre qué actúa una revisión. Tomarlo del orden del recorrido sería tomarlo de algo que nada promete
+reproducir.
+
+**Un archivo ilegible se salta y se nombra**, como el `None` de `phash_image`: un JPEG corrupto no puede perder
+los otros nueve mil.
+
+**Lo que todavía no hay es caché de hashes perceptuales.** Un re-escaneo vuelve a decodificar todo: medido, 2,779
+imágenes en 18 s. La caché de SHA-256 no sirve —es otra clave y otro valor— y la del pHash necesita la versión
+del pipeline estampada, o serviría números que significan otra cosa.
+
 ### El índice LSH: una cota de palomar, y el colapso que importa más
 
 El CLI compara todos los pares: dos loops anidados sobre cada par de archivos
