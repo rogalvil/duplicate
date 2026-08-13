@@ -37,6 +37,7 @@ final class ScanPanelController: NSWindowController {
     private let folderSession: FolderScanSession
     private let similarSession: SimilarScanSession
     private let hiddenToggle = NSButton()
+    private let videoToggle = NSButton()
     private let packagesToggle = NSButton()
     private let cacheToggle = NSButton()
     private let minimumSizeField = NSTextField()
@@ -101,6 +102,14 @@ final class ScanPanelController: NSWindowController {
 
         rebuildThresholdMenu()
         thresholdPopup.isHidden = true
+
+        // **On by default, like the CLI, and offered because video is the expensive half.** Measured on a real
+        // tree: 2,779 images take 19 seconds and 617 videos take 93. Someone who wants a quick pass over a
+        // photo folder should not pay for the movies sitting next to it.
+        videoToggle.setButtonType(.switch)
+        videoToggle.title = Strings.string("scan.includeVideo")
+        videoToggle.state = .on
+        videoToggle.isHidden = true
 
         // Recent roots, so a second scan of the same folder is a click rather than a walk through the open
         // panel. Hidden entirely when there are none, because an empty popup is worse than no popup.
@@ -182,7 +191,7 @@ final class ScanPanelController: NSWindowController {
         optionsStack.spacing = 10
         let detectorRow = NSStackView(views: [
             NSTextField(labelWithString: Strings.string("scan.detector")), detectorPopup,
-            thresholdPopup,
+            thresholdPopup, videoToggle,
         ])
         detectorRow.orientation = .horizontal
         detectorRow.spacing = 8
@@ -340,6 +349,7 @@ final class ScanPanelController: NSWindowController {
         // for both would be two meanings behind one number, so the items are rebuilt with the detector.
         rebuildThresholdMenu()
         thresholdPopup.isHidden = detector == .exact
+        videoToggle.isHidden = detector != .similar
     }
 
     private func rebuildThresholdMenu() {
@@ -390,7 +400,8 @@ final class ScanPanelController: NSWindowController {
         if detector == .similar {
             let similarSession = self.similarSession
             let similarRequest = SimilarScanSession.Request(
-                root: request.root, imageThreshold: imageThreshold, policy: request.policy)
+                root: request.root, imageThreshold: imageThreshold, policy: request.policy,
+                includesVideo: videoToggle.state == .on)
             task = Task { [weak self] in
                 let outcome: Result<SimilarScanSession.Result, any Error>
                 do {
@@ -657,6 +668,12 @@ final class ScanPanelController: NSWindowController {
     var isFolderScanForSelftest: Bool { isFolderScan }
     var thresholdForSelftest: Double { threshold }
     var imageThresholdForSelftest: Int { imageThreshold }
+    var includesVideoForSelftest: Bool { videoToggle.state == .on }
+    var isVideoToggleVisibleForSelftest: Bool { !videoToggle.isHidden }
+
+    func setIncludesVideoForSelftest(_ on: Bool) {
+        videoToggle.state = on ? .on : .off
+    }
 
     func chooseSimilarDetectorForSelftest() {
         detectorPopup.selectItem(at: 2)

@@ -203,7 +203,9 @@ struct SimilarScanSessionTests {
         #expect(found.similarity == 1.0)
         #expect(found.mediaKind == .image)
         #expect(result.saveFailure == nil)
-        #expect(result.scannedKinds == [.image])
+        // Both kinds are looked at by default now, like the CLI -- there is simply no video in this tree.
+        #expect(result.scannedKinds == [.image, .video])
+        #expect(result.videoCount == 0)
 
         let reloaded = try scratch.store.loadSimilarScan(id: noon.identifier)
         #expect(reloaded == result.scan)
@@ -365,5 +367,123 @@ struct SimilarScanSessionTests {
         #expect(summary.videoPairCount == 0)
         #expect(summary.involvedFileCount == 2)
         #expect(summary.hasRelativePaths == false)
+    }
+}
+
+@Suite("SimilarScanSession video")
+struct SimilarScanSessionVideoTests {
+
+    private func writeMovie(
+        _ scratch: SimilarScratch, _ relative: String, _ pattern: SyntheticMovie.Pattern,
+        seconds: Double = 6
+    ) async throws -> String {
+        let path = scratch.tree + "/" + relative
+        try FileManager.default.createDirectory(
+            atPath: (path as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true
+        )
+        return try await SyntheticMovie.write(
+            SyntheticMovie.Specification(seconds: seconds, pattern: pattern), to: path)
+    }
+
+    @Test("Two copies of one clip are found as a video pair")
+    func findsVideoPairs() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        _ = try await writeMovie(scratch, "a/one.mp4", .movingBlock)
+        _ = try await writeMovie(scratch, "b/two.mp4", .movingBlock)
+        // And a clip that looks nothing like them.
+        _ = try await writeMovie(scratch, "b/three.mp4", .constantGrey(200))
+
+        let result = try await scratch.session().run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon)
+
+        #expect(result.videoCount == 3)
+        #expect(result.videoPairsCompared == 3, "three videos are three pairs")
+        let videoPairs = result.scan.pairs.filter { $0.mediaKind == .video }
+        #expect(videoPairs.count == 1, "\(videoPairs.count) video pairs, wanted 1")
+        #expect(videoPairs.first?.similarity == 1.0)
+        #expect(result.scannedKinds == [.image, .video])
+    }
+
+    @Test("Video can be turned off, and then nothing video is read")
+    func skipsVideoWhenAsked() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        _ = try await writeMovie(scratch, "one.mp4", .movingBlock)
+        _ = try await writeMovie(scratch, "two.mp4", .movingBlock)
+
+        let result = try await scratch.session().run(
+            SimilarScanSession.Request(root: scratch.tree, includesVideo: false), instant: noon)
+        #expect(result.videoCount == 0)
+        #expect(result.videoPairsCompared == 0)
+        #expect(result.scan.pairs.isEmpty)
+        #expect(result.scannedKinds == [.image])
+    }
+
+    /// **The orientation rule, on the side where it changes the number.** `video_similarity` is asymmetric, so
+    /// which file is A decides the answer; taking it from the walk would make the same pair score differently
+    /// on another machine.
+    @Test("A video pair is oriented by bytes")
+    func orientsVideoPairsByBytes() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        _ = try await writeMovie(scratch, "wen/s/clip.mp4", .movingBlock)
+        _ = try await writeMovie(scratch, "wen 2/s/clip.mp4", .movingBlock)
+
+        let result = try await scratch.session().run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon)
+        let pair = try #require(result.scan.pairs.first { $0.mediaKind == .video })
+        #expect(pair.fileA.contains("wen 2/s/clip.mp4"))
+        #expect(PathOrder.lessThan(pair.fileA, pair.fileB))
+    }
+
+    /// A file with a video extension that no demuxer opens is named, not silently dropped -- which is where
+    /// `.mkv` and `.avi` land.
+    @Test("A video nothing can read is reported unreadable")
+    func reportsUnreadableVideo() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        let broken = scratch.tree + "/broken.mp4"
+        try Data("not a movie".utf8).write(to: URL(filePath: broken))
+        _ = try await writeMovie(scratch, "fine.mp4", .movingBlock)
+
+        let result = try await scratch.session().run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon)
+        #expect(result.unreadable.contains(broken))
+        #expect(result.videoCount == 1)
+    }
+
+    @Test("Images and videos are found in one scan and counted apart")
+    func findsBothKinds() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        try scratch.writeImage("a.png", .rampWithCorner)
+        try scratch.writeImage("b.png", .rampWithCorner)
+        _ = try await writeMovie(scratch, "one.mp4", .movingBlock)
+        _ = try await writeMovie(scratch, "two.mp4", .movingBlock)
+
+        let result = try await scratch.session().run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon)
+        #expect(result.scan.pairCount(of: .image) == 1)
+        #expect(result.scan.pairCount(of: .video) == 1)
+        #expect(result.hashedCount == 4)
+        // Sorted by similarity, so both being 1.0 leaves the byte order to break the tie.
+        #expect(result.scan.pairs.count == 2)
+    }
+
+    @Test("Progress counts videos as candidates too")
+    func countsVideosInProgress() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        try scratch.writeImage("a.png", .rampWithCorner)
+        _ = try await writeMovie(scratch, "one.mp4", .movingBlock)
+
+        let counters = ProgressCounters()
+        _ = try await scratch.session().run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon, progress: counters)
+        let snapshot = counters.snapshot()
+        #expect(snapshot.candidates == 2)
+        #expect(snapshot.filesHashed == 2)
     }
 }

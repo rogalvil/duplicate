@@ -28,6 +28,11 @@ public enum VideoFrameSampler {
     /// frames. Clamping them into range would compare *different* frames than the CLI compares, at the same
     /// threshold.
     ///
+    /// ``VideoHasher`` drops them rather than asking for them, and that is not the same thing as clamping:
+    /// measured, `AVAssetImageGenerator` with a one-second tolerance answers a request past the end with the
+    /// nearest frame it has, so a 0.4-second clip came back with eight hashes, the last frame repeated four
+    /// times. Both a clamp and that helpfulness would change the frame ratio the threshold is applied to.
+    ///
     /// A duration of zero means the container did not say. The CLI falls back to a one-second interval there,
     /// which for a real file usually yields a few frames and then failures.
     public static func timestamps(duration: Double, count: Int = defaultFrameCount) -> [Double] {

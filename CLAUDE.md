@@ -317,6 +317,17 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   que nunca se hizo. El encabezado cambia de texto según `media_type`.
 - **Un panel vacío no distingue "el archivo ya no está" de "la miniatura todavía no llega".** Y en el corpus
   real pasa seguido: de los pares perceptuales, un lado del primero ya no existe. El panel lo dice.
+- **El LSH no aplica al video.** Indexa hashes sueltos; el video compara *listas* con una regla codiciosa y
+  asimétrica. Así que los videos se comparan por pares como en el CLI — 617 videos son 190,036 pares — y sale
+  barato porque cada comparación son popcounts. Lo caro es hashear.
+- **Cuatro decodes de video a la vez, medido, no elegido**: 60 videos reales dieron 213 ms cada uno en serie,
+  151 ms con cuatro, y **151 ms con ocho**. `AVAssetImageGenerator` ya paraleliza adentro; más workers solo
+  suben la memoria.
+- **Una marca de tiempo pasada del final NO devuelve nada en `ffmpeg` y SÍ devuelve algo aquí.** Con tolerancia
+  de un segundo, `AVAssetImageGenerator` contesta con el cuadro más cercano: un clip de 0.4 s volvió con **ocho
+  hashes**, el último cuadro repetido cuatro veces, donde el CLI hashea cuatro. Eso cambia en silencio la
+  fracción de cuadros a la que se aplica el 0.70, así que las marcas pasadas del final se filtran antes de
+  pedirlas. Medido, no previsto.
 - **La aritmética de muestreo de video se preserva exacta, y no es pedantería.** `interval = max(dur/(n+1), 0.1)`
   y cuadros en `interval·(i+1)`: el umbral de 0.70 se calibró contra *ese* muestreo, así que muestrear distinto
   cambia en silencio lo que el umbral significa mientras cada número en pantalla conserva su nombre. El `n+1`

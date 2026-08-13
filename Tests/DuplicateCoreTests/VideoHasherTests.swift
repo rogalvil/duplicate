@@ -252,3 +252,48 @@ struct VideoSimilarityTests {
         #expect(VideoSimilarity.similarity(a, b) == 0.5)
     }
 }
+
+@Suite("Video asymmetry on real files")
+struct VideoAsymmetryTests {
+
+    /// **The asymmetry, measured on two real movies rather than on hand-written hashes.** A six-second flat
+    /// clip yields eight identical frames; a very short one yields fewer, because the 0.1 s sampling floor puts
+    /// half the timestamps past its end. Comparing the long one against the short one asks "did each of my
+    /// eight frames find a partner" -- yes, all eight -- while the other direction divides the short one's few
+    /// matches by the longer list.
+    ///
+    /// The two answers land on opposite sides of the 0.70 threshold, so **which file the caller happens to hold
+    /// first decides whether the pair exists at all**. That is why the walked side is fixed by path bytes.
+    @Test("The two directions of a real comparison disagree across the threshold")
+    func directionsDisagreeOnRealFiles() async throws {
+        let scratch = try MovieScratch()
+        defer { scratch.remove() }
+        let long = try await SyntheticMovie.write(
+            SyntheticMovie.Specification(seconds: 6, pattern: .constantGrey(128)),
+            to: scratch.path("long.mp4"))
+        let short = try await SyntheticMovie.write(
+            SyntheticMovie.Specification(frameRate: 20, seconds: 0.4, pattern: .constantGrey(128)),
+            to: scratch.path("short.mp4"))
+
+        let hasher = VideoHasher()
+        let longHashes = try await hasher.hashes(fileURL: URL(filePath: long)).hashes
+        let shortHashes = try await hasher.hashes(fileURL: URL(filePath: short)).hashes
+        #expect(
+            longHashes.count > shortHashes.count, "the fixture no longer has two different lengths")
+
+        let forward = VideoSimilarity.similarity(longHashes, shortHashes)
+        let backward = VideoSimilarity.similarity(shortHashes, longHashes)
+        #expect(forward == 1.0)
+        #expect(backward < forward)
+        #expect(
+            VideoSimilarity.directionsDisagree(longHashes, shortHashes),
+            "forward \(forward), backward \(backward) -- both on the same side of 0.70"
+        )
+        // And the oriented answer is the same whichever way the caller holds it.
+        let a = VideoSimilarity.orientedSimilarity(
+            pathA: long, hashesA: longHashes, pathB: short, hashesB: shortHashes)
+        let b = VideoSimilarity.orientedSimilarity(
+            pathA: short, hashesA: shortHashes, pathB: long, hashesB: longHashes)
+        #expect(a == b)
+    }
+}
