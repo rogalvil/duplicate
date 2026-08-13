@@ -215,3 +215,7 @@
 "library.delete.title" = "Delete scan %@?";
 "library.delete.body" = "Only the scan record and its saved review are removed. No file this scan found is touched. The folder can be scanned again at any time.";
 "library.delete.confirm" = "Delete the Record";
+"review.imported.title" = "This scan already has a decision for all %d groups";
+"review.imported.body" = "The rav duplicate CLI writes a decision for every group, including ones nobody opened, filled in with its own guess. So these check marks may not be choices you made. Reviewing again keeps them as a starting point; starting over clears them. Nothing is written either way until you save or apply.";
+"review.imported.keep" = "Keep Them";
+"review.imported.discard" = "Start Over";

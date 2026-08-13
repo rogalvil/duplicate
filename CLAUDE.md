@@ -261,6 +261,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Rehidratar un archivo de decisiones del CLI hace que *todos* los grupos salgan decididos**, porque el
+  CLI escribe una entrada por grupo incluidos los que nadie abrió. Medido en este corpus: **55 de 56
+  archivos tienen exactamente una decisión por grupo**, y el único parcial es el que escribió esta app. La
+  app los carga —son el formato compartido— y avisa: ni rehusarlos ni tirarlos en silencio serían mejores,
+  los dos son la app decidiendo por el usuario.
+- **Una ventana necesita `minSize`, no confiar en sus constraints.** Arrastrada por debajo de lo que el
+  layout necesita, AutoLayout empieza a romper constraints y el panel de detalle desaparece entero — visto
+  en una captura real: ventana aplastada, mitad derecha vacía, sin pie.
+- **`make lint` no ve los warnings del compilador.** Es `swift-format`, no `swiftc`. Un `try?` sin usar pasó
+  el gate y salió en la consola del usuario.
 - **Cambiar el valor por default de un campo no es un arreglo de copy.** Poner "1 KB" en el campo de
   tamaño mínimo se veía como aclarar la unidad y era una divergencia de comportamiento: el archivo de 6
   bytes dejó de contarse y el modo `scan-window` lo atrapó. El default del CLI es 1 byte y ahí se queda;
