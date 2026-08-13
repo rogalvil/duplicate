@@ -37,8 +37,7 @@
 "library.toolbar.sort" = "Ordenar";
 "library.toolbar.search" = "Filtrar";
 /* %1$d escaneos, %2$d grupos, %3$d archivos, %4$@ un tamaño ya formateado. */
-"library.footer" = "%1$d escaneos - %2$d grupos - %3$d archivos - %4$@ recuperables";
-"library.footer.upperBound" = "%1$d escaneos - %2$d grupos - %3$d archivos - hasta %4$@ recuperables";
+"library.footer" = "%1$d escaneos - %2$d mostrados";
 /* %@ es el directorio de donde se leen los escaneos. */
 "library.empty" = "Todavía no hay escaneos.\n\nCorre rav duplicate scan <carpeta> y aparecerá aquí.\n\n%@";
 "library.empty.filtered" = "Ningún escaneo coincide con el filtro.";
@@ -84,8 +83,6 @@
 /* %1$d de %2$d grupos, %3$@ cada uno, %4$d archivos, %5$@ liberados. */
 "review.subheader" = "Grupo %1$d de %2$d - %3$@ cada uno - %4$d archivos - libera %5$@";
 "review.subheader.upperBound" = "Grupo %1$d de %2$d - %3$@ cada uno - %4$d archivos - libera hasta %5$@";
-/* %1$d índice del grupo, %2$@ tamaño, %3$d cuántos archivos. */
-"review.group.row" = "Grupo %1$d - %2$@ - %3$d archivos";
 "review.warning.preview" = "Todavía no hay nada decidido. La marca es solo una sugerencia, y cerrar esta ventana no registra nada para este grupo.";
 "review.warning.keepNothing" = "Un grupo tiene que conservar al menos un archivo. Para quitar todas las copias, usa Grupo > Descartar el grupo completo.";
 "review.warning.sharedStorage" = "Un archivo comparte su almacenamiento con el que estás conservando, así que quitarlo no liberaría nada. No se ofrece.";
@@ -131,9 +128,9 @@
 "scan.badRoot" = "Esa carpeta no se puede escanear";
 "scan.chooseFolder" = "Elegir carpeta...";
 "scan.chooseFolder.prompt" = "Escanear";
-"scan.option.hidden" = "Incluir archivos ocultos (el CLI lo hace; una carpeta de .DS_Store idénticos entierra los hallazgos reales)";
-"scan.option.packages" = "Entrar a paquetes como .app y .photoslibrary (sacarles un archivo los corrompe)";
-"scan.option.cache" = "Usar la caché de hashes (un segundo escaneo de la misma carpeta es mucho más rápido)";
+"scan.option.hidden" = "Incluir archivos ocultos";
+"scan.option.packages" = "Entrar a los paquetes";
+"scan.option.cache" = "Usar la caché de hashes";
 "scan.option.minimumSize" = "Ignorar archivos menores a";
 "scan.start" = "Empezar";
 "scan.stopping" = "Deteniendo...";
@@ -206,3 +203,14 @@
 /* Pie de la revisión */
 "review.button.simulate" = "Simular y aplicar...";
 "library.toolbar.review" = "Revisar";
+"scan.option.hidden.why" = "El CLI lo hace. Una carpeta de .DS_Store idénticos entierra todos los hallazgos reales.";
+"scan.option.packages.why" = "Sacarle un archivo a un .app o un .photoslibrary lo corrompe en silencio.";
+"scan.option.cache.why" = "Un segundo escaneo de la misma carpeta es mucho más rápido. Medido: 130 s en frío, 7 s en caliente sobre 806 GB.";
+"scan.option.minimumSize.hint" = "Lo más chico se ignora, igual que el CLI.";
+"scan.recent.placeholder" = "Recientes...";
+"review.group.title" = "Grupo %d";
+"review.group.detail" = "%1$@ cada uno - %2$d archivos";
+"library.action.delete" = "Borrar este escaneo...";
+"library.delete.title" = "¿Borrar el escaneo %@?";
+"library.delete.body" = "Solo se quita el registro del escaneo y la revisión guardada. Ningún archivo que este escaneo encontró se toca. La carpeta se puede volver a escanear cuando quieras.";
+"library.delete.confirm" = "Borrar el registro";

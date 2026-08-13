@@ -64,6 +64,25 @@ public struct ScanStore: Sendable {
         (try? loadDecisions(scanID: scanID))?.byKey ?? [:]
     }
 
+    /// Removes a scan and the decisions saved beside it.
+    ///
+    /// **Both, because a decisions file without its scan is unreadable.** It is keyed by group digests that
+    /// only the scan explains, so leaving it behind would leave a file nothing can interpret and nothing
+    /// will ever clean up.
+    ///
+    /// A missing file is not an error: deleting something already gone is the outcome the caller wanted.
+    @discardableResult
+    public func delete(id: String) throws -> Bool {
+        let scan = try state.filePath(for: .scans, id: id)
+        let decisions = try state.filePath(for: .decisions, id: id)
+        var removed = false
+        for path in [scan, decisions] where FileManager.default.fileExists(atPath: path) {
+            try FileManager.default.removeItem(atPath: path)
+            removed = true
+        }
+        return removed
+    }
+
     // MARK: - Listing
 
     /// Identifiers in a slot, newest first.

@@ -261,6 +261,14 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   El conjunto de acción **nunca** es `files[1:]`: es un representante por clase de almacenamiento
   menos la clase del keeper. Con `files[1:]`, un grupo con hardlink manda a la Papelera un segundo
   nombre del inodo que se está conservando.
+- **Cambiar el valor por default de un campo no es un arreglo de copy.** Poner "1 KB" en el campo de
+  tamaño mínimo se veía como aclarar la unidad y era una divergencia de comportamiento: el archivo de 6
+  bytes dejó de contarse y el modo `scan-window` lo atrapó. El default del CLI es 1 byte y ahí se queda;
+  un default que valga cambiar se cambia a propósito, en su propio cambio, y se dice en el README.
+- **Una línea malformada rompe el parseo del `.strings` completo.** Un `\n` literal en vez de un salto real
+  dejó `NSDictionary(contentsOf:)` sin poder leer el archivo, y el modo `l10n` reportó **todas** las claves
+  como ausentes, no solo la de al lado. El síntoma no señala la causa.
+- **`NSAlert` no renderiza markdown.** Los asteriscos de `**énfasis**` salen como asteriscos.
 - **Un pie con dos botones que suenan a "confirmar" es un botón de más.** "Guardar decisiones" al lado de
   "Simular y aplicar" hacía preguntar si guardar era requisito de aplicar — y no lo es. Quedó un solo
   botón primario; guardar pasa solo, antes de aplicar y al cerrar. Reportado como poco intuitivo desde el

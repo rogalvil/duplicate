@@ -514,6 +514,45 @@ que lo dice. Nunca un botón Restaurar que no va a hacer nada.
 Y `applicationShouldTerminate` devuelve `.terminateLater` mientras un apply corre: salir a medias dejaría
 archivos medio movidos y un journal que se corta.
 
+### Bookmarks security-scoped: rechazados, y por qué
+
+El plan pedía bookmarks security-scoped para que una carpeta elegida sobreviviera a un relanzamiento. Se
+rechazaron después de mirar para qué existen.
+
+`.withSecurityScope` existe para que una app **en sandbox** vuelva a alcanzar una carpeta que el usuario
+eligió en un panel, porque el sandbox lo olvida. Esta app **no está en sandbox** —verificado: no hay
+entitlement `com.apple.security.app-sandbox` en la firma— porque el estado compartido vive fuera de un
+contenedor y ese requisito lo decidió.
+
+Lo que gobierna el acceso aquí es TCC, que recuerda por **app**, con la llave del designated requirement,
+no por selección de carpeta. Un bookmark no compraría nada que TCC no dé ya, y escribirlo sería ceremonia
+con aspecto de seguridad.
+
+Lo que sí faltaba era mucho más chico: el panel olvidaba dónde escaneaste, así que cada escaneo empezaba
+navegando otra vez. Eso es `RecentRootsStore` — diez rutas, la más reciente primero, comparadas por bytes
+como todo lo demás, en `Application Support` y no en `Caches` porque una lista de carpetas que el usuario
+eligió no es dato derivado que se pueda reconstruir.
+
+### Lo que las capturas de pantalla enseñaron
+
+Tres capturas de uso real destaparon cosas que ningún test veía, porque ninguna es incorrecta — solo
+ilegible:
+
+- **Las etiquetas del escaneo eran comentarios de documentación.** "Incluir archivos ocultos (el CLI lo
+  hace; una carpeta de .DS_Store idénticos entierra los hallazgos reales)" es un párrafo, y se cortaba
+  contra el borde de la ventana. Título corto, razón debajo en gris.
+- **La barra lateral de grupos cortaba en "Grupo 864 - 41.1 KB - 2 ar…".** Tres datos en 210 puntos no
+  caben; en dos líneas sí.
+- **El encabezado de la columna decía "Cons…"** — una columna que no puede mostrar su propio nombre no la
+  interpreta nadie.
+- **El naranja se gastaba en el caso común.** El aviso de "todavía no hay nada decidido" sale en cada grupo
+  sin abrir, así que colorearlo como peligro deja al naranja sin significado para cuando de verdad hay uno.
+- **El total del pie era una mentira reconfortante.** Sumaba los bytes recuperables de escaneos que se
+  solapan —veinte de la misma carpeta en una tarde— y salía "hasta 422.5 GB recuperables" sobre un corpus
+  donde una muestra de doce escaneos encontró el 0.67% de sus rutas todavía en disco. Ahora el pie cuenta
+  escaneos y ya; las cifras por escaneo siguen, y esas sí son honestas sobre sus propias cotas.
+- **No había forma de borrar un escaneo**, y la biblioteca tenía 119 de cuatro días de mayo.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice

@@ -283,4 +283,45 @@ struct ScanStoreTests {
         )
         #expect(try #require(scratch.store.summaries().first).hasRelativePaths)
     }
+
+    /// **Both files, because a decisions file without its scan is unreadable.** It is keyed by group digests
+    /// that only the scan explains, so leaving it behind would leave a file nothing can interpret and
+    /// nothing will ever clean up.
+    @Test("Deleting a scan removes its decisions too")
+    func deletesBoth() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        try scratch.store.save(scan())
+        try scratch.store.save(
+            DecisionsDocument(
+                scanID: "20260511-064716-685054",
+                createdAt: "2026-05-11T06:50:00.000001Z",
+                decisions: [("2048:" + digest("a").hexString, ["/root/a.bin"])]
+            )
+        )
+        #expect(scratch.store.summaries().first?.hasDecisions == true)
+
+        #expect(try scratch.store.delete(id: "20260511-064716-685054"))
+        #expect(scratch.store.identifiers(in: .scans).isEmpty)
+        #expect(scratch.store.identifiers(in: .decisions).isEmpty)
+    }
+
+    @Test("Deleting a scan that is not there is not an error")
+    func deleteIsIdempotent() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        #expect(try scratch.store.delete(id: "20260511-064716-685054") == false)
+    }
+
+    /// Deleting one scan must not take its neighbours with it.
+    @Test("Deleting one scan leaves the others alone")
+    func deletesOnlyOne() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        try scratch.store.save(scan(id: "20260101-000000-000000"))
+        try scratch.store.save(scan(id: "20260511-064716-685054"))
+
+        #expect(try scratch.store.delete(id: "20260101-000000-000000"))
+        #expect(scratch.store.identifiers(in: .scans) == ["20260511-064716-685054"])
+    }
 }

@@ -38,8 +38,7 @@
 "library.toolbar.sort" = "Sort";
 "library.toolbar.search" = "Filter";
 /* %1$d scans, %2$d groups, %3$d files, %4$@ a formatted size. */
-"library.footer" = "%1$d scans - %2$d groups - %3$d files - %4$@ reclaimable";
-"library.footer.upperBound" = "%1$d scans - %2$d groups - %3$d files - up to %4$@ reclaimable";
+"library.footer" = "%1$d scans - %2$d shown";
 /* %@ is the directory scans are read from. */
 "library.empty" = "No scans yet.\n\nRun rav duplicate scan <folder> and it will appear here.\n\n%@";
 "library.empty.filtered" = "No scan matches this filter.";
@@ -85,8 +84,6 @@
 /* %1$d of %2$d groups, %3$@ each, %4$d files, %5$@ freed. */
 "review.subheader" = "Group %1$d of %2$d - %3$@ each - %4$d files - frees %5$@";
 "review.subheader.upperBound" = "Group %1$d of %2$d - %3$@ each - %4$d files - frees up to %5$@";
-/* %1$d group index, %2$@ size, %3$d file count. */
-"review.group.row" = "Group %1$d - %2$@ - %3$d files";
 "review.warning.preview" = "Nothing decided yet. The check mark is only a suggestion, and closing this window records nothing for this group.";
 "review.warning.keepNothing" = "A group has to keep at least one file. To remove every copy, use Group > Discard the Whole Group.";
 "review.warning.sharedStorage" = "One file shares its storage with the file you are keeping, so removing it would free nothing. It is not offered.";
@@ -132,9 +129,9 @@
 "scan.badRoot" = "That folder cannot be scanned";
 "scan.chooseFolder" = "Choose Folder...";
 "scan.chooseFolder.prompt" = "Scan";
-"scan.option.hidden" = "Include hidden files (the CLI does; a folder of identical .DS_Store buries real findings)";
-"scan.option.packages" = "Look inside packages like .app and .photoslibrary (removing a file from one corrupts it)";
-"scan.option.cache" = "Use the hash cache (a second scan of the same folder is much faster)";
+"scan.option.hidden" = "Include hidden files";
+"scan.option.packages" = "Look inside packages";
+"scan.option.cache" = "Use the hash cache";
 "scan.option.minimumSize" = "Ignore files smaller than";
 "scan.start" = "Start";
 "scan.stopping" = "Stopping...";
@@ -207,3 +204,14 @@
 /* Review footer */
 "review.button.simulate" = "Simulate and Apply...";
 "library.toolbar.review" = "Review";
+"scan.option.hidden.why" = "The CLI does. A folder of identical .DS_Store files buries every real finding.";
+"scan.option.packages.why" = "Removing a file from inside a .app or .photoslibrary corrupts it silently.";
+"scan.option.cache.why" = "A second scan of the same folder is much faster. Measured: 130 s cold, 7 s warm on 806 GB.";
+"scan.option.minimumSize.hint" = "Anything smaller is ignored, like the CLI does.";
+"scan.recent.placeholder" = "Recent...";
+"review.group.title" = "Group %d";
+"review.group.detail" = "%1$@ each - %2$d files";
+"library.action.delete" = "Delete This Scan...";
+"library.delete.title" = "Delete scan %@?";
+"library.delete.body" = "Only the scan record and its saved review are removed. No file this scan found is touched. The folder can be scanned again at any time.";
+"library.delete.confirm" = "Delete the Record";
