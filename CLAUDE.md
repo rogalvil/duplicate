@@ -302,6 +302,10 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El setup de `vDSP.DCT` cuesta 1 µs**, no lo que el plan supuso: 1,000 setups de tamaño 32 en 1.0 ms. No hay
   que reusarlo por worker, y así el tipo se queda siendo un valor sin discusión de `Sendable`. Su método es
   `transform(_:result:)`, no `output:`.
+- **El índice LSH necesita `T + 1` bandas, no `T`.** Es la cota de palomar: con `T` bandas, `T` bits que
+  difieren pueden tocar todas, y no queda ninguna idéntica que garantice el encuentro. Medido: bajarlo a `T`
+  hace que **6 de 12 semillas pierdan pares** en el test de superconjunto. Y colapsar los hashes idénticos en
+  clases antes de indexar no es una optimización de caso raro: **2,779 fotos reales dan 1,630 clases**.
 - **Un pHash solo mira las ocho frecuencias más bajas**, así que un tablero de 8 px en una imagen de 128 hashea
   igual que un gris plano — `imagehash` también. No es bug; hay un test que lo fija con su razón, porque la
   alternativa es redescubrirlo como reporte de bug.
