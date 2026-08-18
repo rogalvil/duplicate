@@ -317,6 +317,21 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   que nunca se hizo. El encabezado cambia de texto según `media_type`.
 - **Un panel vacío no distingue "el archivo ya no está" de "la miniatura todavía no llega".** Y en el corpus
   real pasa seguido: de los pares perceptuales, un lado del primero ya no existe. El panel lo dice.
+- **La detección de tráiler va antes que la calidad, y el orden es lo que la hace correcta.** Un tráiler de 30 s
+  en HEVC a alto bitrate **le gana en puntuación** a la película de dos horas en H.264 que anuncia, así que una
+  cadena que preguntara calidad primero conservaría el tráiler y borraría la película. Hay test con esa inversión
+  medida en el fixture.
+- **Un codec desconocido vale 1.0 *y se marca*.** El `.get(codec, 1.0)` del CLI lo trata como H.264 en silencio,
+  que es una adivinanza capaz de entregarle la decisión al archivo equivocado. Se conserva el número por paridad
+  y se agrega la bandera.
+- **La clave de una decisión de parecidos es `a||b` sin escapes**, formato del CLI, con el hueco que implica: una
+  ruta que contenga `||` da una clave que no se puede volver a partir. Medido: **ninguna ruta del corpus lo
+  contiene**, y `SimilarPairKey.isAmbiguous` lo reporta en vez de esconderlo.
+- **`similar-decisions` es un mapa pelado**, sin el envoltorio `{scan_id, created_at, decisions}` que sí llevan
+  `decisions/`. Un solo tipo no puede representar los dos honestamente.
+- **El desempate final de un par parecido es la profundidad, y gana el más profundo** — contraintuitivo y a
+  propósito: es la regla del detector exacto, y que los dos detectores propusieran sobrevivientes distintos para
+  los mismos dos archivos sería peor que una regla rara.
 - **La caché perceptual es la diferencia entre 177 s y 0.5 s**, medido sobre el árbol real de 2,779 imágenes y
   617 videos: **354×**, con el mismo resultado (4,771 pares las dos veces). No es optimización — un video son
   ocho decodes, así que sin caché un segundo escaneo del mismo árbol paga todo otra vez.
