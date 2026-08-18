@@ -755,6 +755,36 @@ en silencio reclasificaría cada par de un corpus escaneado con el CLI mientras 
 conserva su nombre. Lo que sí se fija es **cuál lado se recorre**: la ruta menor por bytes. En el CLI eso sale
 del orden de `os.walk`, así que el mismo par puede caer de los dos lados del umbral entre corridas.
 
+### La caché perceptual, y por qué no es una optimización
+
+Medido sobre el árbol real, 2,779 imágenes y 617 videos:
+
+| | tiempo | aciertos |
+|---|---|---|
+| frío | **177.1 s** | 0 |
+| caliente | **0.5 s** | 2,779 imágenes + 617 videos |
+
+**354×**, con la misma respuesta: 4,771 pares las dos veces. Un video son ocho decodes, así que sin caché un
+segundo escaneo del mismo árbol —lo que uno hace después de mover unos archivos— vuelve a pagar los tres
+minutos completos.
+
+Misma forma que la caché de digests y por las mismas razones: archivo append-only de filas fijas en
+`~/Library/Caches`, nunca en el directorio de estado que comparte el CLI. Un documento de escaneo es interop que
+no se puede perder; esto es dato derivado que macOS puede purgar bajo presión de disco, que es justo la
+semántica que se quiere. Y la clave es la misma —volumen, inodo, tamaño, mtime y **generation**— así que un
+archivo reescrito con su fecha forzada hacia atrás falla el acierto, que es el caso `rsync -t`.
+
+**Dos cosas propias.** La primera: el salt **se deriva de los parámetros del pipeline** en vez de ser una
+constante a subir a mano. Cambiar el decode de 256 a 512 invalida cada hash guardado, y "acuérdate de subir la
+constante" es una regla que se olvida una vez y después sirve números que significan otra cosa. La constante
+sigue ahí para lo que los parámetros no ven —la fórmula de grises, los pesos del resampler— o sea que hacen
+falta las dos mitades.
+
+La segunda: **filas de tamaño fijo con ocho huecos**, aunque una imagen use uno. Se desperdician 56 bytes por
+imagen, 156 KB sobre 2,779 archivos, contra un escaneo de 177 segundos. Lo que compra es que
+`(tamaño − header) % fila != 0` siga detectando una cola truncada, que es toda la historia de recuperación tras
+un crash y solo funciona si las filas miden lo mismo. Medido: 32 + 3,396 × 112 = 380,384 bytes, exacto.
+
 ### El índice LSH: una cota de palomar, y el colapso que importa más
 
 El CLI compara todos los pares: dos loops anidados sobre cada par de archivos

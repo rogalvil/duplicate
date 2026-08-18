@@ -182,6 +182,20 @@ struct FNV1a {
         }
     }
 
+    /// Mixes in a number, least significant byte first.
+    ///
+    /// Used by the perceptual cache to derive its salt from the pipeline's own parameters, so that changing the
+    /// decode size invalidates the file instead of relying on someone remembering to bump a constant.
+    mutating func combine(_ number: UInt64) {
+        for shift in stride(from: 0, to: 64, by: 8) {
+            state ^= (number >> UInt64(shift)) & 0xFF
+            state = state &* 0x0000_0100_0000_01B3
+        }
+    }
+
+    /// The raw state, for callers that want a number rather than the hex a fingerprint is stored as.
+    var rawValue: UInt64 { state }
+
     var value: String {
         let digits = Array("0123456789abcdef")
         var result = ""

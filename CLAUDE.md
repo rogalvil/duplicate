@@ -317,6 +317,19 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   que nunca se hizo. El encabezado cambia de texto según `media_type`.
 - **Un panel vacío no distingue "el archivo ya no está" de "la miniatura todavía no llega".** Y en el corpus
   real pasa seguido: de los pares perceptuales, un lado del primero ya no existe. El panel lo dice.
+- **La caché perceptual es la diferencia entre 177 s y 0.5 s**, medido sobre el árbol real de 2,779 imágenes y
+  617 videos: **354×**, con el mismo resultado (4,771 pares las dos veces). No es optimización — un video son
+  ocho decodes, así que sin caché un segundo escaneo del mismo árbol paga todo otra vez.
+- **Su salt se deriva de los parámetros del pipeline, no de una constante que hay que acordarse de subir.**
+  Cambiar el decode de 256 a 512 invalida cada hash guardado; con un número a mano eso se olvida exactamente una
+  vez y después la caché sirve números que significan otra cosa. La constante sigue existiendo para lo que los
+  parámetros no ven (la fórmula de grises, los pesos del resampler), o sea que hacen falta las dos mitades.
+- **Las filas son de tamaño fijo con ocho huecos, aunque una imagen use uno.** Se desperdician 56 bytes por
+  imagen —156 KB sobre 2,779, contra un escaneo de 177 s— y a cambio `(tamaño - header) % fila != 0` sigue
+  detectando una cola truncada, que es toda la historia de recuperación tras un crash. Medido: el archivo de
+  3,396 archivos pesa exactamente 32 + 3,396 × 112 = 380,384 bytes.
+- **La caché verifica el *tipo*, no solo la clave.** Un inodo reusado por un archivo del otro tipo serviría ocho
+  cuadros como si fueran una imagen.
 - **El LSH no aplica al video.** Indexa hashes sueltos; el video compara *listas* con una regla codiciosa y
   asimétrica. Así que los videos se comparan por pares como en el CLI — 617 videos son 190,036 pares — y sale
   barato porque cada comparación son popcounts. Lo caro es hashear.
