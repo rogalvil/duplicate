@@ -41,9 +41,13 @@ private struct SimilarScratch {
             pattern, width: size, height: size, format: format, to: path)
     }
 
+    /// **The cache URL is injected, always.** A selftest or a unit test that used the real
+    /// `~/Library/Caches` would pollute the next run -- which already happened once with the presence cache and
+    /// made a teeth check fail on the wrong assertion.
     func session() -> SimilarScanSession {
         SimilarScanSession(
-            store: store, trashResolver: FixedTrashRootResolver([root + "/faketrash"]))
+            store: store, trashResolver: FixedTrashRootResolver([root + "/faketrash"]),
+            cacheURL: URL(filePath: root + "/phashes.v1"))
     }
 
     func remove() { try? FileManager.default.removeItem(atPath: root) }
@@ -485,5 +489,77 @@ struct SimilarScanSessionVideoTests {
         let snapshot = counters.snapshot()
         #expect(snapshot.candidates == 2)
         #expect(snapshot.filesHashed == 2)
+    }
+}
+
+@Suite("SimilarScanSession cache")
+struct SimilarScanSessionCacheTests {
+
+    private func writeMovie(_ scratch: SimilarScratch, _ relative: String) async throws -> String {
+        let path = scratch.tree + "/" + relative
+        try FileManager.default.createDirectory(
+            atPath: (path as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true
+        )
+        return try await SyntheticMovie.write(
+            SyntheticMovie.Specification(seconds: 4, pattern: .movingBlock), to: path)
+    }
+
+    /// **The whole reason the cache exists.** A second scan of the same tree must read nothing: measured on the
+    /// real tree, 617 videos cost 93 seconds because each one is eight decodes.
+    @Test("A second scan is served entirely by the cache, both kinds")
+    func servesAWarmScan() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        try scratch.writeImage("a.png", .rampWithCorner)
+        try scratch.writeImage("b.png", .checkerboard(square: 3))
+        _ = try await writeMovie(scratch, "one.mp4")
+        _ = try await writeMovie(scratch, "two.mp4")
+
+        let session = scratch.session()
+        let cold = try await session.run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon)
+        #expect(cold.imageCacheHits == 0)
+        #expect(cold.videoCacheHits == 0)
+        #expect(cold.hashedCount == 4)
+
+        let warm = try await session.run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon.nextMicrosecond)
+        #expect(warm.imageCacheHits == 2)
+        #expect(warm.videoCacheHits == 2)
+        // And the answer is the same, which is the part that matters.
+        #expect(warm.scan.pairs == cold.scan.pairs)
+    }
+
+    @Test("With the cache off, a second scan hashes again")
+    func honoursTheCacheToggle() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        try scratch.writeImage("a.png", .rampWithCorner)
+
+        let session = scratch.session()
+        _ = try await session.run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon)
+        let warm = try await session.run(
+            SimilarScanSession.Request(root: scratch.tree, usesCache: false),
+            instant: noon.nextMicrosecond)
+        #expect(warm.imageCacheHits == 0)
+    }
+
+    /// A file rewritten in place is hashed again even though its path did not change.
+    @Test("A changed image is not served from the cache")
+    func invalidatesAChangedFile() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        try scratch.writeImage("a.png", .rampWithCorner)
+        let session = scratch.session()
+        _ = try await session.run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon)
+
+        // Same path, different picture.
+        try scratch.writeImage("a.png", .checkerboard(square: 3))
+        let warm = try await session.run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon.nextMicrosecond)
+        #expect(warm.imageCacheHits == 0, "a rewritten file was served from the cache")
     }
 }

@@ -3506,8 +3506,11 @@ enum SelfTest {
 
         // 2. A real scan through the session the window uses.
         // Teeth: drop the `store.save(scan)` from `SimilarScanSession.run` and the reload fails.
+        // The cache goes under `/tmp` with everything else: a mode that used the real `~/Library/Caches` would
+        // pollute the next run, which already happened once with the presence cache.
         let session = SimilarScanSession(
-            store: store, trashResolver: FixedTrashRootResolver([root + "/faketrash"]))
+            store: store, trashResolver: FixedTrashRootResolver([root + "/faketrash"]),
+            cacheURL: URL(filePath: root + "/phashes.v1"))
         let instant = ScanIdentifier.Instant(
             year: 2026, month: 8, day: 13, hour: 12, minute: 0, second: 0, microsecond: 0)
         let result = try await session.run(
@@ -3545,6 +3548,21 @@ enum SelfTest {
             PathOrder.lessThan(videoPair.fileA, videoPair.fileB),
             "the video pair reads \(videoPair.fileA) before \(videoPair.fileB)")
 
+        // 2b. A second scan reads nothing. **This is the difference between 177 seconds and half a second**,
+        // measured on a real tree of 2,779 images and 617 videos -- a video is eight decodes, so the cache is
+        // not a speed-up here, it is the difference between usable and not.
+        // Teeth: pass `usesCache: false` and the hits are zero.
+        let warm = try await session.run(
+            SimilarScanSession.Request(root: tree), instant: instant.nextMicrosecond)
+        try expect(
+            warm.imageCacheHits == 3,
+            "\(warm.imageCacheHits) images came from the cache, wanted 3")
+        try expect(
+            warm.videoCacheHits == 2,
+            "\(warm.videoCacheHits) videos came from the cache, wanted 2")
+        try expect(
+            warm.scan.pairs == result.scan.pairs, "the warm scan found a different set of pairs")
+
         // 3. The library switches to the perceptual list and shows it.
         // Teeth: have `loadFromDisk` always read the exact summaries and the count stays 0.
         let library = LibraryWindowController(stateDirectory: state)
@@ -3552,9 +3570,11 @@ enum SelfTest {
         try expect(library.showingSimilarScans == false, "the library starts on images")
         library.showSimilarScansForSelftest()
         try expect(library.showingSimilarScans, "switching to images did not take")
+        // Two, because the warm scan above saved its own document -- a scan that ran is a scan that happened,
+        // and hiding it would make the cache check invisible to the list.
         try await waitOnMainActor(
-            until: { library.similarRowCount == 1 },
-            what: "the perceptual scan to reach the table")
+            until: { library.similarRowCount == 2 },
+            what: "both perceptual scans to reach the table")
         // **The footer and the empty state have to follow the list they are describing.** They did not: a
         // screenshot of 31 real perceptual scans showed "0 escaneos - 0 mostrados" under them and the
         // "no scans yet" placeholder drawn *on top of* the rows, because both were still reading the exact
@@ -3564,9 +3584,10 @@ enum SelfTest {
             library.emptyStateText == nil,
             "the empty state says \(library.emptyStateText ?? "") over \(library.similarRowCount) rows"
         )
+        // The footer counts what the list holds -- two scans, and the pairs of both.
         try expect(
-            library.footerText.contains("1"),
-            "the footer reads \(library.footerText) for one scan"
+            library.footerText.contains("2"),
+            "the footer reads \(library.footerText) for two scans"
         )
 
         // 4. The viewer shows both sides, and they are **different files**.
@@ -3606,14 +3627,14 @@ enum SelfTest {
         // exactly what shipped, and it reads as "the scan found nothing" rather than "this window is not
         // looking".
         let second = SimilarScan(
-            scanID: instant.nextMicrosecond.identifier, root: tree,
-            createdAt: instant.nextMicrosecond.timestamp, imageThreshold: 5, videoThreshold: 0.7,
-            pairs: []
+            scanID: instant.nextMicrosecond.nextMicrosecond.identifier, root: tree,
+            createdAt: instant.nextMicrosecond.nextMicrosecond.timestamp, imageThreshold: 5,
+            videoThreshold: 0.7, pairs: []
         )
         _ = try store.save(second)
         try await waitOnMainActor(
-            until: { library.similarRowCount == 2 },
-            what: "the watcher to notice a second perceptual scan")
+            until: { library.similarRowCount == 3 },
+            what: "the watcher to notice a third perceptual scan")
 
         // 6. The header states the right quantity for the kind, and a missing file says so.
         // Teeth: use the image header for a video pair and this fails naming the bits.

@@ -38,6 +38,7 @@ public struct SimilarScanSession: Sendable {
         /// field and a scan at a different video threshold is a different scan.
         public var videoThreshold: Double
         public var policy: ScanPolicy
+        /// Whether to read and write the perceptual cache.
         public var usesCache: Bool
         /// Whether to hash videos as well.
         ///
@@ -73,6 +74,9 @@ public struct SimilarScanSession: Sendable {
         /// How many videos were hashed, and how many pairs of them were compared.
         public let videoCount: Int
         public let videoPairsCompared: Int
+        /// Files served by the cache, split by kind because the two cost wildly different amounts.
+        public let imageCacheHits: Int
+        public let videoCacheHits: Int
         /// Distinct hash values, so a caller can see how much of the corpus is exact-duplicate images.
         public let classCount: Int
         /// Pairs of classes the index examined, against the number it would have compared without one.
@@ -89,19 +93,22 @@ public struct SimilarScanSession: Sendable {
     private let hasher: ImageHasher
     private let videoHasher: VideoHasher
     private let trashResolver: any TrashRootResolving
+    private let cacheURL: URL?
 
     public init(
         store: ScanStore = ScanStore(),
         walker: any DirectoryEnumerating = FileManagerWalker(),
         hasher: ImageHasher = ImageHasher(),
         videoHasher: VideoHasher = VideoHasher(),
-        trashResolver: any TrashRootResolving = SystemTrashRootResolver()
+        trashResolver: any TrashRootResolving = SystemTrashRootResolver(),
+        cacheURL: URL? = nil
     ) {
         self.store = store
         self.walker = walker
         self.hasher = hasher
         self.videoHasher = videoHasher
         self.trashResolver = trashResolver
+        self.cacheURL = cacheURL
     }
 
     public func run(
@@ -132,24 +139,50 @@ public struct SimilarScanSession: Sendable {
         progress.setPhase(.hashing)
         progress.setCandidates(images.count + videos.count)
 
+        let cache =
+            request.usesCache
+            ? PerceptualCache(
+                url: cacheURL ?? PerceptualCache.defaultURL(),
+                imageConfiguration: hasher.configuration,
+                videoConfiguration: videoHasher.configuration
+            ) : nil
+        await cache?.load()
+
         var paths: [String] = []
         var hashes: [PerceptualHash] = []
         var unreadable: [String] = []
+        var imageHits = 0
         paths.reserveCapacity(images.count)
         hashes.reserveCapacity(images.count)
 
         for entry in images {
             try Task.checkCancellation()
+            if let cache, let known = await cache.hashes(for: entry, kind: .image),
+                let first = known.first
+            {
+                imageHits += 1
+                progress.noteCacheHit()
+                progress.noteHashed(path: entry.path, bytes: 0)
+                paths.append(entry.path)
+                hashes.append(first)
+                continue
+            }
             guard let hash = try? hasher.hash(fileURL: URL(filePath: entry.path)) else {
                 unreadable.append(entry.path)
                 continue
             }
+            if let cache { await cache.store([hash], for: entry, kind: .image) }
             progress.noteHashed(path: entry.path, bytes: entry.size)
             paths.append(entry.path)
             hashes.append(hash)
         }
 
-        let videoResults = try await hashVideos(videos, progress: progress, unreadable: &unreadable)
+        var videoHits = 0
+        let videoResults = try await hashVideos(
+            videos, progress: progress, cache: cache, hits: &videoHits, unreadable: &unreadable)
+        // Written before the pairs are built: the hashing is the expensive part, and a crash while comparing
+        // must not throw away work that is already true.
+        if let cache { _ = try? await cache.persist() }
 
         progress.setPhase(.grouping)
         let index = MultiIndexLSH(maximumDistance: request.imageThreshold)
@@ -236,6 +269,8 @@ public struct SimilarScanSession: Sendable {
             hashedCount: hashes.count + videoResults.count,
             videoCount: videoResults.count,
             videoPairsCompared: videoPairsCompared,
+            imageCacheHits: imageHits,
+            videoCacheHits: videoHits,
             classCount: candidates.classes.count,
             examinedPairs: candidates.pairs.count,
             totalPairs: hashes.count * (hashes.count - 1) / 2,
@@ -254,19 +289,36 @@ public struct SimilarScanSession: Sendable {
     /// Results come back in completion order and are sorted by path afterwards, so the document does not depend
     /// on which decode finished first.
     private func hashVideos(
-        _ entries: [FileEntry], progress: ProgressCounters, unreadable: inout [String]
+        _ entries: [FileEntry],
+        progress: ProgressCounters,
+        cache: PerceptualCache?,
+        hits: inout Int,
+        unreadable: inout [String]
     ) async throws -> [(path: String, hashes: [PerceptualHash])] {
         guard !entries.isEmpty else { return [] }
         let hasher = videoHasher
         var collected: [(path: String, hashes: [PerceptualHash])] = []
         var failed: [String] = []
 
+        // The cache is consulted before anything is queued, so a warm scan never opens a decoder at all.
+        var pending: [FileEntry] = []
+        for entry in entries {
+            if let cache, let known = await cache.hashes(for: entry, kind: .video) {
+                hits += 1
+                progress.noteCacheHit()
+                progress.noteHashed(path: entry.path, bytes: 0)
+                collected.append((entry.path, known))
+                continue
+            }
+            pending.append(entry)
+        }
+
         try await withThrowingTaskGroup(of: (String, [PerceptualHash], Int64).self) { group in
             var index = 0
             var running = 0
-            while index < entries.count || running > 0 {
-                while running < SimilarScanSession.videoConcurrency, index < entries.count {
-                    let entry = entries[index]
+            while index < pending.count || running > 0 {
+                while running < SimilarScanSession.videoConcurrency, index < pending.count {
+                    let entry = pending[index]
                     index += 1
                     running += 1
                     group.addTask {
@@ -285,6 +337,15 @@ public struct SimilarScanSession: Sendable {
                 } else {
                     collected.append((finished.0, finished.1))
                 }
+            }
+        }
+
+        if let cache {
+            var byPath: [String: FileEntry] = [:]
+            for entry in pending { byPath[entry.path] = entry }
+            for row in collected {
+                guard let entry = byPath[row.path] else { continue }
+                await cache.store(row.hashes, for: entry, kind: .video)
             }
         }
 
