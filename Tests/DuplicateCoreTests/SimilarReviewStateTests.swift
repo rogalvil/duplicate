@@ -258,3 +258,58 @@ struct SimilarReviewStateTests {
         #expect(state.tally.decided == 1)
     }
 }
+
+@Suite("SimilarReviewState lazy facts")
+struct SimilarReviewStateFactsTests {
+
+    /// Probing every pair before the window can draw would repeat a large part of the scan, so facts arrive for
+    /// the pair being looked at.
+    @Test("Facts arriving later refine the suggestion")
+    func refinesASuggestion() {
+        let subject = pair("/r/a.mp4", "/r/b.mp4", .video)
+        var state = SimilarReviewState(scan: scan([subject]))
+        // With no facts, the chain falls through to depth: both are one level down, so A wins.
+        #expect(state.suggestion(at: 0)?.ground == .depth)
+
+        state.updateSuggestion(
+            at: 0,
+            factsA: MediaFacts(
+                path: "/r/a.mp4", byteCount: 1, pixelWidth: 1920, pixelHeight: 1080,
+                codec: "h264", isCodecKnown: true, bitrate: 1_000_000, duration: 600),
+            factsB: MediaFacts(
+                path: "/r/b.mp4", byteCount: 1, pixelWidth: 1920, pixelHeight: 1080,
+                codec: "av1", isCodecKnown: true, bitrate: 1_000_000, duration: 600)
+        )
+        #expect(state.effectiveDecision(at: 0) == .keepB)
+        guard case .advice = state.suggestion(at: 0)?.ground else {
+            Issue.record("the advice did not take over")
+            return
+        }
+    }
+
+    /// **A decision is not a suggestion, and facts must not quietly move it.**
+    @Test("Facts do not overwrite a decision already made")
+    func leavesDecisionsAlone() {
+        let subject = pair("/r/a.mp4", "/r/b.mp4", .video)
+        var state = SimilarReviewState(scan: scan([subject]))
+        state.confirm(.keepA)
+        state.updateSuggestion(
+            at: 0,
+            factsA: MediaFacts(
+                path: "/r/a.mp4", byteCount: 1, pixelWidth: 100, pixelHeight: 100,
+                codec: "h264", isCodecKnown: true, bitrate: 1, duration: 600),
+            factsB: MediaFacts(
+                path: "/r/b.mp4", byteCount: 1, pixelWidth: 4000, pixelHeight: 2000,
+                codec: "av1", isCodecKnown: true, bitrate: 9_000_000, duration: 600)
+        )
+        #expect(state.decision(at: 0) == .decided(.keepA))
+        #expect(state.effectiveDecision(at: 0) == .keepA)
+    }
+
+    @Test("An index out of range is ignored")
+    func ignoresBadIndices() {
+        var state = SimilarReviewState(scan: scan([pair("/r/a.jpg", "/r/b.jpg")]))
+        state.updateSuggestion(at: 9, factsA: nil, factsB: nil)
+        #expect(state.suggestions.count == 1)
+    }
+}

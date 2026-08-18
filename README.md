@@ -19,8 +19,7 @@ deshacer.
 | Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Detector perceptual de video: escanear, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
-| Consejo de cuál conservar en un par parecido | **funciona en Core**, sin UI todavía |
-| Revisión de pares parecidos con tri-estado | **funciona en Core**, sin UI todavía |
+| Decidir pares parecidos en el visor, con el consejo de cuál conservar | **funciona**, sin aplicar todavía |
 
 O sea: para **duplicados exactos el ciclo está completo** y no hace falta el CLI — escanear, revisar,
 simular, aplicar, deshacer. Del perceptual, un escaneo de imágenes ya corre y guarda un documento que el
