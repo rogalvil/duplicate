@@ -173,6 +173,30 @@ del test diferencial nunca produjeron un hermano-prefijo, así que la propiedad 
 escrito por Swift mostrarán números un poco distintos para el mismo par. Solo se renderiza y se compara
 contra un umbral, así que la divergencia es cosmética — pero se escribe aquí, no se descubre.
 
+### `similar-decisions` es un mapa pelado, y su orden es parte del formato
+
+`decisions/` envuelve su mapa en `{scan_id, created_at, decisions}`; `similar-decisions/` **es** el mapa
+(`similar_review.py:310-315`). Un solo tipo no puede representar los dos honestamente, así que hay dos.
+
+```
+similar-decisions:  {"<file_a>||<file_b>": "keep_a" | "keep_b" | "keep_both" | "keep_none"}
+```
+
+**Las entradas se guardan ordenadas, no en un `Dictionary`.** El orden de claves del archivo es el que escribió el
+CLI, y un diccionario no tiene orden: re-codificar uno mezclaría 943 líneas y la comparación byte a byte que
+prueba que las dos herramientas son intercambiables fallaría sobre un archivo cuyo *contenido* es idéntico.
+
+Medido sobre los 17 documentos reales de esta máquina: **943 claves**, `keep_a` 597, `keep_b` 337, `keep_both` 8 y
+`keep_none` **1** — los cuatro valores aparecen de verdad, así que ninguno es teórico. Y **cero** claves que no se
+puedan partir en dos.
+
+**El separador son dos pipes sin escapes**, con el hueco que eso implica: una ruta que contenga `||` da una clave
+de tres mitades. Ninguna del corpus lo hace, y `ambiguousKeys` lo reporta en vez de esconderlo.
+
+**Una decisión desconocida se rechaza, no se salta.** Saltarla convertiría en silencio un par revisado en uno sin
+revisar, y el siguiente aplicar dejaría los dos archivos en su lugar mientras la ventana decía que estaba
+decidido.
+
 ## Las cinco cosas que Foundation hace mal
 
 Por esto el escritor de JSON está hecho a mano. `JSONEncoder` y `JSONSerialization` con

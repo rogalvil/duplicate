@@ -114,6 +114,8 @@ public struct ScanStore: Sendable {
         public let videoPairCount: Int
         public let involvedFileCount: Int
         public let hasRelativePaths: Bool
+        /// Whether a review of this scan is already on disk, so a list can badge it.
+        public let hasDecisions: Bool
     }
 
     /// Summaries for every readable perceptual scan.
@@ -133,9 +135,46 @@ public struct ScanStore: Sendable {
                 imagePairCount: scan.pairCount(of: .image),
                 videoPairCount: scan.pairCount(of: .video),
                 involvedFileCount: scan.involvedFileCount,
-                hasRelativePaths: scan.hasRelativePaths
+                hasRelativePaths: scan.hasRelativePaths,
+                hasDecisions: hasSimilarDecisions(scanID: scan.scanID)
             )
         }
+    }
+
+    // MARK: - Similar decisions
+
+    /// Saves a perceptual review's decisions under the scan's own identifier.
+    @discardableResult
+    public func save(_ decisions: SimilarDecisionsDocument, scanID: String) throws -> String {
+        try state.create(.similarDecisions)
+        let path = try state.filePath(for: .similarDecisions, id: scanID)
+        let data = try JSONWriter.document(SimilarDecisionsCodec.encode(decisions))
+        try data.write(to: URL(filePath: path), options: .atomic)
+        return path
+    }
+
+    public func loadSimilarDecisions(scanID: String) throws -> SimilarDecisionsDocument {
+        let path = try state.filePath(for: .similarDecisions, id: scanID)
+        guard let data = FileManager.default.contents(atPath: path) else {
+            throw StoreError.notFound(kind: .similarDecisions, id: scanID)
+        }
+        return try SimilarDecisionsCodec.decode(JSONReader.parse(data))
+    }
+
+    /// Decisions already on disk for a perceptual scan, or an empty map.
+    ///
+    /// Empty rather than throwing: a scan with no review yet is the ordinary case, and the caller wants to know
+    /// what was decided, not whether a file exists.
+    public func priorSimilarDecisions(scanID: String) -> [String: SimilarDecision] {
+        (try? loadSimilarDecisions(scanID: scanID))?.byKey ?? [:]
+    }
+
+    /// Whether a perceptual scan has a decisions document beside it.
+    public func hasSimilarDecisions(scanID: String) -> Bool {
+        guard let path = try? state.filePath(for: .similarDecisions, id: scanID) else {
+            return false
+        }
+        return FileManager.default.fileExists(atPath: path)
     }
 
     // MARK: - Decisions
