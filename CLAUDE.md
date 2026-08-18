@@ -327,6 +327,13 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **La clave de una decisión de parecidos es `a||b` sin escapes**, formato del CLI, con el hueco que implica: una
   ruta que contenga `||` da una clave que no se puede volver a partir. Medido: **ninguna ruta del corpus lo
   contiene**, y `SimilarPairKey.isAmbiguous` lo reporta en vez de esconderlo.
+- **El orden de claves de `similar-decisions` es parte del formato.** Guardarlo en un `Dictionary` mezclaría las
+  943 líneas reales y la comparación byte a byte fallaría sobre un archivo cuyo contenido es idéntico. Medido: los
+  cuatro valores aparecen de verdad —`keep_a` 597, `keep_b` 337, `keep_both` 8, `keep_none` **1**— así que ninguno
+  es teórico, y ordenar los miembros antes de escribir rompe **16 de 17** documentos.
+- **Una decisión desconocida se rechaza, no se salta.** Saltarla convertiría en silencio un par revisado en uno
+  sin revisar, y el siguiente aplicar dejaría los dos archivos donde están mientras la ventana dice que está
+  decidido. El corpus real no tiene valores raros, así que eso lo prueba un test unitario y no el modo `decisions`.
 - **`similar-decisions` es un mapa pelado**, sin el envoltorio `{scan_id, created_at, decisions}` que sí llevan
   `decisions/`. Un solo tipo no puede representar los dos honestamente.
 - **El desempate final de un par parecido es la profundidad, y gana el más profundo** — contraintuitivo y a

@@ -1676,6 +1676,70 @@ enum SelfTest {
                     + "(the CLI's keep-none, which it then ignores)"
             )
         }
+        try checkRealSimilarDecisions(arguments: arguments)
+    }
+
+    /// The same round-trip for the perceptual decisions, which are a **bare map** and not a wrapped one.
+    ///
+    /// The 17 real documents on this machine hold 943 keys, and all four decision values appear in them --
+    /// including `keep_none`, exactly once. Read-only.
+    ///
+    /// Proof of teeth: sort the members before encoding and every document with more than one key differs.
+    private static func checkRealSimilarDecisions(arguments: [String]) throws {
+        let state = StateDirectory.current()
+        let root =
+            value(for: "--similar-decisions-dir", in: arguments)
+            ?? state.path(for: .similarDecisions)
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: root) else {
+            print("  SKIPPED: \(root) is not readable")
+            return
+        }
+
+        var decoded = 0
+        var keys = 0
+        var counts: [SimilarDecision: Int] = [:]
+        var ambiguous = 0
+        var failures: [String] = []
+
+        for name in names.sorted() where name.hasSuffix(".json") {
+            let path = root + "/" + name
+            guard let data = FileManager.default.contents(atPath: path) else { continue }
+            do {
+                let document = try SimilarDecisionsCodec.decode(JSONReader.parse(data))
+                let reencoded = try JSONWriter.document(SimilarDecisionsCodec.encode(document))
+                guard reencoded == data else {
+                    let offset = zip(data, reencoded).enumerated()
+                        .first { $0.element.0 != $0.element.1 }?.offset
+                    failures.append(
+                        "\(name): differs at byte \(offset.map(String.init) ?? "the end")")
+                    continue
+                }
+                decoded += 1
+                keys += document.count
+                ambiguous += document.ambiguousKeys.count
+                for decision in SimilarDecision.allCases {
+                    counts[decision, default: 0] += document.count(of: decision)
+                }
+            } catch {
+                failures.append("\(name): \(error)")
+            }
+        }
+
+        guard failures.isEmpty else {
+            throw SelfTestFailure(
+                "\(failures.count) perceptual decisions documents failed:\n    "
+                    + failures.prefix(10).joined(separator: "\n    ")
+            )
+        }
+        if decoded == 0 {
+            print("  SKIPPED: no perceptual decisions in \(root)")
+        } else {
+            let tally = SimilarDecision.allCases
+                .map { "\($0.rawValue) \(counts[$0] ?? 0)" }
+                .joined(separator: ", ")
+            print("  \(decoded) perceptual decisions documents re-encoded byte-identically")
+            print("  \(keys) pair keys -- \(tally) -- \(ambiguous) that cannot be split")
+        }
     }
 
     // MARK: - gate

@@ -174,4 +174,7 @@ public enum ScanDecodingError: Error, Equatable, Sendable {
     /// A `media_type` this build does not know. Refused rather than guessed: the value decides which threshold
     /// the pair was judged against.
     case unknownMediaType(String)
+    /// A decision string this build does not know. Refused rather than skipped: dropping it would turn a
+    /// reviewed pair back into an unreviewed one.
+    case unknownDecision(String, key: String)
 }
