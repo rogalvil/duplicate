@@ -755,6 +755,36 @@ en silencio reclasificaría cada par de un corpus escaneado con el CLI mientras 
 conserva su nombre. Lo que sí se fija es **cuál lado se recorre**: la ruta menor por bytes. En el CLI eso sale
 del orden de `os.walk`, así que el mismo par puede caer de los dos lados del umbral entre corridas.
 
+### El consejo: cuál conservar, como valores y no como frase
+
+El CLI arma la explicación en español justo donde decide (`similar_review.py:172-227`):
+`"→ Conservar B: HEVC más eficiente que H264 (2.0× vs 1.0×), mayor bitrate (…)"`. Con dos idiomas esa cadena es
+una cadena que no se puede traducir, y un test que la afirme está probando la redacción.
+
+Aquí la decisión y sus fundamentos son valores —`.prefer(.b, because: [.moreEfficientCodec(…),
+.higherBitrate(…)])`— el ejecutable los vuelve una oración, y el test afirma sobre la estructura. Es el caso que
+hace que la regla de "Core no produce prosa" se pague sola.
+
+**La tabla de eficiencia es la del CLI, valor por valor** (av1 3.0, hevc 2.0, vp9 1.8, h264 1.0, mpeg4 0.7,
+mpeg2video 0.5), porque la puntuación que alimenta decide **cuál archivo se propone borrar**. Cambiar un número
+ahí cambia qué se tira. Lo único que se agrega es honestidad: un codec desconocido vale 1.0 **y se marca como
+desconocido**, en vez de pasar por H.264 en silencio.
+
+**La detección de tráiler va primero, y ese orden es la parte correcta.** Un tráiler de 30 segundos en HEVC a
+20 Mbps puntúa **más alto** que la película de dos horas en H.264 a 2 Mbps que anuncia: `bitrate × eficiencia ×
+píxeles` no sabe nada de duración. Una cadena que preguntara calidad primero conservaría el tráiler. La longitud
+es la señal más fuerte, así que se pregunta antes, y el fixture del test tiene la inversión medida para que el
+orden no se pueda "simplificar" sin que algo falle.
+
+**Sin `ffprobe`.** El CLI lo corre dos veces por par y parsea su JSON; si falta o va lento, la recomendación
+desaparece. AVFoundation e ImageIO contestan lo mismo en proceso — y para una imagen se lee el header, así que
+una foto de 24 megapíxeles no cuesta más que una miniatura.
+
+Un detalle que solo se ve con video real: **la dimensión se toma transformada**. Un video de teléfono se guarda
+en horizontal con una matriz de rotación, así que reportar las dimensiones almacenadas llamaría 1920×1080 a un
+clip vertical y lo compararía contra una copia vertical que reporta 1080×1920, para concluir que tienen
+resoluciones distintas.
+
 ### La caché perceptual, y por qué no es una optimización
 
 Medido sobre el árbol real, 2,779 imágenes y 617 videos:
