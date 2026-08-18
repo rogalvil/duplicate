@@ -571,12 +571,17 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         }
         guard let scan = try? ScanStore(state: stateDirectory).loadSimilarScan(id: summary.scanID)
         else { return }
-        let controller = SimilarPairWindowController(scan: scan)
+        let controller = SimilarPairWindowController(scan: scan, stateDirectory: stateDirectory)
         similarWindows[summary.scanID] = controller
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: controller.window, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.similarWindows[summary.scanID] = nil }
+            MainActor.assumeIsolated {
+                // The conflict between overlapping pairs is worth one sheet, when the set of decisions is done
+                // with -- not after every click.
+                controller.presentContradictionsIfNeeded()
+                self?.similarWindows[summary.scanID] = nil
+            }
         }
         controller.showWindow(nil)
     }

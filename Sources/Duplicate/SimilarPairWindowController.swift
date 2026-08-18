@@ -8,12 +8,14 @@ import DuplicateCore
 /// alike, and the user is the only one who can say whether that is true -- so the two pictures have to be on
 /// screen next to each other, at the same size.
 ///
-/// **Read-only, on purpose, and for a different reason than the folder viewer.** There the danger was deleting
-/// a tree that was only mostly a copy; here it is that a pair at distance 5 can be two genuinely different
-/// photographs -- a burst of the same scene, two frames of one video, the same product on two backgrounds. A
-/// "move the second one to the Trash" button next to a list this app produced would be inviting the user to
-/// act on a guess. Deciding these needs its own review flow and its own decisions file
-/// (`similar-decisions`, a bare `{"a||b": "keep_a"}` map), which is not this change.
+/// **It decides, and it does not delete.** A pair at distance 5 can be two genuinely different photographs -- a
+/// burst of the same scene, two frames of one video, the same product on two backgrounds -- so the four choices
+/// here are recorded in `similar-decisions` and nothing is moved. Applying them is its own change, with the same
+/// dry-run gate, journal and re-hash-before-moving the exact detector has.
+///
+/// **The suggestion is shown selected and is never saved on its own.** The CLI fills a default decision for every
+/// pair before anyone has seen one; here the highlight is a proposal and the file only carries what was
+/// confirmed.
 ///
 /// It shows video pairs too, even though this build cannot produce them: a scan written by `rav duplicate
 /// similar` carries them, and refusing to display what the document holds would be its own kind of lie.
@@ -22,16 +24,36 @@ final class SimilarPairWindowController: NSWindowController {
 
     private let scan: SimilarScan
     private let pairs: [SimilarPair]
+    private let stateDirectory: StateDirectory
+    private var review: SimilarReviewState
+    /// Facts already probed, by path. Filled for the pair being looked at, never for all of them.
+    private var facts: [String: MediaFacts] = [:]
+    private var probeGeneration = 0
+    private let probe = MediaProbe()
     private let table = NSTableView()
     private let thumbnailer = QuickLookThumbnailer()
     private let leftPane = SimilarSidePane()
     private let rightPane = SimilarSidePane()
     private let headerLabel = NSTextField(labelWithString: "")
     private let footerLabel = NSTextField(labelWithString: "")
+    private let adviceLabel = NSTextField(labelWithString: "")
+    private let tallyLabel = NSTextField(labelWithString: "")
+    private var decisionButtons: [SimilarDecision: NSButton] = [:]
+    private let skipButton = NSButton()
+    private var savedCount = 0
+    private var saveFailure: String?
 
-    init(scan: SimilarScan) {
+    init(scan: SimilarScan, stateDirectory: StateDirectory = StateDirectory.current()) {
         self.scan = scan
         self.pairs = scan.pairs
+        self.stateDirectory = stateDirectory
+        // Rehydrated from disk, so reopening a scan shows what was already decided -- including a document the
+        // CLI wrote, which decides every pair.
+        self.review = SimilarReviewState(
+            scan: scan,
+            priorDecisions: ScanStore(state: stateDirectory)
+                .priorSimilarDecisions(scanID: scan.scanID)
+        )
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 940, height: 620),
@@ -62,6 +84,7 @@ final class SimilarPairWindowController: NSWindowController {
         for (identifier, key, width) in [
             ("similarity", "similar.column.similarity", 74.0),
             ("kind", "similar.column.kind", 70.0),
+            ("decision", "similar.column.decision", 120.0),
             ("a", "similar.column.a", 260.0),
             ("b", "similar.column.b", 260.0),
         ] {
@@ -80,12 +103,46 @@ final class SimilarPairWindowController: NSWindowController {
         // becomes a floor on the window. A scroll view exists to be narrower than its content.
         scroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        for label in [headerLabel, footerLabel] {
+        for label in [headerLabel, footerLabel, adviceLabel, tallyLabel] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             label.lineBreakMode = .byTruncatingMiddle
         }
         footerLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         footerLabel.textColor = .secondaryLabelColor
+        adviceLabel.font = .systemFont(ofSize: 11)
+        adviceLabel.textColor = .secondaryLabelColor
+        adviceLabel.maximumNumberOfLines = 2
+        tallyLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        tallyLabel.textColor = .secondaryLabelColor
+
+        // The four decisions, in the order a person reads them, plus skip.
+        let decisionRow = NSStackView()
+        decisionRow.orientation = .horizontal
+        decisionRow.spacing = 8
+        decisionRow.translatesAutoresizingMaskIntoConstraints = false
+        for decision in [
+            SimilarDecision.keepA, .keepB, .keepBoth, .keepNone,
+        ] {
+            let button = NSButton()
+            button.title = SimilarAdviceText.label(for: decision)
+            button.bezelStyle = .rounded
+            button.setButtonType(.pushOnPushOff)
+            button.target = self
+            button.action = #selector(decisionChosen(_:))
+            button.tag =
+                [SimilarDecision.keepA, .keepB, .keepBoth, .keepNone]
+                .firstIndex(of: decision) ?? 0
+            // **"Discard both" is the dangerous one and it looks like it.** It is the only choice here that can
+            // remove two files at once, and the CLI's own corpus used it exactly once in 943 decisions.
+            if decision == .keepNone { button.contentTintColor = .systemRed }
+            decisionButtons[decision] = button
+            decisionRow.addView(button, in: .leading)
+        }
+        skipButton.title = Strings.string("similar.decision.skip")
+        skipButton.bezelStyle = .rounded
+        skipButton.target = self
+        skipButton.action = #selector(skipPair(_:))
+        decisionRow.addView(skipButton, in: .leading)
 
         let panes = NSStackView(views: [leftPane, rightPane])
         panes.orientation = .horizontal
@@ -93,7 +150,9 @@ final class SimilarPairWindowController: NSWindowController {
         panes.spacing = 12
         panes.translatesAutoresizingMaskIntoConstraints = false
 
-        let content = NSStackView(views: [scroll, headerLabel, panes, footerLabel])
+        let content = NSStackView(views: [
+            scroll, headerLabel, panes, adviceLabel, decisionRow, tallyLabel, footerLabel,
+        ])
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 6
@@ -123,9 +182,13 @@ final class SimilarPairWindowController: NSWindowController {
         window?.contentView = container
     }
 
-    private var selectedPair: SimilarPair? {
+    private var selectedRow: Int {
         let row = table.clickedRow >= 0 ? table.clickedRow : table.selectedRow
-        return pairs.indices.contains(row) ? pairs[row] : nil
+        return row
+    }
+
+    private var selectedPair: SimilarPair? {
+        pairs.indices.contains(selectedRow) ? pairs[selectedRow] : nil
     }
 
     private func refreshDetail() {
@@ -156,6 +219,93 @@ final class SimilarPairWindowController: NSWindowController {
         }
         leftPane.show(path: pair.fileA, thumbnailer: thumbnailer)
         rightPane.show(path: pair.fileB, thumbnailer: thumbnailer)
+        refreshAdvice(row: selectedRow, pair: pair)
+        refreshDecisionButtons(row: selectedRow)
+        probeFactsIfNeeded(row: selectedRow, pair: pair)
+    }
+
+    /// The suggestion and its reason, or the decision already made.
+    private func refreshAdvice(row: Int, pair: SimilarPair) {
+        let effective = review.effectiveDecision(at: row)
+        switch review.decision(at: row) {
+        case .decided:
+            adviceLabel.stringValue = SimilarAdviceText.label(for: effective)
+        case .skipped:
+            adviceLabel.stringValue = Strings.string("similar.state.skipped")
+        case .undecided:
+            let why = review.suggestion(at: row).map {
+                SimilarAdviceText.explanation(for: $0.ground)
+            }
+            let label = SimilarAdviceText.label(for: effective)
+            adviceLabel.stringValue = String(
+                format: Strings.string("similar.suggested"),
+                why.map { "\(label) - \($0)" } ?? label)
+        }
+        let tally = review.tally
+        tallyLabel.stringValue = String(
+            format: Strings.string("similar.tally"), tally.decided, tally.skipped, tally.undecided)
+    }
+
+    /// The button of the effective decision is pushed in, so the suggestion is visible as a selection.
+    private func refreshDecisionButtons(row: Int) {
+        let effective = review.effectiveDecision(at: row)
+        let isDecided = review.decision(at: row).decision != nil
+        for (decision, button) in decisionButtons {
+            // Only a real decision shows as pressed. A suggestion is drawn as the *default* -- keyboard focus --
+            // rather than as something already chosen, or the two would look identical and the file would be the
+            // only place that knew the difference.
+            button.state = isDecided && decision == effective ? .on : .off
+            button.keyEquivalent = !isDecided && decision == effective ? "\r" : ""
+        }
+    }
+
+    /// Probes the two files of the pair being looked at, then refines its suggestion.
+    ///
+    /// **Lazily and cancellably.** Probing all 2,460 files of a real scan up front would repeat a large part of
+    /// the scan; the generation counter drops a probe that lands after the selection moved on.
+    private func probeFactsIfNeeded(row: Int, pair: SimilarPair) {
+        guard facts[pair.fileA] == nil || facts[pair.fileB] == nil else { return }
+        probeGeneration += 1
+        let generation = probeGeneration
+        let kind = pair.mediaKind
+        let probe = self.probe
+        let paths = (pair.fileA, pair.fileB)
+        Task { @MainActor [weak self] in
+            let a: MediaFacts?
+            let b: MediaFacts?
+            switch kind {
+            case .image:
+                a = probe.facts(ofImage: paths.0)
+                b = probe.facts(ofImage: paths.1)
+            case .video:
+                a = await probe.facts(ofVideo: paths.0)
+                b = await probe.facts(ofVideo: paths.1)
+            }
+            guard let self, generation == self.probeGeneration else { return }
+            if let a { self.facts[paths.0] = a }
+            if let b { self.facts[paths.1] = b }
+            self.review.updateSuggestion(at: row, factsA: a, factsB: b)
+            guard self.selectedRow == row else { return }
+            self.refreshAdvice(row: row, pair: pair)
+            self.refreshDecisionButtons(row: row)
+        }
+    }
+
+    /// Warns when one file is kept by one pair and discarded by another.
+    ///
+    /// **Shown on close rather than on every click**: the conflict only matters when the set of decisions is done
+    /// with, and a sheet after each choice would make deciding impossible.
+    func presentContradictionsIfNeeded() {
+        let conflicting = review.contradictions
+        guard let first = conflicting.first else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = Strings.string("similar.contradiction.title")
+        alert.informativeText = String(
+            format: Strings.string("similar.contradiction.body"),
+            conflicting.count, (first as NSString).lastPathComponent)
+        alert.addButton(withTitle: Strings.string("button.close"))
+        alert.runModal()
     }
 
     /// The counts, split by kind, and the two thresholds.
@@ -163,11 +313,67 @@ final class SimilarPairWindowController: NSWindowController {
     /// **Split because this build only produces one of the two.** A scan it wrote has no video pairs at all, so
     /// a single total would read as "there is no video here" when it means "this app did not look".
     private func footerString() -> String {
-        String(
+        var text = String(
             format: Strings.string("similar.footer"),
             scan.pairCount(of: .image), scan.imageThreshold,
             scan.pairCount(of: .video), Int(scan.videoThreshold * 100)
         )
+        if let saveFailure { return text + "  -  " + saveFailure }
+        if savedCount > 0 { text += "  -  " + Strings.string("similar.saved") }
+        return text
+    }
+
+    private static let decisionOrder: [SimilarDecision] = [.keepA, .keepB, .keepBoth, .keepNone]
+
+    @objc private func decisionChosen(_ sender: Any?) {
+        guard let button = sender as? NSButton,
+            SimilarPairWindowController.decisionOrder.indices.contains(button.tag),
+            pairs.indices.contains(selectedRow)
+        else { return }
+        let decision = SimilarPairWindowController.decisionOrder[button.tag]
+        review.go(to: selectedRow)
+        review.confirm(decision)
+        // Saved as it goes, for the same reason the exact review does: a decision the user made and an app that
+        // forgot it are indistinguishable from the outside.
+        saveDecisions()
+        table.reloadData(forRowIndexes: [selectedRow], columnIndexes: allColumnIndexes)
+        advanceSelection()
+        refreshDetail()
+    }
+
+    @objc private func skipPair(_ sender: Any?) {
+        guard pairs.indices.contains(selectedRow) else { return }
+        review.go(to: selectedRow)
+        review.skip()
+        saveDecisions()
+        table.reloadData(forRowIndexes: [selectedRow], columnIndexes: allColumnIndexes)
+        advanceSelection()
+        refreshDetail()
+    }
+
+    private var allColumnIndexes: IndexSet {
+        IndexSet(integersIn: 0..<table.tableColumns.count)
+    }
+
+    /// Moves to the next pair, which is what makes deciding a rhythm rather than a click-and-hunt.
+    private func advanceSelection() {
+        let next = selectedRow + 1
+        guard pairs.indices.contains(next) else { return }
+        table.selectRowIndexes([next], byExtendingSelection: false)
+        table.scrollRowToVisible(next)
+    }
+
+    /// Writes what has been decided, and **only** what has been decided.
+    private func saveDecisions() {
+        let document = review.decisionsForSaving
+        do {
+            _ = try ScanStore(state: stateDirectory).save(document, scanID: scan.scanID)
+            savedCount = document.count
+        } catch {
+            // Reported in the footer rather than in a sheet: losing a decision matters, and a modal over every
+            // click would make deciding 4,771 pairs impossible.
+            saveFailure = String(describing: error)
+        }
     }
 
     @objc private func revealSelected(_ sender: Any?) {
@@ -186,6 +392,22 @@ final class SimilarPairWindowController: NSWindowController {
     var requiredContentSize: NSSize {
         window?.contentView?.layoutSubtreeIfNeeded()
         return window?.contentView?.fittingSize ?? .zero
+    }
+
+    var adviceText: String { adviceLabel.stringValue }
+    var tallyText: String { tallyLabel.stringValue }
+    var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
+    var contradictionsForSelftest: [String] { review.contradictions }
+
+    func decideForSelftest(_ decision: SimilarDecision, row: Int) {
+        table.selectRowIndexes([row], byExtendingSelection: false)
+        guard let button = decisionButtons[decision] else { return }
+        decisionChosen(button)
+    }
+
+    func skipForSelftest(row: Int) {
+        table.selectRowIndexes([row], byExtendingSelection: false)
+        skipPair(nil)
     }
 
     func selectPairForSelftest(_ row: Int) {
@@ -210,6 +432,13 @@ final class SimilarPairWindowController: NSWindowController {
                 pair.mediaKind == .image ? "similar.kind.image" : "similar.kind.video")
         case "a": return (pair.fileA as NSString).lastPathComponent
         case "b": return (pair.fileB as NSString).lastPathComponent
+        case "decision":
+            guard let row = pairs.firstIndex(of: pair) else { return "" }
+            switch review.decision(at: row) {
+            case .decided(let decision): return SimilarAdviceText.label(for: decision)
+            case .skipped: return Strings.string("similar.state.skipped")
+            case .undecided: return Strings.string("similar.state.undecided")
+            }
         default: return ""
         }
     }

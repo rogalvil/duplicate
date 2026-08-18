@@ -197,6 +197,21 @@ public struct SimilarReviewState: Sendable {
         }
     }
 
+    /// Recomputes one pair's suggestion once its files have been probed.
+    ///
+    /// **Lazily, because probing every pair up front is not affordable.** A suggestion needs pixel dimensions and
+    /// -- for video -- codec and bitrate, which means opening the file; a scan of 4,771 pairs covers 2,460 files,
+    /// and reading all of them before the window can draw would repeat a large part of the scan.
+    ///
+    /// So the state starts with suggestions computed from what needs no file (the copy-looking name, the depth),
+    /// and a window fills in the rest for the pair the user is looking at. **A decision already made is left
+    /// alone**: the facts refine a suggestion, and a suggestion is not a decision.
+    public mutating func updateSuggestion(at index: Int, factsA: MediaFacts?, factsB: MediaFacts?) {
+        guard scan.pairs.indices.contains(index) else { return }
+        suggestions[index] = SimilarDecisionDefaults.suggestion(
+            for: scan.pairs[index], root: scan.root, factsA: factsA, factsB: factsB)
+    }
+
     // MARK: - Output
 
     /// What belongs in `similar-decisions/<scan_id>.json`, in pair order.

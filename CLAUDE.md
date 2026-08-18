@@ -327,6 +327,17 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **La clave de una decisión de parecidos es `a||b` sin escapes**, formato del CLI, con el hueco que implica: una
   ruta que contenga `||` da una clave que no se puede volver a partir. Medido: **ninguna ruta del corpus lo
   contiene**, y `SimilarPairKey.isAmbiguous` lo reporta en vez de esconderlo.
+- **Una sugerencia se dibuja como el *default*, no como algo ya elegido.** Si el botón de la sugerencia sale
+  presionado igual que una decisión real, las dos se ven idénticas y el único que sabe la diferencia es el
+  archivo. Aquí la sugerencia toma el `keyEquivalent` de Return y ninguna se ve pulsada hasta que alguien
+  decide.
+- **Las facts de media se piden por par, no por escaneo.** Probar los 2,460 archivos de un escaneo real antes de
+  dibujar la ventana repetiría buena parte del escaneo; se piden para el par que se está viendo, con un contador
+  de generación que tira la respuesta que llega después de que la selección se movió.
+- **Las contradicciones se avisan al cerrar, no en cada clic.** El conflicto solo importa cuando el conjunto de
+  decisiones está terminado, y una hoja tras cada elección haría imposible decidir 4,771 pares.
+- **"Descartar los dos" va en rojo.** Es la única opción del visor que puede quitar dos archivos de una, y en el
+  corpus real se usó **una vez en 943 decisiones**.
 - **Un archivo puede estar en varios pares, y eso es lo normal, no un borde**: 4,771 pares sobre 2,460 archivos
   en el corpus real. Un plan que listara la misma ruta dos veces intentaría moverla dos veces, y el segundo
   intento fallaría sobre un archivo que ya está en la Papelera — un error reportado por algo que funcionó.

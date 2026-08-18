@@ -3739,7 +3739,7 @@ enum SelfTest {
         )
 
         // 4. The viewer shows both sides, and they are **different files**.
-        let viewer = SimilarPairWindowController(scan: reloaded)
+        let viewer = SimilarPairWindowController(scan: reloaded, stateDirectory: state)
         defer { viewer.window?.close() }
         try expect(
             viewer.pairRowCount == reloaded.pairs.count,
@@ -3799,7 +3799,7 @@ enum SelfTest {
                     similarity: 1.0, mediaKind: .video)
             ]
         )
-        let videoViewer = SimilarPairWindowController(scan: videoScan)
+        let videoViewer = SimilarPairWindowController(scan: videoScan, stateDirectory: state)
         defer { videoViewer.window?.close() }
         videoViewer.selectPairForSelftest(0)
         // A video similarity is a fraction of sampled frames. There is no 64-bit distance behind it, and
@@ -3815,6 +3815,36 @@ enum SelfTest {
             "a missing file's pane says nothing"
         )
 
+        // 7. Deciding from the window writes only what was decided, and the suggestion is not a decision.
+        // Teeth: have `decisionChosen` confirm every pair and the tally reads 2 decided instead of 1.
+        try expect(
+            viewer.reviewTallyForSelftest.decided == 0,
+            "\(viewer.reviewTallyForSelftest.decided) pairs were decided before anyone clicked")
+        try expect(
+            !viewer.adviceText.isEmpty, "the advice line is empty for an undecided pair")
+        viewer.decideForSelftest(.keepA, row: imageRow)
+        try expect(
+            viewer.reviewTallyForSelftest.decided == 1,
+            "after one click the tally reads \(viewer.reviewTallyForSelftest)")
+
+        let savedDecisions = try store.loadSimilarDecisions(scanID: reloaded.scanID)
+        try expect(
+            savedDecisions.count == 1,
+            "\(savedDecisions.count) decisions on disk after deciding one pair")
+        try expect(
+            savedDecisions.byKey[SimilarPairKey.key(for: reloaded.pairs[imageRow])] == .keepA,
+            "the decision on disk is not the one that was clicked")
+
+        // Skipping records neither, so "passed over" and "never seen" stay different.
+        let otherRow = imageRow == 0 ? 1 : 0
+        viewer.skipForSelftest(row: otherRow)
+        try expect(
+            viewer.reviewTallyForSelftest == (decided: 1, skipped: 1, undecided: 0),
+            "the tally after a skip is \(viewer.reviewTallyForSelftest)")
+        try expect(
+            try store.loadSimilarDecisions(scanID: reloaded.scanID).count == 1,
+            "a skip reached the decisions file")
+
         let fit = viewer.requiredContentSize
         try expect(
             fit.height <= 700 && fit.width <= 1100,
@@ -3826,6 +3856,8 @@ enum SelfTest {
                 + "(\(reloaded.pairCount(of: .image)) image, \(reloaded.pairCount(of: .video)) video), "
                 + "\(result.classCount) hash classes, \(result.examinedPairs) class pairs examined")
         print("  the library lists it and the viewer shows two different files side by side")
+        print(
+            "  one click decided one pair and wrote one key; a skip wrote none")
     }
 
     // MARK: - video
