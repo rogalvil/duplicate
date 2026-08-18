@@ -755,6 +755,28 @@ en silencio reclasificaría cada par de un corpus escaneado con el CLI mientras 
 conserva su nombre. Lo que sí se fija es **cuál lado se recorre**: la ruta menor por bytes. En el CLI eso sale
 del orden de `os.walk`, así que el mismo par puede caer de los dos lados del umbral entre corridas.
 
+### La revisión perceptual: el mismo tri-estado, y dos problemas que el exacto no tiene
+
+`SimilarReviewState.__post_init__` del CLI (`similar_review.py:246-251`) llena una decisión por default para
+**cada** par antes de que el usuario vea uno, así que salir después del primero de 4,771 escribe un archivo que
+dice que los 4,771 se decidieron — y su aplicar actúa sobre todos. Es el mismo defecto que el detector exacto
+tenía, en la misma forma, y aquí una decisión existe solo cuando alguien la tomó. La sugerencia se calcula y se
+muestra; no es decisión hasta que se confirma.
+
+Dos cosas que el detector exacto no tiene que resolver, porque un grupo exacto es una partición y un par no:
+
+**Un archivo aparece en varios pares.** Medido: 4,771 pares sobre 2,460 archivos. Un plan que listara la misma
+ruta dos veces intentaría moverla dos veces, y el segundo intento fallaría sobre un archivo que ya está en la
+Papelera — un error reportado por algo que sí funcionó. Por eso `distinctRemovals` existe.
+
+**Y los pares traslapados se pueden contradecir, incluso con la misma decisión en los dos.** Con (a,b) `keep_a` y
+(b,c) `keep_a`, el primero borra `b` y el segundo lo **conserva**. Transitivamente quizá sea lo que el usuario
+quiso —a ≈ b ≈ c, conservar a— pero nadie dijo "borra b" en el segundo par, e inferirlo es exactamente la
+amabilidad que una acción destructiva no puede permitirse. `contradictions` lo reporta y no lo resuelve; la UI
+decide si preguntar o negarse.
+
+Lo descubrió un test que yo escribí afirmando que esas dos decisiones "coincidían". No coincidían.
+
 ### El consejo: cuál conservar, como valores y no como frase
 
 El CLI arma la explicación en español justo donde decide (`similar_review.py:172-227`):
