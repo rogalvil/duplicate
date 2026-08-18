@@ -3846,6 +3846,27 @@ enum SelfTest {
             try store.loadSimilarDecisions(scanID: reloaded.scanID).count == 1,
             "a skip reached the decisions file")
 
+        // 8. The sheet: a dry run of what was decided, and the gate refusing before it.
+        // Teeth: have the viewer skip `flow.advance(.dryRun,…)` and the sheet's apply refuses.
+        viewer.simulateForSelftest()
+        let sheet = try expectSome(viewer.applySheetForSelftest, "no apply sheet appeared")
+        defer { sheet.window?.close() }
+        try expect(
+            sheet.headlineText.contains("1"),
+            "the sheet says \(sheet.headlineText) for one decided pair")
+        try expect(
+            !sheet.detailText.isEmpty,
+            "the sheet does not warn that every pair is re-checked when it moves")
+        try expect(sheet.isApplyEnabled, "the apply button is disabled with a file to move")
+        try expect(
+            sheet.isAuthorizedForSelftest,
+            "the gate would refuse this sheet, so pressing apply would do nothing")
+        try expect(sheet.isUndoVisible == false, "undo is offered before anything moved")
+        let sheetFit = sheet.requiredContentSize
+        try expect(
+            sheetFit.height <= 700 && sheetFit.width <= 1100,
+            "the sheet layout demands \(Int(sheetFit.width))x\(Int(sheetFit.height))")
+
         let fit = viewer.requiredContentSize
         try expect(
             fit.height <= 700 && fit.width <= 1100,
@@ -3859,6 +3880,7 @@ enum SelfTest {
         print("  the library lists it and the viewer shows two different files side by side")
         print(
             "  one click decided one pair and wrote one key; a skip wrote none")
+        print("  the sheet simulates what would move and says every pair is re-checked first")
     }
 
     // MARK: - similar-apply

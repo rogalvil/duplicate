@@ -20,10 +20,10 @@ deshacer.
 | Detector perceptual de video: escanear, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
 | Decidir pares parecidos en el visor, con el consejo de cuál conservar | **funciona**, sin aplicar todavía |
-| Aplicar un par parecido a la Papelera, verificado y deshacible | **funciona en Core**, sin UI todavía |
+| Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
 
-O sea: para **duplicados exactos el ciclo está completo** y no hace falta el CLI — escanear, revisar,
-simular, aplicar, deshacer. Del perceptual, un escaneo de imágenes ya corre y guarda un documento que el
+O sea: para **duplicados exactos y para parecidos el ciclo está completo** y no hace falta el CLI — escanear,
+revisar, simular, aplicar, deshacer. Lo que sigue de solo lectura es el detector de carpetas. Del perceptual, un escaneo de imágenes ya corre y guarda un documento que el
 CLI lee byte a byte; el hash está medido contra `imagehash` sobre 2,779 fotos reales: **90.4% idéntico bit a
 bit**, 99.2% dentro de dos bits, y las 16 excepciones son justo las 16 imágenes con etiqueta de rotación EXIF,
 que es la divergencia elegida a propósito. Falta la UI y **todo el video**: un escaneo de esta app escribe

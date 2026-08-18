@@ -40,6 +40,9 @@ final class SimilarPairWindowController: NSWindowController {
     private let tallyLabel = NSTextField(labelWithString: "")
     private var decisionButtons: [SimilarDecision: NSButton] = [:]
     private let skipButton = NSButton()
+    private let applyButton = NSButton()
+    private var flow = ReviewFlow()
+    private var applySheet: SimilarApplySheetController?
     private var savedCount = 0
     private var saveFailure: String?
 
@@ -143,6 +146,14 @@ final class SimilarPairWindowController: NSWindowController {
         skipButton.target = self
         skipButton.action = #selector(skipPair(_:))
         decisionRow.addView(skipButton, in: .leading)
+
+        // **A button, not only a menu item.** The last time an action of this app lived behind a keyboard
+        // shortcut alone, nothing on screen said a review could be applied at all.
+        applyButton.title = Strings.string("similar.review.apply")
+        applyButton.bezelStyle = .rounded
+        applyButton.target = self
+        applyButton.action = #selector(simulateAndApply(_:))
+        decisionRow.addView(applyButton, in: .trailing)
 
         let panes = NSStackView(views: [leftPane, rightPane])
         panes.orientation = .horizontal
@@ -376,6 +387,35 @@ final class SimilarPairWindowController: NSWindowController {
         }
     }
 
+    /// Simulates, then -- only from the sheet -- applies.
+    @objc private func simulateAndApply(_ sender: Any?) {
+        let plan = SimilarApplyPlan.from(review)
+        // The gate wants a review that decided something and a dry run of *this* plan. Both are established
+        // here, in the window that owns the review; the sheet never advances its own flow.
+        flow.decisionsChanged(hasAny: review.tally.decided > 0)
+        guard flow.advance(.dryRun, fingerprint: plan.fingerprint) != nil else {
+            let alert = NSAlert()
+            alert.messageText = Strings.string("similar.apply.nothing")
+            alert.addButton(withTitle: Strings.string("button.ok"))
+            alert.runModal()
+            return
+        }
+        let sheet = SimilarApplySheetController(
+            plan: plan, fingerprint: plan.fingerprint, flow: flow,
+            stateDirectory: stateDirectory)
+        sheet.onApplied = { [weak self] _ in
+            // A file that moved is a file the panes must stop showing as if it were there.
+            self?.refreshDetail()
+        }
+        sheet.onUndone = { [weak self] in self?.refreshDetail() }
+        applySheet = sheet
+        if let window, let sheetWindow = sheet.window {
+            window.beginSheet(sheetWindow) { [weak self] _ in self?.applySheet = nil }
+        } else {
+            sheet.showWindow(nil)
+        }
+    }
+
     @objc private func revealSelected(_ sender: Any?) {
         guard let pair = selectedPair else { return }
         Reveal.item(at: pair.fileA)
@@ -398,6 +438,10 @@ final class SimilarPairWindowController: NSWindowController {
     var tallyText: String { tallyLabel.stringValue }
     var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
     var contradictionsForSelftest: [String] { review.contradictions }
+
+    var applySheetForSelftest: SimilarApplySheetController? { applySheet }
+
+    func simulateForSelftest() { simulateAndApply(nil) }
 
     func decideForSelftest(_ decision: SimilarDecision, row: Int) {
         table.selectRowIndexes([row], byExtendingSelection: false)

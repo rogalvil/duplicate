@@ -1,0 +1,335 @@
+import AppKit
+import DuplicateCore
+import Synchronization
+
+/// Shows what a perceptual apply would do, then does it.
+///
+/// A sibling of ``ApplySheetController`` rather than a generalisation of it. The two share their shape -- one
+/// sheet for both steps, because the only thing that authorises the apply is having seen the dry run -- and
+/// differ in what they have to say:
+///
+/// **A refusal is a first-class outcome here, not an error.** The exact apply either moves a file or fails; this
+/// one can also decline, because the pair no longer looks alike. That is the check doing its job, and reporting
+/// it as a failure would train the reader to ignore failures.
+///
+/// **And there is nothing to promise about reclaimed space.** The exact detector knows a group's files are
+/// byte-identical, so it can say what deleting the copies frees. Two similar files have different sizes, and the
+/// only honest number is the size of the files actually being moved.
+@MainActor
+final class SimilarApplySheetController: NSWindowController {
+    var onApplied: ((SimilarDisposalReport) -> Void)?
+    var onUndone: (() -> Void)?
+    private(set) var isApplying = false
+
+    private let stateDirectory: StateDirectory
+    private let plan: SimilarApplyPlan
+    private let fingerprint: String
+    private var flow: ReviewFlow
+    private var report: SimilarDisposalReport?
+    private var progressTimer: Timer?
+    private var applyTask: Task<Void, Never>?
+
+    private let headlineLabel = NSTextField(labelWithString: "")
+    private let detailLabel = NSTextField(wrappingLabelWithString: "")
+    private let listView = NSTextView()
+    private let progressBar = NSProgressIndicator()
+    private let applyButton = NSButton()
+    private let cancelButton = NSButton()
+    private let undoButton = NSButton()
+
+    /// - Parameter flow: already advanced to `.dryRunDone` with `fingerprint`. The sheet does not advance it
+    ///   itself: a sheet that authorised its own apply would be the gate authorising itself.
+    init(
+        plan: SimilarApplyPlan,
+        fingerprint: String,
+        flow: ReviewFlow,
+        stateDirectory: StateDirectory
+    ) {
+        self.plan = plan
+        self.fingerprint = fingerprint
+        self.flow = flow
+        self.stateDirectory = stateDirectory
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 580, height: 400),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = Strings.string("apply.window.title")
+        super.init(window: window)
+        build()
+        showPlan()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+    private func build() {
+        guard let window else { return }
+        headlineLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        detailLabel.font = .systemFont(ofSize: 11)
+        detailLabel.textColor = .secondaryLabelColor
+        for label in [headlineLabel, detailLabel] {
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+
+        listView.isEditable = false
+        listView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        let scroll = NSScrollView()
+        scroll.documentView = listView
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        progressBar.isIndeterminate = false
+        progressBar.minValue = 0
+        progressBar.maxValue = Double(max(1, plan.items.count))
+        progressBar.isHidden = true
+        progressBar.translatesAutoresizingMaskIntoConstraints = false
+
+        applyButton.title = Strings.string("apply.button.apply")
+        applyButton.bezelStyle = .rounded
+        applyButton.keyEquivalent = "\r"
+        applyButton.target = self
+        applyButton.action = #selector(applyNow(_:))
+        applyButton.isEnabled = !plan.isEmpty
+
+        cancelButton.title = Strings.string("button.cancel")
+        cancelButton.bezelStyle = .rounded
+        cancelButton.keyEquivalent = "\u{1b}"
+        cancelButton.target = self
+        cancelButton.action = #selector(dismiss(_:))
+
+        undoButton.title = Strings.string("apply.button.undo")
+        undoButton.bezelStyle = .rounded
+        undoButton.target = self
+        undoButton.action = #selector(undoNow(_:))
+        undoButton.isHidden = true
+
+        let buttons = NSStackView(views: [undoButton, cancelButton, applyButton])
+        buttons.orientation = .horizontal
+        buttons.spacing = 10
+        buttons.alignment = .centerY
+
+        let content = NSStackView(views: [
+            headlineLabel, detailLabel, scroll, progressBar, buttons,
+        ])
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 10
+        content.edgeInsets = NSEdgeInsets(top: 16, left: 18, bottom: 16, right: 18)
+        content.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView()
+        container.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            progressBar.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            progressBar.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+            buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+        ])
+        window.contentView = container
+    }
+
+    /// The dry run: what would move, and what would not.
+    private func showPlan() {
+        headlineLabel.stringValue = String(
+            format: Strings.string("similar.apply.headline"), plan.items.count, plan.pairCount)
+
+        var details: [String] = []
+        // **Said before the button is pressed, not after**: every file is re-checked at the moment it is moved,
+        // and a pair that stopped looking alike is skipped. A reader who learns that from the result would
+        // reasonably think something went wrong.
+        details.append(Strings.string("similar.apply.verifyNote"))
+        if !plan.contradicted.isEmpty {
+            details.append(
+                String(
+                    format: Strings.string("similar.apply.excluded"), plan.contradicted.count))
+        }
+        detailLabel.stringValue = details.joined(separator: "\n")
+
+        listView.string =
+            plan.isEmpty
+            ? Strings.string("similar.apply.nothing")
+            : plan.items.map { "\($0.path)\n    ← \($0.pairKey)" }.joined(separator: "\n")
+    }
+
+    @objc private func applyNow(_ sender: Any?) {
+        // The gate, checked here rather than trusted from the button's state: a disabled control a keyboard
+        // shortcut can still reach is not a rule.
+        do {
+            try ApplyGate.authorize(flow: flow, fingerprint: fingerprint)
+        } catch {
+            presentGateRefusal(error)
+            return
+        }
+
+        isApplying = true
+        applyButton.isEnabled = false
+        cancelButton.isEnabled = false
+        progressBar.isHidden = false
+        progressBar.doubleValue = 0
+        headlineLabel.stringValue = Strings.string("apply.running")
+
+        let runner = SimilarApplyRunner(state: stateDirectory)
+        let plan = self.plan
+        let sessionID = runner.sessionIdentifier(at: Date())
+        let instant = ScanIdentifier.Instant(Date())
+        let progress = AppliedCounter()
+
+        applyTask = Task.detached(priority: .userInitiated) {
+            let outcome: Result<SimilarDisposalReport, any Error>
+            do {
+                outcome = .success(
+                    try await runner.run(
+                        plan,
+                        sessionID: sessionID,
+                        instant: instant,
+                        // The Trash first, quarantine only when it refuses -- a network mount or a read-only
+                        // volume.
+                        disposer: FallbackDisposer(
+                            quarantineRoot: QuarantineDisposer.defaultRoot(),
+                            sessionID: sessionID
+                        ),
+                        onProgress: { done, _ in progress.set(done) }
+                    )
+                )
+            } catch {
+                outcome = .failure(error)
+            }
+            await MainActor.run { [weak self] in
+                self?.finish(outcome)
+            }
+        }
+        startProgressTimer(reading: progress)
+    }
+
+    private func startProgressTimer(reading progress: AppliedCounter) {
+        let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                self.progressBar.doubleValue = Double(progress.value)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        progressTimer = timer
+    }
+
+    private func finish(_ outcome: Result<SimilarDisposalReport, any Error>) {
+        isApplying = false
+        progressTimer?.invalidate()
+        progressTimer = nil
+        progressBar.isHidden = true
+        cancelButton.isEnabled = true
+        cancelButton.title = Strings.string("button.close")
+
+        switch outcome {
+        case .failure(let error):
+            headlineLabel.stringValue = Strings.string("apply.failed.title")
+            listView.string = String(describing: error)
+        case .success(let result):
+            report = result
+            headlineLabel.stringValue = String(
+                format: Strings.string("similar.apply.done"),
+                result.moved.count, ByteSize.format(result.movedBytes))
+
+            var lines: [String] = []
+            // **The refusals first**, because they are the part a reader has to act on: those files are still
+            // there and their pairs need looking at again.
+            if !result.refused.isEmpty {
+                lines.append(
+                    String(
+                        format: Strings.string("similar.apply.refusedHeader"), result.refused.count)
+                )
+                for entry in result.refused.prefix(50) {
+                    lines.append("    \(entry.path)  —  \(Self.reason(entry.reason))")
+                }
+            }
+            if !result.failures.isEmpty {
+                lines.append(
+                    String(format: Strings.string("apply.done.failed"), result.failures.count))
+                for failure in result.failures.prefix(50) {
+                    lines.append("    \(failure.path)  —  \(failure.reason)")
+                }
+            }
+            if result.stoppedEarly { lines.append(Strings.string("apply.done.stoppedEarly")) }
+            for outcome in result.moved.prefix(200) { lines.append(outcome.originalPath) }
+            listView.string = lines.joined(separator: "\n")
+
+            undoButton.isHidden = result.moved.isEmpty
+            onApplied?(result)
+        }
+    }
+
+    static func reason(_ refusal: SimilarRefusal) -> String {
+        switch refusal {
+        case .noLongerAlike(let similarity, let threshold):
+            return String(
+                format: Strings.string("similar.apply.refused.changed"),
+                similarity * 100, threshold * 100)
+        case .unreadable(let path):
+            return String(
+                format: Strings.string("similar.apply.refused.unreadable"),
+                (path as NSString).lastPathComponent)
+        case .missing:
+            return Strings.string("similar.apply.refused.missing")
+        }
+    }
+
+    @objc private func undoNow(_ sender: Any?) {
+        guard let report, !report.moved.isEmpty else { return }
+        let outcome = UndoCoordinator.undo(sessionID: report.sessionID, in: stateDirectory)
+        headlineLabel.stringValue = outcome.summary
+        listView.string = outcome.detail
+        undoButton.isHidden = true
+        onUndone?()
+    }
+
+    private func presentGateRefusal(_ error: any Error) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = Strings.string("apply.refused.title")
+        alert.informativeText = Strings.string("apply.refused.body")
+        alert.addButton(withTitle: Strings.string("button.ok"))
+        alert.runModal()
+    }
+
+    @objc private func dismiss(_ sender: Any?) {
+        applyTask?.cancel()
+        window?.sheetParent?.endSheet(window!)
+        window?.close()
+    }
+
+    // MARK: - Selftest hooks
+
+    var headlineText: String { headlineLabel.stringValue }
+    var detailText: String { detailLabel.stringValue }
+    var listText: String { listView.string }
+    var isApplyEnabled: Bool { applyButton.isEnabled }
+    var isUndoVisible: Bool { !undoButton.isHidden }
+    var requiredContentSize: NSSize {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return window?.contentView?.fittingSize ?? .zero
+    }
+
+    /// Whether the gate would let this sheet apply, without applying.
+    ///
+    /// **Exposed because asserting on the sheet's text does not test the gate.** A first version of the harness
+    /// checked the headline and the list and passed with `flow.advance(.dryRun,…)` removed -- the refusal only
+    /// happens when the button is pressed, and the harness was not pressing it. Pressing it there would move real
+    /// files, which the `similar-apply` mode already does properly, with cleanup.
+    var isAuthorizedForSelftest: Bool {
+        (try? ApplyGate.authorize(flow: flow, fingerprint: fingerprint)) != nil
+    }
+
+    func applyForSelftest() { applyNow(nil) }
+    func undoForSelftest() { undoNow(nil) }
+    var reportForSelftest: SimilarDisposalReport? { report }
+}
