@@ -20,6 +20,7 @@ deshacer.
 | Detector perceptual de video: escanear, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
 | Decidir pares parecidos en el visor, con el consejo de cuál conservar | **funciona**, sin aplicar todavía |
+| Aplicar un par parecido a la Papelera, verificado y deshacible | **funciona en Core**, sin UI todavía |
 
 O sea: para **duplicados exactos el ciclo está completo** y no hace falta el CLI — escanear, revisar,
 simular, aplicar, deshacer. Del perceptual, un escaneo de imágenes ya corre y guarda un documento que el
@@ -220,7 +221,7 @@ make help       # lista todos los targets
 ```
 
 Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.md). El catálogo de los
-30 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
+31 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ## Si algo no funciona

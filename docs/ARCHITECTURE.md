@@ -755,6 +755,34 @@ en silencio reclasificaría cada par de un corpus escaneado con el CLI mientras 
 conserva su nombre. Lo que sí se fija es **cuál lado se recorre**: la ruta menor por bytes. En el CLI eso sale
 del orden de `os.walk`, así que el mismo par puede caer de los dos lados del umbral entre corridas.
 
+### Aplicar un par parecido: la verificación que no puede ser la del exacto
+
+En el detector exacto la regla es clara: el escaneo guardó un SHA-256, y justo antes de mover se vuelve a hashear
+el archivo y se rehúsa si difiere. Eso convierte un escaneo vencido o una caché corrupta de *pérdida de datos* en
+*un mensaje de error*.
+
+**Un escaneo perceptual no guarda ningún digest.** `similar-scans` tiene dos rutas, una similitud y un tipo de
+medio. No hay bytes contra los que comparar.
+
+Lo que sí se puede re-chequear es **la afirmación sobre la que se decidió**: que estos dos archivos se parecen.
+Así que se hashean los dos otra vez, se vuelve a puntuar el par, y el movimiento ocurre solo si sigue pasando el
+umbral con el que se corrió el escaneo. Una foto editada desde entonces, o un archivo reemplazado entero en la
+misma ruta, falla y se rehúsa. Cuesta un decode de dos archivos —medido en ~7 ms para un par de imágenes y ~300 ms
+para uno de video— contra un escaneo que tardó 177 segundos, y se paga solo por los archivos que se van a borrar.
+
+Tres consecuencias que no son obvias:
+
+**Si el contraparte no está, no se mueve nada.** Sin el otro lado la afirmación no se puede re-chequear, y mover
+sobre una afirmación no verificable es exactamente lo que esta verificación existe para evitar.
+
+**El digest del journal se calcula al mover.** Es el único que hay — y es el que un undo necesita, porque es lo
+que prueba que el archivo restaurado es byte-idéntico al que se movió. Si no se puede calcular, **el archivo no se
+mueve**: una entrada con un digest inventado dejaría que el undo "verifique" contra nada.
+
+**Y una ruta contradicha se excluye del plan**, no se avisa. Con (a,b) conservando b y (a,c) conservando a, `a` se
+borra por una decisión y se conserva por otra; las dos son del usuario, y la única lectura que respeta las dos es
+no actuar sobre ninguna.
+
 ### La revisión perceptual: el mismo tri-estado, y dos problemas que el exacto no tiene
 
 `SimilarReviewState.__post_init__` del CLI (`similar_review.py:246-251`) llena una decisión por default para

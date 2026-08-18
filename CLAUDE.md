@@ -327,6 +327,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **La clave de una decisión de parecidos es `a||b` sin escapes**, formato del CLI, con el hueco que implica: una
   ruta que contenga `||` da una clave que no se puede volver a partir. Medido: **ninguna ruta del corpus lo
   contiene**, y `SimilarPairKey.isAmbiguous` lo reporta en vez de esconderlo.
+- **Un escaneo perceptual NO guarda ningún digest**, así que "verificar antes de actuar" no puede ser "¿son los
+  bytes que vio el escaneo?". Lo que sí se puede re-chequear es la afirmación sobre la que se decidió: **estos dos
+  se parecen**. Se re-hashean los dos archivos y se vuelve a puntuar el par contra el umbral del escaneo; una foto
+  editada desde entonces, o un archivo reemplazado en la misma ruta, se rehúsa. Cuesta un decode de dos archivos
+  (~7 ms imagen, ~300 ms video) y solo se paga por los que se van a borrar.
+- **Si el contraparte no está, no se mueve nada.** Sin el otro lado no se puede re-chequear la afirmación, y mover
+  sobre una afirmación no verificable es justo lo que esa verificación existe para evitar.
+- **El digest del journal se calcula al mover, no se recuerda del escaneo** — es el único que hay. Y si no se puede
+  calcular, **el archivo no se mueve**: una entrada con un digest inventado dejaría que un undo "verifique" un
+  archivo restaurado contra nada, que es peor que negarse a borrar.
+- **Una ruta que una decisión borra y otra conserva se excluye del plan, no se avisa.** Las dos decisiones son del
+  usuario, y la única lectura que respeta las dos es no actuar sobre ninguna.
 - **Una sugerencia se dibuja como el *default*, no como algo ya elegido.** Si el botón de la sugerencia sale
   presionado igual que una decisión real, las dos se ven idénticas y el único que sabe la diferencia es el
   archivo. Aquí la sugerencia toma el `keyEquivalent` de Return y ninguna se ve pulsada hasta que alguien

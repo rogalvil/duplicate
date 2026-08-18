@@ -34,7 +34,7 @@ enum SelfTest {
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
-            "similar-window", "video",
+            "similar-window", "video", "similar-apply",
         ]
 
         let modes: [String]
@@ -81,6 +81,7 @@ enum SelfTest {
                 case "phash": try checkPerceptualHash()
                 case "similar-window": try await checkSimilarWindow()
                 case "video": try await checkVideoHashing()
+                case "similar-apply": try await checkSimilarApply()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -3858,6 +3859,128 @@ enum SelfTest {
         print("  the library lists it and the viewer shows two different files side by side")
         print(
             "  one click decided one pair and wrote one key; a skip wrote none")
+    }
+
+    // MARK: - similar-apply
+
+    /// Applies a perceptual decision to the **real Trash**, then puts it back.
+    ///
+    /// The strongest check in this file, and the one that could not exist before: a scan of two real images, a
+    /// decision, a verification that re-scores the pair, a move through `TrashDisposer`, a journal, and an undo
+    /// that restores the file **byte-identically**.
+    ///
+    /// **Nothing is left in the Trash.** The item is removed from `resultingItemURL` at the end, the same way the
+    /// `trash` mode does -- a selftest that leaves debris in a person's Trash is a selftest nobody will run.
+    ///
+    /// Proof of teeth: three breaks, each named beside its assertion.
+    private static func checkSimilarApply() async throws {
+        let manager = FileManager.default
+        let root = NSTemporaryDirectory() + "duplicate-selftest-simapply-\(UUID().uuidString)"
+        let tree = root + "/tree"
+        try manager.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(atPath: root) }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+
+        let keeper = try SyntheticImage.write(
+            .rampWithCorner, width: 96, height: 96, format: .png, to: tree + "/keeper.png")
+        let doomed = try SyntheticImage.write(
+            .rampWithCorner, width: 96, height: 96, format: .jpeg(quality: 0.95),
+            to: tree + "/doomed.jpg")
+
+        let hasher = ContentHasher()
+        let beforeDigest = try hasher.fullDigest(atPath: doomed)
+
+        let scan = SimilarScan(
+            scanID: "20260818-120000-000000", root: tree, createdAt: "2026-08-18T12:00:00Z",
+            imageThreshold: 5, videoThreshold: 0.7,
+            pairs: [
+                SimilarPair(fileA: keeper, fileB: doomed, similarity: 1.0, mediaKind: .image)
+            ]
+        )
+        var review = SimilarReviewState(scan: scan)
+        review.confirm(.keepA)
+        let plan = SimilarApplyPlan.from(review)
+        try expect(plan.items.count == 1, "the plan holds \(plan.items.count) items, wanted 1")
+        try expect(plan.items[0].path == doomed, "the plan would move \(plan.items[0].path)")
+
+        // The gate: nothing can be applied without a current dry run, the same rule the exact detector has.
+        // Teeth: make `ApplyGate.authorize` ignore its fingerprint and the stale case below stops throwing.
+        var flow = ReviewFlow()
+        var refusedWithoutDryRun = false
+        do {
+            try ApplyGate.authorize(flow: flow, fingerprint: plan.fingerprint)
+        } catch { refusedWithoutDryRun = true }
+        try expect(refusedWithoutDryRun, "an apply was authorised with no dry run")
+        // A dry run is not even offered until something is decided, which is why this comes first.
+        flow.decisionsChanged(hasAny: true)
+        _ = flow.advance(.dryRun, fingerprint: plan.fingerprint)
+        try ApplyGate.authorize(flow: flow, fingerprint: plan.fingerprint)
+        // And a plan that is not the one shown is refused, which is the whole point of the fingerprint.
+        var staleRefused = false
+        do {
+            try ApplyGate.authorize(flow: flow, fingerprint: "0000000000000000")
+        } catch { staleRefused = true }
+        try expect(staleRefused, "an apply was authorised for a plan that was never shown")
+
+        // The move, through the real Trash.
+        // Teeth: drop the verification from `SimilarApplyRunner` and the changed-file case below moves.
+        let instant = ScanIdentifier.Instant(
+            year: 2026, month: 8, day: 18, hour: 12, minute: 0, second: 0, microsecond: 0)
+        let report = try await SimilarApplyRunner(state: state).run(
+            plan, sessionID: instant.identifier, instant: instant, disposer: TrashDisposer())
+        try expect(report.moved.count == 1, "\(report.moved.count) files moved, wanted 1")
+        let outcome = try expectSome(report.moved.first, "no outcome")
+        defer { try? manager.removeItem(atPath: outcome.resultingPath) }
+        try expect(!manager.fileExists(atPath: doomed), "the original is still there")
+        try expect(manager.fileExists(atPath: keeper), "the file that was kept is gone")
+        try expect(report.refused.isEmpty, "an unchanged pair was refused: \(report.refused)")
+
+        // The journal carries a digest computed at move time, and it is the real one.
+        let loaded = try MoveJournal.load(sessionID: instant.identifier, in: state)
+        try expect(loaded.entries.count == 1, "\(loaded.entries.count) journal entries")
+        let entry = try expectSome(loaded.entries.first, "no journal entry")
+        try expect(
+            entry.digest == beforeDigest.digest,
+            "the journal recorded \(entry.digest.hexString) for a file whose digest is "
+                + "\(beforeDigest.digest.hexString)")
+        try expect(entry.groupKey == "\(keeper)||\(doomed)", "the pair key is \(entry.groupKey)")
+
+        // And the undo puts it back, byte for byte.
+        let undoPlan = UndoPlanner.plan(
+            sessionID: instant.identifier,
+            entries: loaded.entries,
+            restoredPaths: loaded.restoredPaths,
+            environment: .live(hasher: hasher)
+        )
+        let undone = UndoRunner().run(undoPlan)
+        try expect(undone.restored.count == 1, "\(undone.restored.count) files restored")
+        try expect(manager.fileExists(atPath: doomed), "the file did not come back")
+        try expect(
+            try hasher.fullDigest(atPath: doomed).digest == beforeDigest.digest,
+            "the restored file is not byte-identical")
+
+        // A pair that no longer looks alike is refused rather than moved.
+        // Teeth: this is the assertion that fails when the verification is removed.
+        let changed = try SyntheticImage.write(
+            .checkerboard(square: 3), width: 96, height: 96, format: .png,
+            to: tree + "/doomed.jpg")
+        _ = changed
+        var second = SimilarReviewState(scan: scan)
+        second.confirm(.keepA)
+        let stalePlan = SimilarApplyPlan.from(second)
+        let refusedReport = try await SimilarApplyRunner(state: state).run(
+            stalePlan, sessionID: instant.nextMicrosecond.identifier,
+            instant: instant.nextMicrosecond, disposer: TrashDisposer())
+        try expect(refusedReport.moved.isEmpty, "a changed file was moved to the Trash")
+        try expect(refusedReport.refused.count == 1, "the changed file was not refused")
+        try expect(
+            manager.fileExists(atPath: doomed), "the refused file disappeared anyway")
+
+        print(
+            "  decided one pair, verified it still matched, trashed 1 file and put it back "
+                + "byte-identically")
+        print(
+            "  a pair that stopped looking alike was refused: \(refusedReport.refused.count) of 1")
     }
 
     // MARK: - video
