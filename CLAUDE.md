@@ -327,6 +327,15 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **La clave de una decisión de parecidos es `a||b` sin escapes**, formato del CLI, con el hueco que implica: una
   ruta que contenga `||` da una clave que no se puede volver a partir. Medido: **ninguna ruta del corpus lo
   contiene**, y `SimilarPairKey.isAmbiguous` lo reporta en vez de esconderlo.
+- **Un archivo puede estar en varios pares, y eso es lo normal, no un borde**: 4,771 pares sobre 2,460 archivos
+  en el corpus real. Un plan que listara la misma ruta dos veces intentaría moverla dos veces, y el segundo
+  intento fallaría sobre un archivo que ya está en la Papelera — un error reportado por algo que funcionó.
+- **Y los pares que se traslapan pueden contradecirse, incluso con la *misma* decisión en los dos.** Con (a,b)
+  keep_a y (b,c) keep_a: el primero borra `b` y el segundo **conserva** `b`. Actuar sobre los dos borra un archivo
+  que el usuario eligió conservar un par después. Transitivamente puede ser lo que quiso —a ≈ b ≈ c, conservar a—
+  pero nadie dijo "borra b" en el segundo par, e inferirlo es justo la clase de amabilidad que una acción
+  destructiva no puede tener. Se reporta con `contradictions`, no se resuelve. Un test mío afirmaba lo contrario y
+  estaba equivocado.
 - **El orden de claves de `similar-decisions` es parte del formato.** Guardarlo en un `Dictionary` mezclaría las
   943 líneas reales y la comparación byte a byte fallaría sobre un archivo cuyo contenido es idéntico. Medido: los
   cuatro valores aparecen de verdad —`keep_a` 597, `keep_b` 337, `keep_both` 8, `keep_none` **1**— así que ninguno

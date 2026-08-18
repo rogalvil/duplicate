@@ -1609,6 +1609,90 @@ enum SelfTest {
 
         print("  reviewed 1 of 50 groups; saved exactly 1 decision, 49 left undecided")
         print("  a skip is recorded as neither decided nor unseen")
+
+        try checkSimilarReviewTriState(scratch: scratch)
+    }
+
+    /// The same tri-state, for a perceptual review, through the store.
+    ///
+    /// **The CLI has this defect here too**, and worse: `SimilarReviewState.__post_init__` fills a default
+    /// decision for every pair before the user has seen one, so quitting after the first of 4,771 writes a file
+    /// claiming all 4,771 were decided -- and its apply then acts on them.
+    ///
+    /// Writes only under `/tmp`.
+    ///
+    /// Proof of teeth: have `decisionsForSaving` fall back to the suggestion for an undecided pair and the first
+    /// assertion reads 50 instead of 1.
+    private static func checkSimilarReviewTriState(scratch: String) throws {
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": scratch], homePath: scratch)
+        let store = ScanStore(state: state)
+
+        // Fifty pairs, one of them named like a copy so the suggestion has something to say.
+        let pairs = (0..<50).map { index in
+            SimilarPair(
+                fileA: "/r/photo\(index) copy.jpg", fileB: "/r/photo\(index).jpg",
+                similarity: 1.0, mediaKind: .image)
+        }
+        let scan = SimilarScan(
+            scanID: "20260818-120000-000000", root: "/r", createdAt: "2026-08-18T12:00:00Z",
+            imageThreshold: 5, videoThreshold: 0.7, pairs: pairs
+        )
+        var review = SimilarReviewState(scan: scan)
+
+        // The suggestion is visible before anything is decided, and is not a decision.
+        try expect(
+            review.effectiveDecision(at: 0) == .keepB,
+            "the copy-looking name did not lose: \(review.effectiveDecision(at: 0))")
+        try expect(review.decision(at: 0) == .undecided, "a suggestion counted as a decision")
+        try expect(
+            review.decisionsForSaving.count == 0,
+            "\(review.decisionsForSaving.count) decisions before anyone decided anything")
+
+        try expect(review.confirmEffective() == .advanced, "confirming the first pair failed")
+        try expect(
+            review.decisionsForSaving.count == 1,
+            "reviewed 1 of 50 pairs but saved \(review.decisionsForSaving.count) decisions")
+        try expect(
+            review.tally == (decided: 1, skipped: 0, undecided: 49), "tally is \(review.tally)")
+
+        // Through the store, and back, with only the one key.
+        _ = try store.save(review.decisionsForSaving, scanID: scan.scanID)
+        let reloaded = try store.loadSimilarDecisions(scanID: scan.scanID)
+        try expect(reloaded.count == 1, "the saved document holds \(reloaded.count) keys")
+        try expect(
+            reloaded.byKey[SimilarPairKey.key(for: pairs[0])] == .keepB,
+            "the decision did not survive the store")
+        try expect(
+            store.hasSimilarDecisions(scanID: scan.scanID), "the store cannot see its own file")
+
+        // Reopening restores the one decision and leaves the other 49 alone.
+        let reopened = SimilarReviewState(
+            scan: scan, priorDecisions: store.priorSimilarDecisions(scanID: scan.scanID))
+        try expect(
+            reopened.tally == (decided: 1, skipped: 0, undecided: 49),
+            "after reopening, the tally is \(reopened.tally)")
+
+        // And the conflict overlapping pairs make possible is reported rather than resolved.
+        var overlapping = SimilarReviewState(
+            scan: SimilarScan(
+                scanID: "20260818-120001-000000", root: "/r", createdAt: "t",
+                imageThreshold: 5, videoThreshold: 0.7,
+                pairs: [
+                    SimilarPair(
+                        fileA: "/r/a.jpg", fileB: "/r/b.jpg", similarity: 1, mediaKind: .image),
+                    SimilarPair(
+                        fileA: "/r/a.jpg", fileB: "/r/c.jpg", similarity: 1, mediaKind: .image),
+                ]
+            ))
+        overlapping.confirm(.keepB)
+        overlapping.go(to: 1)
+        overlapping.confirm(.keepA)
+        try expect(
+            overlapping.contradictions == ["/r/a.jpg"],
+            "the contradiction was not reported: \(overlapping.contradictions)")
+
+        print("  reviewed 1 of 50 pairs; saved exactly 1 decision through the store, 49 undecided")
+        print("  a file removed by one pair and kept by another is reported, not resolved")
     }
 
     // MARK: - decisions

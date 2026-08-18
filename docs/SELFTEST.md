@@ -39,7 +39,7 @@ La segunda columna de la tabla no es aspiracional. Cada línea se ejecutó.
 | `storage` | `link`, `clonefile`, `copyItem` y una escritura fresca se distinguen | keyear `StoragePartition.of` por ruta en vez de por content identifier |
 | `trash` | Un archivo temporal va a la Papelera real, vuelve idéntico, y una colisión se renombra | hacer que `TrashDisposer` ignore `resultingItemURL` |
 | `undo` | Cuatro archivos van a la Papelera, se journalizan y se restauran idénticos; un segundo deshacer sobre trabajo ocupado se rehúsa | quitar el guardia `fileExists` de `UndoRunner.run` |
-| `review` | Tras revisar 1 de 50 grupos: exactamente 1 decisión guardada, 49 ausentes | hacer que `decisionsForSaving` caiga a `effectiveKeep` para los sin decidir |
+| `review` | Tras revisar 1 de 50 **grupos** y 1 de 50 **pares parecidos**: exactamente 1 decisión guardada de cada tipo, 49 ausentes — el par pasa además por el store — y una contradicción entre pares traslapados se reporta | tres roturas: `decisionsForSaving` cayendo a `effectiveKeep` para los sin decidir (exacto), lo mismo en el perceptual (**50 decisiones antes de que nadie decidiera nada**), y `contradictions` devolviendo vacío |
 | `gate` | Aplicar se rehúsa sin simulación, tras editar, y para un plan distinto del mostrado | hacer que `ApplyGate.authorize` ignore su argumento |
 | `library` | La ventana real lista, ordena, filtra, etiqueta la cota superior, y **una escritura de otro proceso llega a la tabla** | quitar la asignación `rows =`; vigilar solo `scans/` |
 | `review-window` | La ventana real: el preview no es decisión, conservar nada se rehúsa, el almacenamiento del keeper no se ofrece, se guarda 1 de 3 | cinco roturas distintas, listadas junto a cada aserción |
