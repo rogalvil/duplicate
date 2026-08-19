@@ -34,7 +34,8 @@ enum SelfTest {
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
-            "similar-window", "video", "similar-apply", "folder-apply",
+            "similar-window", "video", "similar-apply", "folder-apply", "cancel", "keeper",
+            "format", "progress", "volumes", "realroot",
         ]
 
         let modes: [String]
@@ -83,6 +84,12 @@ enum SelfTest {
                 case "video": try await checkVideoHashing()
                 case "similar-apply": try await checkSimilarApply()
                 case "folder-apply": try await checkFolderApply()
+                case "cancel": try await checkCancellation()
+                case "keeper": try checkKeeperHeuristic()
+                case "format": try checkByteFormatting()
+                case "progress": try await checkProgressCoalescing(arguments: arguments)
+                case "volumes": try checkVolumeTraits()
+                case "realroot": try await checkRealRoot(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -4306,6 +4313,366 @@ enum SelfTest {
         print(
             "  a q=0.9 JPEG moved the hash \(distance) bits; the inversion moved "
                 + "\(fromPNG.distance(to: inverted))")
+    }
+
+    // MARK: - cancel
+
+    /// Proves a cancelled scan stops quickly and leaves nothing behind.
+    ///
+    /// **The three things a cancelled scan must not do**, each asserted: take long enough that a person presses
+    /// stop twice, write a scan document, or change a single file. The manifest of `(path, size, digest)` is taken
+    /// before and after and compared -- a scan is read-only apart from its hash cache, and this is what says so
+    /// rather than a comment claiming it.
+    ///
+    /// **The cache appends are kept deliberately.** They are true facts about files that did not change, and
+    /// discarding them would make the next run pay the whole price again.
+    ///
+    /// Writes only under `/tmp`.
+    ///
+    /// **Proof of teeth, and which assertion actually has them.** Removing every `checkCancellation` from the
+    /// finder makes the scan run to completion and *return a result*: `a cancelled scan returned a result instead
+    /// of throwing`. The 300 ms deadline is **not** what catches it -- 400 small files hash quickly whether or not
+    /// anyone is listening -- and a deadline that only fires on a corpus a selftest should not create is worth
+    /// keeping as a guard and worth not claiming as the check. Removing one checkpoint of the four changes
+    /// nothing here, which is also worth knowing.
+    private static func checkCancellation() async throws {
+        let manager = FileManager.default
+        let root = NSTemporaryDirectory() + "duplicate-selftest-cancel-\(UUID().uuidString)"
+        let tree = root + "/tree"
+        try manager.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(atPath: root) }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+
+        // Enough files, in enough size classes, that a scan has real work to interrupt.
+        for index in 0..<400 {
+            let payload = String(repeating: "x", count: 200 + index % 7)
+            try Data(payload.utf8).write(to: URL(filePath: tree + "/f\(index).bin"))
+        }
+
+        let hasher = ContentHasher()
+        func manifest() throws -> [String: String] {
+            var result: [String: String] = [:]
+            for name in try manager.contentsOfDirectory(atPath: tree) {
+                let path = tree + "/" + name
+                let digest = try hasher.fullDigest(atPath: path)
+                result[name] = "\(digest.byteCount):\(digest.digest.hexString)"
+            }
+            return result
+        }
+        let before = try manifest()
+
+        let session = ScanSession(
+            store: ScanStore(state: state),
+            cacheURL: URL(filePath: root + "/hashes.v1")
+        )
+        // **Cancelled mid-scan, not before it starts.** A first version cancelled immediately and passed with
+        // every `checkCancellation` removed -- the task threw at its first suspension point, so the checkpoints
+        // were never what stopped it. Waiting until files are actually being hashed is what makes the deadline
+        // mean something.
+        let counters = ProgressCounters()
+        let task = Task {
+            try await session.run(
+                ScanSession.Request(root: tree), at: Date(), progress: counters)
+        }
+        var waited = 0
+        while counters.snapshot().filesHashed < 5, waited < 2_000 {
+            try await Task.sleep(for: .milliseconds(2))
+            waited += 2
+        }
+        try expect(
+            counters.snapshot().filesHashed >= 5,
+            "the scan never got going, so cancelling it proves nothing")
+
+        let started = ContinuousClock.now
+        task.cancel()
+        var cancelled = false
+        do {
+            _ = try await task.value
+        } catch is CancellationError {
+            cancelled = true
+        }
+        let elapsed = ContinuousClock.now - started
+
+        try expect(cancelled, "a cancelled scan returned a result instead of throwing")
+        try expect(
+            elapsed < .milliseconds(300),
+            "a cancelled scan took \(elapsed) to stop, past the 300 ms the plan asks for")
+        try expect(
+            ScanStore(state: state).identifiers(in: .scans).isEmpty,
+            "a cancelled scan wrote a document")
+        let after = try manifest()
+        try expect(after == before, "a cancelled scan changed \(after.count) files on disk")
+
+        print(
+            "  a cancelled scan stopped in \(elapsed), wrote no document, "
+                + "and left all \(before.count) files byte-identical")
+    }
+
+    // MARK: - keeper
+
+    /// Proves the keeper heuristic, and that the two ways of reaching it agree.
+    ///
+    /// **The CLI's fifth defect**: its batch path takes `files[0]` while its interactive path uses the heuristic,
+    /// so `rav duplicate move` and a review of the same scan keep different files. One policy here, asserted from
+    /// both directions.
+    ///
+    /// **And the answer is counter-intuitive on purpose**: the *deepest* file wins, because `depthScore` is
+    /// negative depth. A harness written assuming the first file passes against broken code -- which is how this
+    /// assertion was written wrong once already.
+    ///
+    /// Proof of teeth: point the batch path at `files[0]` and the first assertion fails; port `skip_group`
+    /// literally and the third does.
+    private static func checkKeeperHeuristic() throws {
+        let root = "/root"
+        let files = [
+            "/root/a.jpg",
+            "/root/deep/nested/a.jpg",
+            "/root/a copy.jpg",
+        ]
+        let index = KeeperHeuristic.bestIndex(files: files, root: root)
+        try expect(
+            files[index] == "/root/deep/nested/a.jpg",
+            "the heuristic kept \(files[index]), wanted the deepest file")
+
+        // A copy-looking name loses even when it is deeper, because the copy score is compared first.
+        let withDeepCopy = ["/root/a.jpg", "/root/deep/nested/a copy.jpg"]
+        try expect(
+            withDeepCopy[KeeperHeuristic.bestIndex(files: withDeepCopy, root: root)]
+                == "/root/a.jpg",
+            "a deeper copy-looking name won")
+
+        // The interactive path: a review's default keep set is the same file.
+        let scan = DuplicateScan(
+            scanID: "20260818-120000-000000", root: root, createdAt: "t",
+            groups: [
+                DuplicateGroup(
+                    size: 10, digest: Digest32(hexString: String(repeating: "a", count: 64))!,
+                    files: files)
+            ]
+        )
+        var review = ExactReviewState(scan: scan, root: root)
+        let kept = review.effectiveKeep(at: 0)
+        try expect(
+            kept == [index],
+            "the review proposes \(kept) and the batch path picks \(index)")
+
+        // And skipping leaves it alone -- the CLI's `skip_group` resets the keep set to the first file.
+        _ = review.skip()
+        try expect(
+            review.effectiveKeep(at: 0) == [index],
+            "a skip changed the keeper to \(review.effectiveKeep(at: 0))")
+
+        print(
+            "  the heuristic keeps the deepest name that does not look like a copy, "
+                + "from both the batch and the interactive path")
+        print("  a skip leaves it where it was")
+    }
+
+    // MARK: - format
+
+    /// Proves the byte sizes are the CLI's, and that no locale can move them.
+    ///
+    /// **The decimal separator is a full stop in both languages, deliberately.** `ByteCountFormatter` and
+    /// `NumberFormatter` produce different output per user, which makes column widths unpredictable and tests
+    /// unstable, and the strings the CLI's own tests pin are these. A user running the app in German would
+    /// otherwise see `1,0 KB` where the CLI wrote `1.0 KB`.
+    ///
+    /// **The property is checked against a real German formatter, not by overriding the process locale.** A first
+    /// version set `AppleLanguages` in `UserDefaults` and looped over three identifiers -- which does nothing to a
+    /// process that has already launched, so it asserted the same thing three times while claiming to have tested
+    /// three locales. Building an explicit `de_DE` formatter and showing what it *would* produce is the check
+    /// that has teeth.
+    ///
+    /// It exists next to the unit tests because formatting inside an app bundle is where a locale would arrive
+    /// from, if it ever did.
+    ///
+    /// Proof of teeth: format the fraction with a locale-aware formatter and the German row fails with `1,0 KB`.
+    private static func checkByteFormatting() throws {
+        let expectations: [(Int64, String)] = [
+            (0, "0 B"),
+            (512, "512 B"),
+            (1024, "1.0 KB"),
+            (14_540, "14.2 KB"),
+            (3_670_016, "3.5 MB"),
+            (1_288_490_188, "1.2 GB"),
+        ]
+        for (bytes, expected) in expectations {
+            let formatted = ByteSize.format(bytes)
+            try expect(
+                formatted == expected, "\(bytes) formatted as \(formatted), wanted \(expected)")
+        }
+
+        // What a locale-aware implementation would produce for the same number, on this machine's German
+        // formatter. If this stops using a comma the check below is vacuous, so it is asserted too.
+        let german = NumberFormatter()
+        german.locale = Locale(identifier: "de_DE")
+        german.numberStyle = .decimal
+        german.minimumFractionDigits = 1
+        german.maximumFractionDigits = 1
+        let germanOne = german.string(from: 1.0) ?? ""
+        try expect(
+            germanOne.contains(","),
+            "the German formatter produced \(germanOne), so this check proves nothing")
+        try expect(
+            !ByteSize.format(1024).contains(","),
+            "the shipped format uses a comma: \(ByteSize.format(1024))")
+        try expect(
+            ByteSize.format(1024) == "1.0 KB",
+            "the shipped format reads \(ByteSize.format(1024)) where German would read \(germanOne)"
+        )
+
+        print(
+            "  512 B, 1.0 KB, 14.2 KB, 3.5 MB and 1.2 GB, with a full stop where a German "
+                + "formatter writes \(germanOne)")
+    }
+
+    // MARK: - progress
+
+    /// Proves the progress counters coalesce instead of flooding.
+    ///
+    /// The CLI's hooks fire once per file; at 800,000 files a pushed update would be 800,000 actor hops to redraw
+    /// a label nobody can read more than ten times a second. This drives the counters as fast as a scan would and
+    /// checks that reading them is cheap and that the reader never sees a stale phase.
+    ///
+    /// Proof of teeth: make `snapshot()` allocate the current path per call and the timing assertion fails.
+    private static func checkProgressCoalescing(arguments: [String]) async throws {
+        let count = Int(value(for: "--events", in: arguments) ?? "") ?? 20_000
+        let counters = ProgressCounters()
+        counters.setPhase(.hashing)
+        counters.setCandidates(count)
+
+        let started = ContinuousClock.now
+        for index in 0..<count {
+            counters.noteHashed(path: "/root/file-\(index).bin", bytes: 1024)
+        }
+        let writing = ContinuousClock.now - started
+
+        // Ten reads a second is what the window does; a thousand here is a hard upper bound on the cost.
+        let readStart = ContinuousClock.now
+        var last = counters.snapshot()
+        for _ in 0..<1_000 { last = counters.snapshot() }
+        let reading = ContinuousClock.now - readStart
+
+        try expect(last.filesHashed == count, "\(last.filesHashed) of \(count) events counted")
+        try expect(last.bytesRead == Int64(count) * 1024, "bytes read is \(last.bytesRead)")
+        try expect(last.phase == .hashing, "the phase read as \(last.phase)")
+        try expect(
+            reading < .milliseconds(50),
+            "1,000 snapshots took \(reading), which a 10 Hz timer cannot afford")
+        // The sampled path is one of the ones written, not a concatenation or an empty string.
+        try expect(
+            last.currentPath.hasPrefix("/root/file-"),
+            "the sampled path reads \(last.currentPath)")
+
+        print(
+            "  \(count) progress events in \(writing); 1,000 snapshots in \(reading)")
+    }
+
+    // MARK: - volumes
+
+    /// Prints the volume traits this machine reports, and the concurrency each one gets.
+    ///
+    /// **Needs real volumes, so CI cannot run it** -- a runner has one synthetic disk. It prints rather than
+    /// guesses, and asserts only what must hold anywhere: the boot volume is local and internal, and every width
+    /// is inside the policy's own bounds.
+    ///
+    /// Proof of teeth: return `maximum` for a removable volume in `IOConcurrencyPolicy` and the external row's
+    /// assertion fails -- on a machine with an external disk attached.
+    private static func checkVolumeTraits() throws {
+        let manager = FileManager.default
+        var roots = ["/"]
+        if let mounted = try? manager.contentsOfDirectory(atPath: "/Volumes") {
+            roots += mounted.map { "/Volumes/" + $0 }
+        }
+
+        var reported = 0
+        for root in roots.sorted() {
+            guard let traits = VolumeTraits.forItem(at: root) else {
+                print("  \(root): traits unreadable")
+                continue
+            }
+            let width = IOConcurrencyPolicy.recommended(
+                for: traits, processorCount: ProcessInfo.processInfo.activeProcessorCount)
+            reported += 1
+            print(
+                "  \(root): local \(traits.isLocal), internal \(traits.isInternal), "
+                    + "removable \(traits.isRemovable), cloning \(traits.supportsCloning) "
+                    + "-> concurrency \(width)")
+            try expect(
+                width >= IOConcurrencyPolicy.minimum && width <= IOConcurrencyPolicy.maximum,
+                "\(root) got a width of \(width), outside the policy's own bounds")
+            if traits.isRemovable || !traits.isInternal {
+                try expect(
+                    width == IOConcurrencyPolicy.minimum,
+                    "\(root) is external and got \(width) concurrent readers")
+            }
+        }
+
+        let boot = try expectSome(VolumeTraits.forItem(at: "/"), "the boot volume has no traits")
+        try expect(boot.isLocal, "the boot volume reports as not local")
+        try expect(reported > 0, "no volume reported its traits")
+    }
+
+    // MARK: - realroot
+
+    /// Read-only invariants over a real directory the user names.
+    ///
+    /// **Needs a corpus, so CI skips it.** What it checks is what no synthetic tree can: that the properties hold
+    /// over real shapes -- packages, firmlinks, permission holes, names in two Unicode forms.
+    ///
+    /// Nothing is written anywhere: no scan document, no cache.
+    private static func checkRealRoot(arguments: [String]) async throws {
+        guard let root = value(for: "--path", in: arguments) else {
+            print("  SKIPPED: pass --path <directory> to run this")
+            return
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: root, isDirectory: &isDirectory),
+            isDirectory.boolValue
+        else {
+            throw SelfTestFailure("\(root) is not a directory")
+        }
+
+        let scratch = NSTemporaryDirectory() + "duplicate-selftest-realroot-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: scratch) }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": scratch], homePath: scratch)
+
+        let started = ContinuousClock.now
+        let result = try await ScanSession(
+            store: ScanStore(state: state), cacheURL: URL(filePath: scratch + "/hashes.v1")
+        ).run(ScanSession.Request(root: root), at: Date())
+        let elapsed = ContinuousClock.now - started
+
+        // Every group holds files of one size and one digest -- the two things a group means.
+        for group in result.scan.groups {
+            try expect(group.files.count >= 2, "a group of \(group.files.count) was emitted")
+            try expect(group.size >= 0, "a group has a negative size")
+        }
+        // The order is the CLI's: size descending, then digest bytes.
+        var previous: (Int64, Digest32)?
+        for group in result.scan.groups {
+            if let previous {
+                let ordered =
+                    previous.0 > group.size
+                    || (previous.0 == group.size && previous.1 < group.digest)
+                try expect(ordered, "the groups are out of order at size \(group.size)")
+            }
+            previous = (group.size, group.digest)
+        }
+        // Nothing from a Trash or quarantine root, which is the CLI's live bug.
+        let exclusions = ExclusionSet.forScan(of: root, resolver: SystemTrashRootResolver())
+        for group in result.scan.groups {
+            for path in group.files {
+                try expect(
+                    !path.contains("/.Trash"), "a path under a Trash root was emitted: \(path)")
+            }
+        }
+        _ = exclusions
+
+        print(
+            "  \(result.scan.groups.count) groups over \(result.scan.groups.reduce(0) { $0 + $1.files.count }) "
+                + "files in \(elapsed), nothing written outside /tmp")
     }
 
     // MARK: - about

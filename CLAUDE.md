@@ -560,6 +560,14 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Todo lo que mueve archivos tiene que refrescar la presencia, y eso incluye deshacer.** El primer
   cableado solo lo hacía tras aplicar, así que la ventana seguía diciendo "este archivo ya no existe"
   sobre un archivo que acababa de volver. Lo encontró el uso real, no un test.
+- **Cancelar antes de que el trabajo empiece no prueba los checkpoints.** El `Task` lanza en su primer punto de
+  suspensión, así que el modo pasaba con **todos** los `checkCancellation` quitados. Hay que esperar a que la fase
+  de hasheo haya avanzado y cancelar ahí. Y el plazo de 300 ms **no** es lo que atrapa la regresión —400 archivos
+  chicos se hashean rápido de todos modos—; lo que la atrapa es que un escaneo cancelado **devuelva resultado en
+  vez de lanzar**.
+- **Poner `AppleLanguages` en `UserDefaults` no cambia el locale de un proceso ya lanzado.** Un modo que lo hacía
+  y recorría tres identificadores afirmaba lo mismo tres veces mientras decía haber probado tres locales. La
+  propiedad real se prueba construyendo un `NumberFormatter` alemán explícito y mostrando qué escribiría él.
 - **Un arnés que llama él mismo a la función arreglada no tiene dientes.** La primera versión de esa
   aserción invocaba `reloadFromDisk()` y luego afirmaba: pasaba con el arreglo quitado, porque probaba que
   la función sirve y no que algo la llame. Hay que manejar el camino de producción — el botón de la hoja —

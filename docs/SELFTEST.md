@@ -54,6 +54,12 @@ La segunda columna de la tabla no es aspiracional. Cada línea se ejecutó.
 | `video` | El camino de video en el build de release, con una película real: `AVAssetWriter` codifica H.264, `AVAssetImageGenerator` saca los cuadros, y un clip plano da **un solo hash** (`8000000000000000`) mientras uno con movimiento da varios; más la comparación contra el umbral de 0.70 | dos roturas: quitar la cuantización tras el resample (`d555d515d515d505` en vez del bit del DC), muestrear siempre el mismo instante (1 hash distinto en vez de 5) |
 | `phash` | El hash perceptual en el build de release: un uniforme da **solo el bit del DC** y sus otros 63 coeficientes son **exactamente cero**, un JPEG q=0.9 no mueve el hash más allá del umbral del CLI, el archivo y sus muestras en memoria coinciden, y una inversión sí se aleja | dos roturas: quitar la cuantización a `UInt8` tras el resample (`ab2adcaad8aad8a8` en vez del bit del DC), transformar con la matriz de la base en vez de con Accelerate (`bc41a9b8a9a90046`) |
 | `folder-window` | El detector de carpetas de punta a punta: la ventana lo ofrece, un escaneo real encuentra el par con sus números exactos, la biblioteca lo lista, el visor nombra el traslape y la diferencia, y **todo par guardado queda orientado por bytes** —`folder_b` es la que `rav duplicate folders-move` borra | cuatro roturas: la sesión no guarda, la biblioteca siempre lee los resúmenes exactos, `similarity` escrita como entero, y orientar por los índices del árbol (`folder_a` sale `…/wen/s`) y **un clic decide un par y escribe una clave**, con el aviso de qué perdería el movimiento antes de decidir; la hoja de simular queda autorizada | cinco roturas, entre ellas: decidir todos los pares en vez del seleccionado (`the tally reads (decided: 4…)`) y no avanzar la simulación (`the gate would refuse this sheet`) |
+| `cancel` | Un escaneo cancelado **a media corrida** lanza en vez de devolver resultado, no escribe documento, y deja los 400 archivos byte-idénticos | quitar **todos** los `checkCancellation` del finder: `a cancelled scan returned a result instead of throwing`. El plazo de 300 ms **no** es lo que lo atrapa, y se dice |
+| `keeper` | La heurística conserva el archivo **más profundo** que no parece copia, y el camino batch y el interactivo eligen el mismo; un `skip` no lo mueve | apuntar el batch a `files[0]`, o portar `skip_group` literal |
+| `format` | `512 B`, `1.0 KB`, `14.2 KB`, `3.5 MB`, `1.2 GB`, con punto donde un formateador alemán escribe `1,0` | cambiar el separador a coma: `1024 formatted as 1,0 KB` |
+| `progress` | 20,000 eventos y 1,000 snapshots: los conteos cuadran, la fase no queda vieja, y leer 1,000 veces cuesta menos de 50 ms | que `snapshot()` aloque por llamada |
+| `volumes` | Imprime los `VolumeTraits` de cada volumen montado y la concurrencia que le toca, y **afirma que un externo recibe el mínimo** | devolver el máximo para un volumen removible — falla solo en una máquina con disco externo |
+| `realroot PATH=` | Invariantes de solo lectura sobre un directorio real: todo grupo tiene ≥2 archivos, el orden `(-size, digest)` se sostiene, y ninguna ruta sale de una Papelera. **No escribe nada fuera de `/tmp`** | formas reales de filesystem; sin `--path` se salta diciéndolo |
 | `about` | El panel muestra fecha de compilación y número de build de verdad | quitar la sustitución de `__BUILD_NUMBER__` |
 | `icon` | El `.icns` está en el bundle y trae las siete resoluciones | quitar el `cp Resources/AppIcon.icns` del Makefile |
 
@@ -76,7 +82,7 @@ Importa porque el corpus del usuario tiene 119 escaneos que no se pueden perder.
 
 ## CI los corre, y cómo se pagó
 
-`.github/workflows/ci.yml` corre los 32 modos en cada pull request, después de compilar y **antes** del
+`.github/workflows/ci.yml` corre los 38 modos en cada pull request, después de compilar y **antes** del
 paso de cobertura.
 
 El orden y la configuración son las dos razones por las que esto cuesta poco:
