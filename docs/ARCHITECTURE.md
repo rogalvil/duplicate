@@ -969,10 +969,36 @@ exactamente el error que este documento lleva cincuenta PRs registrando.
 Pico de RSS entre **21.7 y 54.8 MB** en todas las corridas, contra el objetivo de < 400 MB del plan. Sobra un
 orden de magnitud.
 
-### La que falta
+### Y la quinta: `AttrListWalker` queda formalmente rechazado
 
-`fs_usage` para contar syscalls por archivo —lo que decide si `AttrListWalker` llega a escribirse— **necesita
-root** y no se puede correr desde aquí.
+Contado con `fs_usage` sobre el mismo árbol de 3,421 archivos (necesita root, así que lo corrió el usuario):
+
+```
+getattrlistbulk 292      -> 0.085 por archivo, ~11.7 entradas por llamada
+getattrlist     323
+stat64           92
+lstat64           0
+fstatat64         1      -> 0.12 de la familia stat por archivo
+getdirentries    10
+```
+
+**0.12 syscalls de metadata por archivo, contra los 3-4 que hace el CLI en Python** (`lstat` de `is_symlink()` más
+`stat` de `is_file()` en `duplicates.py:203`, más `.stat()` en `:65`). Foundation ya agrupa con
+`getattrlistbulk`: 292 llamadas para 3,421 archivos.
+
+La regla que el plan escribió para esta medición era: *"Si `getattrlistbulk` domina y la razón es < 1.2,
+`FoundationWalker` se queda y `AttrListWalker` nunca se escribe."* Sale **0.12**, diez veces por debajo del
+límite. Así que esas ~400 líneas de aritmética de punteros **no se escriben**, y esto es el número que lo dice en
+lugar de una corazonada.
+
+**Y el mismo trazo confirma el cambio de umbral del prefijo, por un instrumento independiente.** Se tomó con el
+binario anterior —reporta 1,912 sondas— y sobre 2,259 archivos hasheados hubo 6,241 `pread`:
+
+- una sonda son 2 `pread`, así que **3,824 de los 6,241 (61%) eran la sonda**;
+- 3,242 `open` para 1,912 sondas más 2,259 lecturas completas, o sea que 929 pares compartieron descriptor.
+
+Con el umbral en 8 MiB la sonda se dispara 2 veces en vez de 1,912. El barrido de tiempos ya lo decía; esto lo
+dice en syscalls.
 
 ## Testing
 
