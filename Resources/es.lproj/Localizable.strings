@@ -337,3 +337,17 @@
 "folders.warnLoss" = "Mover %1$@ perdería %2$d archivos que tiene y la otra no.";
 "folders.warnNoLoss" = "Todo lo de %@ está también en la otra carpeta.";
 "folders.review.apply" = "Simular y aplicar…";
+"similar.filter.similarity" = "Parecidas al menos";
+"similar.filter.similarity.any" = "cualquiera";
+"similar.filter.similarity.value" = "%d%%";
+"similar.filter.identical" = "idénticas";
+"similar.filter.kind.any" = "Imágenes y videos";
+"similar.filter.kind.image" = "Solo imágenes";
+"similar.filter.kind.video" = "Solo videos";
+"similar.filter.undecided" = "Sin decidir";
+"similar.filter.count" = "%1$d de %2$d pares mostrados";
+"similar.confirmShown" = "Aceptar los %d mostrados";
+"similar.confirmShown.title" = "¿Aceptar la sugerencia de %d pares?";
+"similar.confirmShown.body" = "Al aplicar se moverían %1$d archivos a la Papelera: %2$@. Ahora no se mueve nada, y los pares fuera del filtro siguen sin decidir.";
+"similar.confirmShown.contradictions" = "\n\nOjo: %d archivos los conservaría un par y los descartaría otro. Esos quedan fuera del aplicar.";
+"button.accept" = "Aceptar";

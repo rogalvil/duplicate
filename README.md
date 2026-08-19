@@ -19,7 +19,7 @@ deshacer.
 | Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona** |
 | Detector perceptual de video: escanear, listar y ver los pares | **funciona** |
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
-| Decidir pares parecidos en el visor, con el consejo de cuál conservar | **funciona** |
+| Decidir pares parecidos en el visor, con el consejo y **decisión en lote por filtro** | **funciona** |
 | Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
 
 O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,

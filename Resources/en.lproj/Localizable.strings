@@ -338,3 +338,17 @@
 "folders.warnLoss" = "Moving %1$@ would lose %2$d files it has and the other does not.";
 "folders.warnNoLoss" = "Everything in %@ is in the other folder too.";
 "folders.review.apply" = "Simulate and apply...";
+"similar.filter.similarity" = "Alike at least";
+"similar.filter.similarity.any" = "any";
+"similar.filter.similarity.value" = "%d%%";
+"similar.filter.identical" = "identical";
+"similar.filter.kind.any" = "Images and videos";
+"similar.filter.kind.image" = "Images only";
+"similar.filter.kind.video" = "Videos only";
+"similar.filter.undecided" = "Not decided yet";
+"similar.filter.count" = "%1$d of %2$d pairs shown";
+"similar.confirmShown" = "Accept the %d shown";
+"similar.confirmShown.title" = "Accept the suggestion for %d pairs?";
+"similar.confirmShown.body" = "%1$d files would be moved to the Trash when you apply: %2$@. Nothing moves now, and the pairs outside the filter stay undecided.";
+"similar.confirmShown.contradictions" = "\n\nWarning: %d files would be kept by one pair and discarded by another. Those are excluded from the apply.";
+"button.accept" = "Accept";

@@ -377,6 +377,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   archivo restaurado contra nada, que es peor que negarse a borrar.
 - **Una ruta que una decisión borra y otra conserva se excluye del plan, no se avisa.** Las dos decisiones son del
   usuario, y la única lectura que respeta las dos es no actuar sobre ninguna.
+- **Narrowing no decide nada, y ese es todo el diseño.** 4,771 pares no se revisan de a uno, y la respuesta no es
+  un botón que decida todos —ese botón es el defecto del CLI—. Se filtra, y después se acepta **exactamente lo que
+  está en pantalla**, con el conteo de archivos y bytes dicho antes. Cada índice que llega a `confirmAll` es uno
+  que la ventana mostró.
+- **Con un filtro activo, la fila y el índice del par son números distintos.** Todo lo que decide, dibuja el
+  consejo o pide facts va por el índice del escaneo; usar la fila decidiría el par equivocado. Y tras mutar hay que
+  **reconstruir** la lista visible si el filtro es "sin decidir", o la fila se queda mostrando un par que el estado
+  ya dejó atrás — exactamente lo que una captura real del detector exacto destapó.
+- **La selección se restaura por par, no por fila.** Un filtro que quita filas de arriba movería la selección a
+  otro par sin avisar.
 - **Una sugerencia se dibuja como el *default*, no como algo ya elegido.** Si el botón de la sugerencia sale
   presionado igual que una decisión real, las dos se ven idénticas y el único que sabe la diferencia es el
   archivo. Aquí la sugerencia toma el `keyEquivalent` de Return y ninguna se ve pulsada hasta que alguien
