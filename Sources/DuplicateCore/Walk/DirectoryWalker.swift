@@ -42,6 +42,19 @@ public protocol DirectoryEnumerating: Sendable {
 }
 
 /// The `FileManager.enumerator` implementation.
+///
+/// **And the only one, because the measurement said so.** The plan held open a hand-written `AttrListWalker` --
+/// roughly 400 lines of `getattrlistbulk` and pointer arithmetic -- to be written *if* Foundation turned out to
+/// be paying per-file `stat` calls the way the CLI does. Counted with `fs_usage` over a real 3,421-file tree:
+///
+/// | | per file |
+/// |---|---|
+/// | `getattrlistbulk` | 0.085 (292 calls, ~11.7 entries each) |
+/// | the whole `stat` family | **0.12** |
+/// | the CLI in Python, for comparison | 3-4 |
+///
+/// The rule the plan wrote for this was "if the ratio is under 1.2, `FoundationWalker` stays". It is 0.12, ten
+/// times under. So the rewrite is rejected on evidence, and this comment exists so nobody reopens it on a hunch.
 public struct FileManagerWalker: DirectoryEnumerating, Sendable {
     /// The keys fetched in one batch per entry.
     ///

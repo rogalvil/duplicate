@@ -409,6 +409,13 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El desempate final de un par parecido es la profundidad, y gana el más profundo** — contraintuitivo y a
   propósito: es la regla del detector exacto, y que los dos detectores propusieran sobrevivientes distintos para
   los mismos dos archivos sería peor que una regla rara.
+- **`AttrListWalker` está rechazado con número, no por pereza.** `fs_usage` sobre 3,421 archivos: **0.12 syscalls
+  de la familia stat por archivo** y 292 `getattrlistbulk` (~11.7 entradas por llamada), contra los **3-4 stats por
+  archivo** que hace el CLI en Python. La regla del plan era "si la razón es < 1.2, `FoundationWalker` se queda";
+  sale 0.12. Esas ~400 líneas de aritmética de punteros no se escriben. Necesita `sudo`, así que la corrió el
+  usuario.
+- **Y el mismo trazo mostró que el 61% de los `pread` de un escaneo eran la sonda de prefijo** (3,824 de 6,241),
+  medido con el umbral viejo de 256 KiB. Dos instrumentos distintos —tiempos y syscalls— dijeron lo mismo.
 - **La etapa de prefijo estaba mal calibrada y ahora el umbral es 8 MiB.** A los 256 KiB que se enviaron sondeaba
   **1,912 de 3,421 archivos, cobraba 54% del tiempo y ahorraba 1 MB de 1.5 GB**. El argumento del plan (dos
   imágenes de 4 GB del mismo tamaño) sigue en pie; el umbral no. A 8 MiB es indistinguible de apagarla sobre fotos.
