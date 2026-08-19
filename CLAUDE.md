@@ -327,6 +327,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **La clave de una decisión de parecidos es `a||b` sin escapes**, formato del CLI, con el hueco que implica: una
   ruta que contenga `||` da una clave que no se puede volver a partir. Medido: **ninguna ruta del corpus lo
   contiene**, y `SimilarPairKey.isAmbiguous` lo reporta en vez de esconderlo.
+- **Una rehúsa no es una falla, y mezclarlas entrena a ignorar las fallas.** El aplicar exacto mueve o falla; el
+  perceptual además puede declinar porque el par ya no se parece — eso es el chequeo funcionando, y va primero en
+  el reporte porque es lo que el lector tiene que atender: esos archivos siguen ahí.
+- **En un par parecido no hay nada que prometer sobre espacio recuperado.** El exacto sabe que los archivos de un
+  grupo son byte-idénticos; dos parecidos tienen tamaños distintos, y el único número honesto es el de los
+  archivos que de verdad se movieron.
+- **Afirmar sobre el texto de una hoja no prueba la compuerta.** La primera versión del arnés revisaba el titular
+  y la lista, y **pasaba con `flow.advance(.dryRun,…)` quitado**: la negativa solo ocurre al presionar el botón, y
+  el arnés no lo presionaba. Presionarlo ahí movería archivos de verdad, que es lo que el modo `similar-apply` ya
+  hace con limpieza, así que la hoja expone si la compuerta la autorizaría **sin aplicar**.
 - **Un escaneo perceptual NO guarda ningún digest**, así que "verificar antes de actuar" no puede ser "¿son los
   bytes que vio el escaneo?". Lo que sí se puede re-chequear es la afirmación sobre la que se decidió: **estos dos
   se parecen**. Se re-hashean los dos archivos y se vuelve a puntuar el par contra el umbral del escaneo; una foto

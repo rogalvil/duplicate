@@ -308,3 +308,13 @@
 "similar.contradiction.title" = "Un archivo lo conserva un par y lo descarta otro";
 "similar.contradiction.body" = "Hay %1$d archivos en esa situación, entre ellos %2$@. Actuar sobre todas las decisiones borraría un archivo que elegiste conservar en otro par. Vuelve a decidir esos pares antes de aplicar.";
 "similar.saved" = "Decisiones guardadas";
+"similar.apply.headline" = "%1$d archivos de %2$d pares irían a la Papelera";
+"similar.apply.verifyNote" = "Cada par se vuelve a puntuar en el momento de moverlo. Uno que ya no se parezca se salta.";
+"similar.apply.excluded" = "%d archivos quedan fuera: otra decisión los conserva.";
+"similar.apply.nothing" = "Nada que mover.";
+"similar.apply.done" = "Se movieron %1$d archivos - %2$@";
+"similar.apply.refusedHeader" = "%d saltados, porque el par ya no se sostiene:";
+"similar.apply.refused.changed" = "ahora %1$.2f%% parecidos, por debajo de %2$.2f%%";
+"similar.apply.refused.unreadable" = "no se pudo leer %@";
+"similar.apply.refused.missing" = "ya no está";
+"similar.review.apply" = "Simular y aplicar…";

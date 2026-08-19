@@ -309,3 +309,13 @@
 "similar.contradiction.title" = "One file is kept by one pair and discarded by another";
 "similar.contradiction.body" = "%1$d files are in that position, %2$@ among them. Acting on every decision would delete a file you chose to keep elsewhere. Decide those pairs again before applying.";
 "similar.saved" = "Decisions saved";
+"similar.apply.headline" = "%1$d files from %2$d pairs would go to the Trash";
+"similar.apply.verifyNote" = "Each pair is scored again at the moment it is moved. One that no longer looks alike is skipped.";
+"similar.apply.excluded" = "%d files are left out: another decision keeps them.";
+"similar.apply.nothing" = "Nothing to move.";
+"similar.apply.done" = "Moved %1$d files - %2$@";
+"similar.apply.refusedHeader" = "%d skipped, because the pair no longer holds up:";
+"similar.apply.refused.changed" = "now %1$.2f%% alike, under %2$.2f%%";
+"similar.apply.refused.unreadable" = "%@ could not be read";
+"similar.apply.refused.missing" = "already gone";
+"similar.review.apply" = "Simulate and apply...";
