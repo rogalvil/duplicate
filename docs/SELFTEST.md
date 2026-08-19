@@ -35,7 +35,7 @@ La segunda columna de la tabla no es aspiracional. Cada línea se ejecutó.
 | `walk-permissions` | Un directorio `chmod 000` en medio no detiene el recorrido, y se reporta como inaccesible | pasar `errorHandler: nil` → `inaccessiblePaths` vuelve vacío |
 | `trash-exclusion` | Nada bajo una raíz de Papelera se emite, incluso cuando se llega por symlink | comparar por ruta en vez de por identidad → falla solo la variante con symlink |
 | `scan` | Un árbol sintético da el mismo JSON en cuatro anchos de concurrencia, con el orden exacto | ordenar con `String <` en vez de `PathOrder` |
-| `cache` | Frío contra caliente: mismo resultado, y los registros se escriben | volver a reconstruir el `FileEntry` desde cero en vez de `withSize` |
+| `cache` | Frío contra caliente: mismo resultado, y los registros se escriben. Y que **un escaneo real repare** un archivo de caché al que se le pegó una fila parcial de 40 bytes — el arnés no llama a la reparación, la provoca | dos roturas: reconstruir el `FileEntry` desde cero en vez de `withSize`, y volver a poner `load()` donde va `loadAndRepair()` en `ScanSession.run` |
 | `storage` | `link`, `clonefile`, `copyItem` y una escritura fresca se distinguen | keyear `StoragePartition.of` por ruta en vez de por content identifier |
 | `trash` | Un archivo temporal va a la Papelera real, vuelve idéntico, y una colisión se renombra | hacer que `TrashDisposer` ignore `resultingItemURL` |
 | `undo` | Cuatro archivos van a la Papelera, se journalizan y se restauran idénticos; un segundo deshacer sobre trabajo ocupado se rehúsa | quitar el guardia `fileExists` de `UndoRunner.run` |

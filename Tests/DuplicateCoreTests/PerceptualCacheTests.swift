@@ -212,21 +212,28 @@ struct PerceptualCacheTests {
     func discardsForeignPipelines() async throws {
         let url = try scratch()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        let writer = PerceptualCache(url: url)
-        await writer.load()
-        await writer.store(hashes([9]), for: entry("/a.jpg", inode: 1), kind: .image)
-        _ = try await writer.persist()
+        // Each instance in its own scope. Two live instances over one file is a lock loser, not another
+        // pipeline: a real second pipeline is a different build in a different process, holding its own lock.
+        do {
+            let writer = PerceptualCache(url: url)
+            await writer.load()
+            await writer.store(hashes([9]), for: entry("/a.jpg", inode: 1), kind: .image)
+            _ = try await writer.persist()
+        }
 
-        let other = PerceptualCache(
-            url: url, imageConfiguration: ImageHasher.Configuration(decodeMaxPixelSize: 512))
-        await other.load()
-        #expect(await other.report.discardedFile)
-        #expect(await other.count == 0)
-        #expect(await other.hashes(for: entry("/a.jpg", inode: 1), kind: .image) == nil)
+        do {
+            let other = PerceptualCache(
+                url: url, imageConfiguration: ImageHasher.Configuration(decodeMaxPixelSize: 512))
+            await other.load()
+            #expect(await other.report.discardedFile)
+            #expect(await other.count == 0)
+            #expect(await other.hashes(for: entry("/a.jpg", inode: 1), kind: .image) == nil)
 
-        // And it can then write its own file over the old one, rather than appending under a stale header.
-        await other.store(hashes([11]), for: entry("/a.jpg", inode: 1), kind: .image)
-        _ = try await other.persist()
+            // And it can then write its own file over the old one, rather than appending under a stale header.
+            await other.store(hashes([11]), for: entry("/a.jpg", inode: 1), kind: .image)
+            _ = try await other.persist()
+        }
+
         let reread = PerceptualCache(
             url: url, imageConfiguration: ImageHasher.Configuration(decodeMaxPixelSize: 512))
         await reread.load()
@@ -240,5 +247,92 @@ struct PerceptualCacheTests {
         await cache.load()
         #expect(await cache.count == 0)
         #expect(await cache.report == PerceptualCache.LoadReport())
+    }
+
+    @Test("A torn tail triggers a rewrite that drops it and keeps the rest")
+    func tornTailIsRepaired() async throws {
+        let url = try scratch()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        // Each instance in its own scope: the lock lives as long as the object, so two live instances over one
+        // file is the case the lock exists to make read-only.
+        var full = 0
+        do {
+            let writer = PerceptualCache(url: url)
+            await writer.load()
+            for inode in UInt64(1)...4 {
+                await writer.store(
+                    hashes([UInt64(inode)]), for: entry("/\(inode).jpg", inode: inode), kind: .image
+                )
+            }
+            _ = try await writer.persist()
+            full = try Data(contentsOf: url).count
+        }
+
+        var bytes = try Data(contentsOf: url)
+        bytes.append(Data(repeating: 0xAB, count: 50))
+        try bytes.write(to: url)
+
+        do {
+            let repaired = PerceptualCache(url: url)
+            await repaired.loadAndRepair()
+            #expect(await repaired.count == 4)
+            #expect(await repaired.report.hadTornTail == false)
+            #expect(try Data(contentsOf: url).count == full, "the partial row survived")
+        }
+
+        let reader = PerceptualCache(url: url)
+        await reader.load()
+        #expect(await reader.report.recordsRead == 4)
+        #expect(await reader.report.hadTornTail == false)
+    }
+
+    @Test("A second instance is read-only and appends nothing")
+    func lockDegradesToReadOnly() async throws {
+        let url = try scratch()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let holder = PerceptualCache(url: url)
+        await holder.load()
+        await holder.store(hashes([0x99]), for: entry("/a.jpg", inode: 1), kind: .image)
+        _ = try await holder.persist()
+        let sizeBefore = try Data(contentsOf: url).count
+
+        // Two windows scanning at once. The loser must serve every hit it has and write nothing: two writers
+        // appending 112-byte rows to one file interleave them, and a CRC can say a row is broken without being
+        // able to say which two writers made it.
+        let loser = PerceptualCache(url: url)
+        await loser.load()
+        #expect(await loser.report.isReadOnly)
+        #expect(await loser.hashes(for: entry("/a.jpg", inode: 1), kind: .image) == hashes([0x99]))
+        await loser.store(hashes([0x11]), for: entry("/b.jpg", inode: 2), kind: .image)
+        #expect(try await loser.persist() == 0)
+        #expect(try Data(contentsOf: url).count == sizeBefore, "a read-only instance wrote")
+        #expect(!(await loser.needsRewrite), "a read-only instance offered to rewrite the file")
+    }
+
+    @Test("A salt that no longer matches is not a rewrite trigger")
+    func saltMismatchIsNotARewrite() async throws {
+        // The pipeline changed, so every number in the file means something else -- but a different build can
+        // still use it, and `persist` already rewrites the whole file under the new header when it writes.
+        let url = try scratch()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        do {
+            let writer = PerceptualCache(url: url)
+            await writer.load()
+            await writer.store(hashes([0x1]), for: entry("/a.jpg", inode: 1), kind: .image)
+            _ = try await writer.persist()
+        }
+        let original = try Data(contentsOf: url)
+
+        let other = PerceptualCache(
+            url: url,
+            imageConfiguration: ImageHasher.Configuration(decodeMaxPixelSize: 512)
+        )
+        await other.loadAndRepair()
+        #expect(await other.report.discardedFile)
+        #expect(!(await other.needsRewrite))
+        #expect(
+            try Data(contentsOf: url) == original, "a file another build can read was overwritten")
     }
 }

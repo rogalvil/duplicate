@@ -88,7 +88,7 @@ public struct ScanSession: Sendable {
         progress: ProgressCounters = ProgressCounters()
     ) async throws -> Result {
         let cache = request.usesCache ? HashCache(url: cacheURL ?? HashCache.defaultURL()) : nil
-        await cache?.load()
+        await cache?.loadAndRepair()
 
         // The Trash and the CLI's three quarantine roots are excluded by **identity**, so a root reached
         // through a symlink is pruned too. This is the CLI's live bug: `rav duplicate ~` twice

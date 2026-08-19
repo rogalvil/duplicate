@@ -315,29 +315,115 @@ struct HashCacheTests {
         #expect(await cache.digest(for: entry()) == nil)
     }
 
-    @Test("Compaction keeps the live rows and shrinks the file")
+    @Test("A rewrite keeps the live rows and shrinks the file")
     func compactionKeepsLiveRows() async throws {
+        // Ten digests under one key. **Production cannot reach this state** -- the key carries size, mtime and
+        // generation, so changed content means a new key -- and the mechanism is still worth testing, because a
+        // torn tail and a bad CRC reach the same rewrite by a route that is reachable.
         let scratch = try CacheScratch()
         defer { scratch.remove() }
         let cache = HashCache(url: scratch.url)
         await cache.load()
-        // Ten updates for one key: one live row, nine dead.
         for index in 0..<10 {
             await cache.store(digest(String(index)), for: entry())
             _ = try await cache.persist()
         }
         let before = try scratch.bytes().count
-        #expect(await cache.needsCompaction)
 
         #expect(try await cache.compact() == 1)
         let after = try scratch.bytes().count
         #expect(after < before)
-        #expect(!(await cache.needsCompaction))
 
         let reader = HashCache(url: scratch.url)
         await reader.load()
         #expect(await reader.digest(for: entry()) == digest("9"))
         #expect(await reader.report.recordsRead == 1)
+    }
+
+    @Test("A torn tail is what triggers a rewrite, and the rewrite drops it")
+    func tornTailTriggersRewrite() async throws {
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+        // Each instance in its own scope, because the lock is held for the life of the object -- two live
+        // instances over one file is exactly the case the lock exists to make read-only.
+        var full = 0
+        do {
+            let cache = HashCache(url: scratch.url)
+            await cache.load()
+            for inode in UInt64(1)...4 {
+                await cache.store(digest(String(inode)), for: entry(inode: inode))
+            }
+            _ = try await cache.persist()
+            full = try scratch.bytes().count
+        }
+
+        // A crash mid-append leaves a partial record. Half a row, written by hand.
+        var bytes = try scratch.bytes()
+        bytes.append(contentsOf: [UInt8](repeating: 0xAB, count: 40))
+        try Data(bytes).write(to: scratch.url)
+
+        do {
+            let repaired = HashCache(url: scratch.url)
+            await repaired.loadAndRepair()
+            #expect(
+                await repaired.report.hadTornTail == false, "the report still claims a torn tail")
+            #expect(await repaired.report.recordsRead == 4)
+            #expect(try scratch.bytes().count == full, "the partial row survived the rewrite")
+        }
+
+        let reader = HashCache(url: scratch.url)
+        await reader.load()
+        #expect(await reader.report.isClean)
+        #expect(await reader.report.recordsRead == 4)
+    }
+
+    @Test("A row with a broken CRC triggers a rewrite that drops only that row")
+    func corruptRowTriggersRewrite() async throws {
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+        do {
+            let cache = HashCache(url: scratch.url)
+            await cache.load()
+            for inode in UInt64(1)...4 {
+                await cache.store(digest(String(inode)), for: entry(inode: inode))
+            }
+            _ = try await cache.persist()
+        }
+
+        var bytes = try scratch.bytes()
+        let rowStart = HashCacheFormat.headerSize + HashCacheFormat.recordSize
+        bytes[rowStart + 48] ^= 0xFF
+        try Data(bytes).write(to: scratch.url)
+
+        do {
+            let repaired = HashCache(url: scratch.url)
+            await repaired.load()
+            #expect(await repaired.report.corruptRecords == 1)
+            #expect(await repaired.needsRewrite)
+            _ = try await repaired.compact()
+            #expect(await repaired.report.recordsRead == 3)
+        }
+
+        let reader = HashCache(url: scratch.url)
+        await reader.load()
+        #expect(await reader.report.isClean)
+        #expect(await reader.report.recordsRead == 3, "the rewrite kept the broken row")
+    }
+
+    @Test("A file this build cannot read is left alone, not clobbered")
+    func unknownFormatIsNotRewritten() async throws {
+        // Wrong magic can mean a *newer* build wrote it. Rewriting would cost that build its cache to save us
+        // nothing: the rows are ignored either way.
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+        let alien = Data([UInt8]("SOMETHINGELSE".utf8) + [UInt8](repeating: 7, count: 200))
+        try alien.write(to: scratch.url)
+
+        let cache = HashCache(url: scratch.url)
+        await cache.loadAndRepair()
+        #expect(await cache.report.discardedFile)
+        #expect(!(await cache.needsRewrite))
+        #expect(try Data(contentsOf: scratch.url) == alien, "an unknown format was overwritten")
     }
 
     @Test("Compaction is byte-reproducible")

@@ -756,6 +756,28 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **La caché de hashes vive en `~/Library/Caches`, nunca en el state dir compartido.** Son dos clases
   de dato: un scan es formato de interop que el CLI lee y no se puede perder; la caché es dato
   derivado que macOS puede purgar bajo presión de disco, que es la semántica que se quiere.
+- **La regla de compactación por filas muertas era imposible de disparar, y está medido.** Una fila queda
+  superseded solo si la misma clave se escribe con otro digest — y la clave carga tamaño, mtime y generation, así
+  que un archivo con contenido nuevo produce una clave **nueva** en vez de matar la vieja. En las dos cachés
+  reales de esta máquina: `hashes.v1` tiene 6,661 filas y 6,661 claves distintas, `phashes.v1` tiene 3,396 y
+  3,396. **Razón exactamente 1.0000 tras 119 escaneos.** El test que ejercitaba la regla tenía que escribir diez
+  digests bajo una clave, o sea fabricar un estado que producción no alcanza.
+
+  Lo que sí es alcanzable es basura: una cola parcial de un crash a media escritura, y una fila con CRC roto.
+  Esas se releen y se descartan en **cada** carga, para siempre. Ese es el disparador de la reescritura, y ahora
+  producción la llama: `loadAndRepair()` en las cuatro sesiones que abren una caché.
+- **Un archivo que este build no puede leer se deja quieto, no se pisa.** Magic o versión desconocidos pueden ser
+  de un build **más nuevo**; reescribirlo le costaría su caché a ese build para no ganar nada, porque las filas se
+  ignoran igual. Por eso `discardedFile` no dispara la reescritura y `hadTornTail`/`corruptRecords` sí.
+- **La caché perceptual no tenía `flock` y la de digests sí**, lo cual era una inconsistencia y no una decisión:
+  dos procesos agregando filas de 112 bytes al mismo archivo las intercalan, y un CRC puede decir que una fila
+  está rota sin poder decir cuáles dos escritores la hicieron. Ya lo tiene, con la misma degradación a solo
+  lectura: el que pierde el lock sirve todos sus hits y no escribe.
+- **El lock se sostiene mientras el objeto vive, y eso rompió tres tests y un arnés.** Dos instancias vivas sobre
+  el mismo archivo son un perdedor de lock, no dos pipelines: en producción cada sesión crea su caché dentro de
+  `run()` y la suelta al volver, pero un test que deja la primera en scope hace que la segunda salga read-only y
+  —correctamente— se niegue a escribir. Los tests van con `do { }` por instancia y el modo `cache` usa su propio
+  archivo para el chequeo de reparación.
 - **La clave de la caché incluye `generation`, no solo mtime.** Verificado en APFS: avanza con un
   append, con una reescritura del mismo largo, y con contenido distinto y mtime forzado atrás con
   `utimes` — el caso `rsync -t` que una caché por mtime sirve rancio. `URL` cachea resource values,

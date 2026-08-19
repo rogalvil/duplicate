@@ -1144,6 +1144,74 @@ enum SelfTest {
                 + "warm \(String(format: "%.3f", seconds(warmElapsed)))s  "
                 + "(\(String(format: "%.1f", seconds(coldElapsed) / max(seconds(warmElapsed), 1e-9)))x)"
         )
+
+        // Its own cache file, not this one: `warm` is still in scope and holds the write lock, so a session
+        // opening the same file would degrade to read-only and correctly decline to rewrite anything.
+        try await checkTornTailIsRepairedByAScan(
+            cacheURL: URL(filePath: cacheDirectory).appending(
+                path: "repair.v1", directoryHint: .notDirectory),
+            root: root, instant: instant)
+    }
+
+    /// Proves a scan repairs a cache file that ends in a partial row.
+    ///
+    /// **The trigger for rewriting the file used to be a dead-row ratio, and that rule can never fire in
+    /// production**: the cache key carries size, mtime and generation, so changed content produces a new key
+    /// instead of superseding an old row. Measured on the two real cache files this app has built --
+    /// `hashes.v1` with 6,661 rows and 6,661 distinct keys, `phashes.v1` with 3,396 and 3,396 -- the ratio is
+    /// exactly 1.0000 after 119 scans. What is reachable is junk: a crash mid-append leaves a partial row that
+    /// is re-read and re-skipped on every load, forever.
+    ///
+    /// **Nothing here calls the repair.** The harness truncates the file and then runs a real `ScanSession`, so
+    /// what is asserted is that production repairs it -- the lesson from an earlier mode that called the fixed
+    /// function itself and passed with the fix removed.
+    ///
+    /// Teeth: put `load()` back in place of `loadAndRepair()` in `ScanSession.run` and the partial row is still
+    /// there afterwards.
+    private static func checkTornTailIsRepairedByAScan(
+        cacheURL: URL, root: String, instant: ScanIdentifier.Instant
+    ) async throws {
+        // A state directory of its own, so nothing lands in the user's.
+        let stateRoot = NSTemporaryDirectory() + "/duplicate-cacherepair-\(getpid())"
+        defer { try? FileManager.default.removeItem(atPath: stateRoot) }
+        try FileManager.default.createDirectory(
+            atPath: stateRoot, withIntermediateDirectories: true)
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": stateRoot], homePath: stateRoot)
+
+        // First scan: builds the file and releases the lock when it returns.
+        _ = try await ScanSession(store: ScanStore(state: state), cacheURL: cacheURL)
+            .run(ScanSession.Request(root: root), instant: instant)
+
+        let path = cacheURL.path(percentEncoded: false)
+        var torn = try expectSome(
+            FileManager.default.contents(atPath: path), "the first scan wrote no cache file")
+        torn.append(Data(repeating: 0xAB, count: 40))
+        try torn.write(to: cacheURL)
+
+        // Second scan: the one that has to notice and rewrite.
+        _ = try await ScanSession(store: ScanStore(state: state), cacheURL: cacheURL)
+            .run(
+                ScanSession.Request(root: root),
+                instant: ScanIdentifier.Instant(
+                    year: instant.year, month: instant.month, day: instant.day, hour: instant.hour,
+                    minute: instant.minute, second: instant.second,
+                    microsecond: instant.microsecond + 1))
+
+        let after = try expectSome(
+            FileManager.default.contents(atPath: path), "the scan removed the cache file")
+        let body = after.count - HashCacheFormat.headerSize
+        try expect(
+            body % HashCacheFormat.recordSize == 0,
+            "the cache still ends in a partial row: \(body % HashCacheFormat.recordSize) bytes over"
+        )
+        let reader = HashCache(url: cacheURL)
+        await reader.load()
+        try expect(
+            await reader.report.isClean,
+            "the repaired cache does not load cleanly: \(await reader.report)")
+        print(
+            "  a 40-byte partial row was appended and a real scan rewrote the file: "
+                + "\(after.count) bytes, \(await reader.report.recordsRead) rows, no torn tail")
     }
 
     // MARK: - storage

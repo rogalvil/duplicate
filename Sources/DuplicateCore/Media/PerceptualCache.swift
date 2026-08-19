@@ -201,6 +201,8 @@ public actor PerceptualCache {
         public var hadTornTail = false
         /// Whether the whole file was discarded: wrong magic, version, row size or salt.
         public var discardedFile = false
+        /// Whether another process holds the write lock, so this instance reads but never appends.
+        public var isReadOnly = false
     }
 
     private let url: URL
@@ -208,7 +210,12 @@ public actor PerceptualCache {
     private var entries: [HashCacheKey: PerceptualCacheEntry] = [:]
     private var appended: [(key: HashCacheKey, entry: PerceptualCacheEntry)] = []
     private var recordsOnDisk = 0
+    private var lockDescriptor: Int32 = -1
     private(set) public var report = LoadReport()
+
+    deinit {
+        if lockDescriptor >= 0 { close(lockDescriptor) }
+    }
 
     public init(
         url: URL = PerceptualCache.defaultURL(),
@@ -225,6 +232,7 @@ public actor PerceptualCache {
         report = LoadReport()
         entries.removeAll()
         recordsOnDisk = 0
+        acquireLock()
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return }
         let bytes = [UInt8](data)
         guard bytes.count >= PerceptualCacheFormat.headerSize,
@@ -276,6 +284,9 @@ public actor PerceptualCache {
     @discardableResult
     public func persist() throws -> Int {
         guard !appended.isEmpty else { return 0 }
+        // Another process holds the lock. Every hit this instance served is still valid; only writing is off,
+        // because two writers appending to one file interleave rows that no CRC can reassemble.
+        guard !report.isReadOnly else { return 0 }
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
@@ -308,13 +319,94 @@ public actor PerceptualCache {
         return written
     }
 
-    /// Whether the file holds enough superseded rows to be worth rewriting.
+    /// Whether the file holds bytes this build cannot trust, so rewriting it reclaims something.
     ///
-    /// Same rule as the digest cache: an append-only file grows a row every time a file changes, and the live
-    /// set is what matters.
-    public var needsCompaction: Bool {
-        recordsOnDisk > 2 * max(1, entries.count)
+    /// Same reasoning as ``HashCache/needsRewrite``, including why a superseded-row ratio is the wrong rule: the
+    /// key carries mtime and generation, so a changed file gets a new key instead of superseding a row. Measured
+    /// on the real file: 3,396 rows, 3,396 distinct keys.
+    ///
+    /// A salt mismatch is not a trigger either. It means the pipeline changed and every number in the file
+    /// means something else now -- ``persist()`` already rewrites the whole file in that case, under the new
+    /// header, and doing it here as well would throw away a file a different build can still use.
+    public var needsRewrite: Bool {
+        (report.hadTornTail || report.corruptRecords > 0) && !report.isReadOnly
+    }
+
+    /// Loads, then rewrites the file if it holds bytes that cannot be trusted.
+    ///
+    /// A failed repair is dropped, not propagated: the hashes already loaded are still good, and a perceptual
+    /// scan costs 177 seconds on a real tree.
+    public func loadAndRepair() {
+        load()
+        guard needsRewrite else { return }
+        _ = try? compact()
+    }
+
+    /// Rewrites the file with one row per live key.
+    ///
+    /// Atomic: a temporary file in the same directory swapped in with `replaceItemAt`, so a crash during the
+    /// rewrite leaves the old file rather than half of a new one. Rows go out in key order, which makes a
+    /// byte-diff between two rewrites of the same content meaningful.
+    @discardableResult
+    public func compact() throws -> Int {
+        guard !report.isReadOnly else { return 0 }
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        var payload = PerceptualCacheFormat.encodeHeader(salt: salt)
+        for key in entries.keys.sorted(by: PerceptualCache.isOrdered) {
+            payload += PerceptualCacheFormat.encode(key: key, entry: entries[key]!)
+        }
+
+        let temporary = directory.appending(
+            path: "phashes.v1.compacting-\(ProcessInfo.processInfo.processIdentifier)",
+            directoryHint: .notDirectory
+        )
+        try Data(payload).write(to: temporary, options: .atomic)
+        if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary)
+        } else {
+            try FileManager.default.moveItem(at: temporary, to: url)
+        }
+        appended.removeAll()
+        recordsOnDisk = entries.count
+        report.hadTornTail = false
+        report.corruptRecords = 0
+        return entries.count
     }
 
     public var count: Int { entries.count }
+
+    // MARK: - Locking
+
+    /// Takes a non-blocking exclusive lock, degrading to read-only rather than waiting.
+    ///
+    /// The digest cache has had this since it shipped and this one did not, which was an inconsistency and not
+    /// a decision: two processes appending 112-byte rows to one file interleave them, and a CRC can tell you a
+    /// row is broken without being able to tell you which two writers made it. Derived data must never make two
+    /// windows of the app wait on each other, so a loser reads and serves every hit it has.
+    private func acquireLock() {
+        let directory = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let lockPath = url.path(percentEncoded: false) + ".lock"
+        if lockDescriptor >= 0 { close(lockDescriptor) }
+        lockDescriptor = lockPath.withCString { open($0, O_CREAT | O_RDWR, 0o644) }
+        guard lockDescriptor >= 0 else {
+            report.isReadOnly = true
+            return
+        }
+        if flock(lockDescriptor, LOCK_EX | LOCK_NB) != 0 {
+            report.isReadOnly = true
+        }
+    }
+
+    private static func isOrdered(_ a: HashCacheKey, _ b: HashCacheKey) -> Bool {
+        if a.volume != b.volume { return a.volume < b.volume }
+        if a.inode != b.inode { return a.inode < b.inode }
+        if a.size != b.size { return a.size < b.size }
+        if a.mtimeNanoseconds != b.mtimeNanoseconds {
+            return a.mtimeNanoseconds < b.mtimeNanoseconds
+        }
+        return a.generation < b.generation
+    }
 }

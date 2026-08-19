@@ -173,9 +173,35 @@ public actor HashCache {
         return written
     }
 
-    /// Whether the file has enough dead rows to be worth rewriting.
-    public var needsCompaction: Bool {
-        recordsOnDisk > 2 * max(entries.count, 1)
+    /// Whether the file holds bytes this build cannot trust, so rewriting it reclaims something.
+    ///
+    /// **The trigger used to be a dead-row ratio, and that rule can never fire.** A row is superseded only if
+    /// the same key is written with a different digest, and the key carries the file's size, mtime and
+    /// generation -- so a file whose content changed produces a *new* key rather than superseding the old row.
+    /// Measured on the real caches this app has built: `hashes.v1` holds 6,661 rows and 6,661 distinct keys,
+    /// `phashes.v1` holds 3,396 and 3,396. Zero superseded rows, a ratio of exactly 1.0000, after 119 scans.
+    /// The test that exercised the old rule had to write ten digests under one key, which is a state production
+    /// cannot reach.
+    ///
+    /// What *is* reachable is junk: a torn tail from a crash mid-append, and a row whose CRC no longer matches.
+    /// Those are re-read and re-skipped on every future load, forever, and a rewrite drops them.
+    ///
+    /// **A discarded file is deliberately not a trigger.** Wrong magic or an unknown version can mean a *newer*
+    /// build wrote it, and clobbering that would cost the other build its cache to save us nothing -- the rows
+    /// are already ignored either way.
+    public var needsRewrite: Bool {
+        (report.hadTornTail || report.corruptRecords > 0) && !report.isReadOnly
+    }
+
+    /// Loads, then rewrites the file if it holds bytes that cannot be trusted.
+    ///
+    /// **A failed repair is not a failed scan.** The cache still serves everything it loaded, so the error is
+    /// dropped here rather than propagated: a read-only cache directory would otherwise turn a twenty-minute
+    /// scan into nothing.
+    public func loadAndRepair() {
+        load()
+        guard needsRewrite else { return }
+        _ = try? compact()
     }
 
     /// Rewrites the file with one row per live key.
@@ -208,6 +234,10 @@ public actor HashCache {
         }
         pending.removeAll()
         recordsOnDisk = entries.count
+        // The junk is gone, so the report must stop claiming it is there -- a caller that checks
+        // `needsRewrite` after a repair should see a clean file.
+        report.hadTornTail = false
+        report.corruptRecords = 0
         return entries.count
     }
 
