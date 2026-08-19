@@ -3545,7 +3545,7 @@ enum SelfTest {
             until: { library.folderRowCount == 1 }, what: "the folder scan to reach the table")
 
         // 4. The viewer names the overlap and the difference.
-        let viewer = FolderPairWindowController(scan: reloaded)
+        let viewer = FolderPairWindowController(scan: reloaded, stateDirectory: state)
         defer { viewer.window?.close() }
         try expect(
             viewer.pairRowCount == reloaded.pairs.count,
@@ -3587,6 +3587,40 @@ enum SelfTest {
             "some pair in the saved document is not oriented by bytes"
         )
 
+        // 6. Deciding from the window, and the warning it gives before the decision.
+        // Teeth: have `decisionChosen` decide every pair and the tally reads more than 1.
+        try expect(
+            viewer.reviewTallyForSelftest.decided == 0,
+            "\(viewer.reviewTallyForSelftest.decided) pairs were decided before anyone clicked")
+        viewer.selectPairForSelftest(0)
+        try expect(
+            !viewer.adviceText.isEmpty,
+            "the window says nothing about what moving the other folder would lose")
+
+        viewer.decideForSelftest("keepA", row: 0)
+        try expect(
+            viewer.reviewTallyForSelftest.decided == 1,
+            "after one click the tally reads \(viewer.reviewTallyForSelftest)")
+        let savedFolders = try store.loadFolderDecisions(scanID: reloaded.scanID)
+        try expect(
+            savedFolders.count == 1,
+            "\(savedFolders.count) folder decisions on disk after one click")
+
+        // And the sheet, with the gate behind it.
+        // Teeth: skip `flow.advance(.dryRun,…)` in the window and this reports unauthorised.
+        viewer.simulateForSelftest()
+        let folderSheet = try expectSome(viewer.applySheetForSelftest, "no apply sheet appeared")
+        defer { folderSheet.window?.close() }
+        try expect(
+            folderSheet.isAuthorizedForSelftest,
+            "the gate would refuse this sheet, so pressing apply would do nothing")
+        try expect(
+            !folderSheet.detailText.isEmpty,
+            "the sheet does not say that each folder is checked when it moves")
+
+        print(
+            "  one click decided one pair and wrote one key; the window warns what a move would lose"
+        )
         print(
             "  a folder scan of 2 near-copies: \(reloaded.pairs.count) pairs, "
                 + "\(result.folderCount) folders compared, \(result.examinedPairs) examined"
