@@ -614,6 +614,15 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Confirmar es lo que convierte un preview en decisión.** Dejar el keep set correcto no alcanza: si el
   heurístico ya eligió bien, no hay nada que alternar y el grupo sigue `.undecided`. Eso es el
   tri-estado funcionando, y un arnés que solo alterna casillas obtiene un plan vacío — ya pasó.
+- **Cancelar un apply no puede lanzar: tiene que devolver reporte.** Lanzar desde el chequeo al inicio del loop
+  **se saltaba el `flush()` final**, así que hasta 31 archivos ya movidos quedaban en la Papelera **sin entrada en el
+  journal** — o sea invisibles para el deshacer. Ahora rompe el loop, hace el flush y devuelve el reporte con
+  `wasCancelled`, que es lo que la ventana necesita para ofrecer el undo de lo que sí se movió.
+- **`Task.isCancelled` funciona en código síncrono**, así que el runner exacto honra un cancel sin volverse `async`:
+  corre en una tarea desprendida y ahí la bandera se ve.
+- **Y el botón de detener se queda vivo durante el apply.** Verificar y mover cientos de ítems toma minutos, y una
+  barra de progreso sin salida no es una opción. Cerrar la hoja mientras corre **detiene y no cierra**, porque el
+  reporte de lo que ya se movió es justo la razón para no cerrar.
 - **Veinte fallas seguidas detienen un apply; una sola no.** Un archivo bloqueado por otro proceso no
   puede abortar los otros 3,997, pero un problema global —permiso revocado, volumen que se fue— no debe
   producir cuatro mil filas idénticas que leer.

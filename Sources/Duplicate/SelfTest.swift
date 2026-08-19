@@ -4084,9 +4084,55 @@ enum SelfTest {
         try expect(
             manager.fileExists(atPath: doomed), "the refused file disappeared anyway")
 
+        // And a cancelled apply returns a report whose journal describes what already moved.
+        // Teeth: throw from the cancellation check instead of breaking and this fails with a CancellationError.
+        let cancelTree = root + "/cancel"
+        try manager.createDirectory(atPath: cancelTree, withIntermediateDirectories: true)
+        var cancelPairs: [SimilarPair] = []
+        for index in 0..<5 {
+            let keep = try SyntheticImage.write(
+                .rampWithCorner, width: 64, height: 64, format: .png,
+                to: cancelTree + "/keep\(index).png")
+            let gone = try SyntheticImage.write(
+                .rampWithCorner, width: 64, height: 64, format: .png,
+                to: cancelTree + "/gone\(index).png")
+            cancelPairs.append(
+                SimilarPair(fileA: keep, fileB: gone, similarity: 1.0, mediaKind: .image))
+        }
+        let cancelScan = SimilarScan(
+            scanID: "20260819-120000-000000", root: cancelTree, createdAt: "t",
+            imageThreshold: 5, videoThreshold: 0.7, pairs: cancelPairs)
+        var cancelReview = SimilarReviewState(scan: cancelScan)
+        cancelReview.confirmAll(Array(cancelPairs.indices), as: .keepA)
+        let cancelPlan = SimilarApplyPlan.from(cancelReview)
+
+        let stopper = StoppingDisposer(after: 2)
+        let cancelRunner = SimilarApplyRunner(state: state)
+        let cancelSession = ScanIdentifier.Instant(
+            year: 2026, month: 8, day: 19, hour: 12, minute: 0, second: 0, microsecond: 0)
+        let cancelTask = Task {
+            try await cancelRunner.run(
+                cancelPlan, sessionID: cancelSession.identifier, instant: cancelSession,
+                disposer: stopper)
+        }
+        stopper.setCancel { cancelTask.cancel() }
+        let cancelReport = try await cancelTask.value
+        try expect(cancelReport.wasCancelled, "the report does not say it was cancelled")
+        try expect(
+            cancelReport.moved.count == 2,
+            "\(cancelReport.moved.count) files moved before the stop, wanted 2")
+        let cancelJournal = try MoveJournal.load(
+            sessionID: cancelSession.identifier, in: state)
+        try expect(
+            cancelJournal.entries.count == cancelReport.moved.count,
+            "\(cancelJournal.entries.count) journal entries for \(cancelReport.moved.count) moved files"
+        )
+
         print(
             "  decided one pair, verified it still matched, trashed 1 file and put it back "
                 + "byte-identically")
+        print(
+            "  a stopped apply moved 2 of 5 and journalled both, so undo can still reach them")
         print(
             "  a pair that stopped looking alike was refused: \(refusedReport.refused.count) of 1")
     }
@@ -4936,6 +4982,36 @@ private struct SlowHasher: FileHashing {
     func fullDigest(atPath path: String) throws -> HashResult {
         usleep(microseconds)
         return try wrapped.fullDigest(atPath: path)
+    }
+}
+
+/// Cancels the task that owns it after a number of disposals, so a stop lands mid-run.
+///
+/// Nothing is moved: the point is the bookkeeping, and the real Trash is exercised elsewhere in this mode.
+private final class StoppingDisposer: ItemDisposing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    private let after: Int
+    private var cancel: (@Sendable () -> Void)?
+
+    init(after: Int) { self.after = after }
+
+    func setCancel(_ cancel: @escaping @Sendable () -> Void) {
+        lock.lock()
+        self.cancel = cancel
+        lock.unlock()
+    }
+
+    func dispose(path: String) throws -> DisposalOutcome {
+        lock.lock()
+        count += 1
+        let reached = count >= after
+        let action = cancel
+        lock.unlock()
+        if reached { action?() }
+        return DisposalOutcome(
+            originalPath: path, resultingPath: "/trash/" + (path as NSString).lastPathComponent,
+            mechanism: .trash, byteCount: 10)
     }
 }
 

@@ -351,3 +351,6 @@
 "similar.confirmShown.body" = "Al aplicar se moverían %1$d archivos a la Papelera: %2$@. Ahora no se mueve nada, y los pares fuera del filtro siguen sin decidir.";
 "similar.confirmShown.contradictions" = "\n\nOjo: %d archivos los conservaría un par y los descartaría otro. Esos quedan fuera del aplicar.";
 "button.accept" = "Aceptar";
+"apply.button.stop" = "Detener";
+"apply.stopped" = "Detenido tras %1$d archivos - %2$@";
+"apply.stopped.note" = "El resto no se tocó. Lo que sí se movió está en la Papelera y esta ventana lo puede devolver.";

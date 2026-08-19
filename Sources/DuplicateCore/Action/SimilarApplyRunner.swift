@@ -29,6 +29,12 @@ public struct SimilarDisposalReport: Sendable {
     /// Files not moved because the pair no longer holds up. **Not failures** -- the check did its job.
     public let refused: [(path: String, reason: SimilarRefusal)]
     public let stoppedEarly: Bool
+    /// Whether the run stopped because it was cancelled.
+    ///
+    /// **A cancelled apply returns a report rather than throwing**, because the files it already moved are in the
+    /// Trash and the caller needs the journal path and the moved list to offer an undo. Throwing would leave the
+    /// user with moved files and a window that never learned about them.
+    public var wasCancelled = false
     public let journalPath: String?
 
     public var movedBytes: Int64 { moved.reduce(0) { $0 + $1.byteCount } }
@@ -86,8 +92,15 @@ public struct SimilarApplyRunner: Sendable {
             pending.removeAll()
         }
 
+        var cancelled = false
         for (index, item) in plan.items.enumerated() {
-            try Task.checkCancellation()
+            // **Checked here and the journal flushed on the way out.** An earlier version threw from this point,
+            // which skipped the flush below and left up to 31 already-moved files with no journal entry -- in the
+            // Trash, and invisible to undo.
+            if Task.isCancelled {
+                cancelled = true
+                break
+            }
             let verdict = await verifier.verify(
                 item, imageThreshold: plan.imageThreshold, videoThreshold: plan.videoThreshold)
             if let refusal = SimilarRefusal(verdict) {
@@ -134,10 +147,11 @@ public struct SimilarApplyRunner: Sendable {
             onProgress?(index + 1, plan.items.count)
         }
 
-        // Flushed even when the run stopped early, or the files that did move would be unrecoverable.
+        // Flushed even when the run stopped early or was cancelled, or the files that did move would be
+        // unrecoverable.
         try flush()
 
-        return SimilarDisposalReport(
+        var report = SimilarDisposalReport(
             sessionID: sessionID,
             moved: moved,
             failures: failures,
@@ -145,6 +159,8 @@ public struct SimilarApplyRunner: Sendable {
             stoppedEarly: stoppedEarly,
             journalPath: moved.isEmpty ? nil : journalPath
         )
+        report.wasCancelled = cancelled
+        return report
     }
 
     public func sessionIdentifier(at date: Date) -> String {

@@ -19,6 +19,8 @@ public struct FolderDisposalReport: Sendable {
     public let failures: [ApplyFailure]
     public let refused: [(path: String, reason: FolderRefusal)]
     public let stoppedEarly: Bool
+    /// Whether the run stopped because it was cancelled. See ``SimilarDisposalReport/wasCancelled``.
+    public var wasCancelled = false
     public let journalPath: String?
 
     public var movedBytes: Int64 { moved.reduce(0) { $0 + $1.byteCount } }
@@ -83,8 +85,13 @@ public struct FolderApplyRunner: Sendable {
             pending.removeAll()
         }
 
+        var cancelled = false
         for (index, item) in plan.items.enumerated() {
-            try Task.checkCancellation()
+            // Flushed on the way out rather than thrown from here: see the note in `SimilarApplyRunner`.
+            if Task.isCancelled {
+                cancelled = true
+                break
+            }
             let manager = FileManager.default
             var isDirectory: ObjCBool = false
             guard manager.fileExists(atPath: item.path, isDirectory: &isDirectory),
@@ -155,7 +162,7 @@ public struct FolderApplyRunner: Sendable {
         _ = try? await cache.persist()
         try flush()
 
-        return FolderDisposalReport(
+        var report = FolderDisposalReport(
             sessionID: sessionID,
             moved: moved,
             failures: failures,
@@ -163,6 +170,8 @@ public struct FolderApplyRunner: Sendable {
             stoppedEarly: stoppedEarly,
             journalPath: moved.isEmpty ? nil : journalPath
         )
+        report.wasCancelled = cancelled
+        return report
     }
 
     public func sessionIdentifier(at date: Date) -> String {

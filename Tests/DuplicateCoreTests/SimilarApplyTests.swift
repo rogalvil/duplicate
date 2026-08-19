@@ -411,7 +411,9 @@ struct SimilarApplyRunnerTests {
         #expect(report.moved.count + report.refused.count == 2)
     }
 
-    @Test("A cancelled apply stops between items")
+    /// **A cancelled apply returns a report, it does not throw.** It used to throw, which skipped the journal
+    /// flush and left already-moved files unrecoverable; the report is what lets a window offer the undo.
+    @Test("A cancelled apply stops between items and reports it")
     func stopsWhenCancelled() async throws {
         let scratch = try ApplyScratch()
         defer { scratch.remove() }
@@ -428,7 +430,10 @@ struct SimilarApplyRunnerTests {
                 disposer: RecordingDisposer())
         }
         task.cancel()
-        await #expect(throws: CancellationError.self) { _ = try await task.value }
+        let report = try await task.value
+        #expect(report.wasCancelled)
+        #expect(report.moved.isEmpty, "a run cancelled before it started moved something")
+        #expect(report.journalPath == nil, "nothing moved, so there is no journal")
     }
 }
 
@@ -455,5 +460,102 @@ private final class ProgressBox: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return total
+    }
+}
+
+/// Cancels the task that owns it after a given number of disposals, so cancellation lands mid-run.
+private final class CancellingDisposer: ItemDisposing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    private let after: Int
+    private var cancel: (@Sendable () -> Void)?
+    private(set) var disposed: [String] = []
+
+    init(after: Int) { self.after = after }
+
+    func setCancel(_ cancel: @escaping @Sendable () -> Void) {
+        lock.lock()
+        self.cancel = cancel
+        lock.unlock()
+    }
+
+    func dispose(path: String) throws -> DisposalOutcome {
+        lock.lock()
+        count += 1
+        disposed.append(path)
+        let reached = count >= after
+        let action = cancel
+        lock.unlock()
+        if reached { action?() }
+        return DisposalOutcome(
+            originalPath: path, resultingPath: "/trash/" + (path as NSString).lastPathComponent,
+            mechanism: .trash, byteCount: 10)
+    }
+}
+
+@Suite("Cancelling an apply")
+struct SimilarApplyCancellationTests {
+
+    private let instant = ScanIdentifier.Instant(
+        year: 2026, month: 8, day: 19, hour: 12, minute: 0, second: 0, microsecond: 0)
+
+    /// **The bug this test was written to pin.** Cancellation used to throw from the top of the loop, which
+    /// skipped the journal flush after it -- so up to 31 files were in the Trash with no journal entry, and undo
+    /// could not see them. A cancelled apply now returns its report, and the journal describes every file it
+    /// moved.
+    @Test("A cancelled apply journals what it already moved")
+    func journalsWhatItMoved() async throws {
+        let scratch = try ApplyScratch()
+        defer { scratch.remove() }
+
+        // Five pairs, so a cancel after two leaves three untouched.
+        var pairs: [SimilarPair] = []
+        for index in 0..<5 {
+            let keeper = try scratch.image("keep\(index).png", .rampWithCorner)
+            let doomed = try scratch.image("gone\(index).png", .rampWithCorner)
+            pairs.append(pair(keeper, doomed))
+        }
+        var review = SimilarReviewState(scan: scan(pairs, root: scratch.tree))
+        review.confirmAll(Array(pairs.indices), as: .keepA)
+        let plan = SimilarApplyPlan.from(review)
+        #expect(plan.items.count == 5)
+
+        let disposer = CancellingDisposer(after: 2)
+        let runner = SimilarApplyRunner(state: scratch.state)
+        let task = Task {
+            try await runner.run(
+                plan, sessionID: instant.identifier, instant: instant, disposer: disposer)
+        }
+        disposer.setCancel { task.cancel() }
+
+        // A report, not a thrown error: the caller needs the moved list to offer an undo.
+        let report = try await task.value
+        #expect(report.wasCancelled)
+        #expect(report.moved.count == 2, "\(report.moved.count) files moved")
+        #expect(report.moved.count < plan.items.count, "the run was not actually interrupted")
+
+        // And the journal holds every one of them.
+        let loaded = try MoveJournal.load(sessionID: instant.identifier, in: scratch.state)
+        #expect(
+            loaded.entries.count == report.moved.count,
+            "\(loaded.entries.count) journal entries for \(report.moved.count) moved files")
+        #expect(Set(loaded.entries.map(\.originalPath)) == Set(report.moved.map(\.originalPath)))
+        #expect(report.journalPath != nil)
+    }
+
+    @Test("An uncancelled apply is not marked cancelled")
+    func doesNotMarkNormalRuns() async throws {
+        let scratch = try ApplyScratch()
+        defer { scratch.remove() }
+        let keeper = try scratch.image("keep.png", .rampWithCorner)
+        let doomed = try scratch.image("gone.png", .rampWithCorner)
+        var review = SimilarReviewState(scan: scan([pair(keeper, doomed)], root: scratch.tree))
+        review.confirm(.keepA)
+
+        let report = try await SimilarApplyRunner(state: scratch.state).run(
+            SimilarApplyPlan.from(review), sessionID: instant.identifier, instant: instant,
+            disposer: RecordingDisposer())
+        #expect(report.wasCancelled == false)
+        #expect(report.moved.count == 1)
     }
 }

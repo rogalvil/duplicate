@@ -80,6 +80,15 @@ public struct DisposalReport: Sendable {
     public let failures: [ApplyFailure]
     /// `true` when the run gave up early because failures kept coming.
     public let stoppedEarly: Bool
+    /// Whether the run stopped because it was cancelled.
+    ///
+    /// **A cancelled apply returns a report rather than throwing.** The files it already moved are in the Trash,
+    /// and the caller needs the journal path and the moved list to offer an undo; throwing would leave the user
+    /// with moved files and a window that never heard about them.
+    ///
+    /// `Task.isCancelled` works in synchronous code, so this runner needs no `async` to honour a cancel -- it is
+    /// called from a detached task and the flag is visible there.
+    public var wasCancelled = false
     /// Where the journal went, or `nil` when nothing was moved.
     public let journalPath: String?
 
@@ -164,7 +173,12 @@ public struct ApplyRunner: Sendable {
             pending.removeAll()
         }
 
+        var cancelled = false
         for (index, item) in plan.items.enumerated() {
+            if Task.isCancelled {
+                cancelled = true
+                break
+            }
             do {
                 let outcome = try verifying.dispose(path: item.path)
                 moved.append(outcome)
@@ -196,13 +210,15 @@ public struct ApplyRunner: Sendable {
         // Flushed even when the run stopped early, or the files that did move would be unrecoverable.
         try flush()
 
-        return DisposalReport(
+        var report = DisposalReport(
             sessionID: sessionID,
             moved: moved,
             failures: failures,
             stoppedEarly: stoppedEarly,
             journalPath: moved.isEmpty ? nil : journalPath
         )
+        report.wasCancelled = cancelled
+        return report
     }
 
     /// A session identifier for an apply starting now.
