@@ -12,6 +12,14 @@ import DuplicateCore
 @MainActor
 final class FolderPairWindowController: NSWindowController {
     private let scan: FolderScan
+    private let stateDirectory: StateDirectory
+    private var review: FolderReviewState
+    private var flow = ReviewFlow()
+    private var applySheet: FolderApplySheetController?
+    private let adviceLabel = NSTextField(labelWithString: "")
+    private let tallyLabel = NSTextField(labelWithString: "")
+    private var decisionButtons: [String: NSButton] = [:]
+    private var savedCount = 0
     private var pairs: [FolderPair] = []
 
     private let table = NSTableView()
@@ -19,7 +27,13 @@ final class FolderPairWindowController: NSWindowController {
     private let detailView = NSTextView()
     private let footerLabel = NSTextField(labelWithString: "")
 
-    init(scan: FolderScan) {
+    init(scan: FolderScan, stateDirectory: StateDirectory = StateDirectory.current()) {
+        self.stateDirectory = stateDirectory
+        self.review = FolderReviewState(
+            scan: scan,
+            priorDecisions: ScanStore(state: stateDirectory)
+                .priorFolderDecisions(scanID: scan.scanID)
+        )
         self.scan = scan
         self.pairs = scan.pairs
 
@@ -63,6 +77,7 @@ final class FolderPairWindowController: NSWindowController {
             ("b", "folders.column.b", CGFloat(280), false),
             ("matching", "folders.column.matching", CGFloat(110), true),
             ("difference", "folders.column.difference", CGFloat(120), true),
+            ("decision", "folders.column.decision", CGFloat(140), false),
         ] as [(String, String, CGFloat, Bool)] {
             let column = NSTableColumn(identifier: .init(name))
             column.title = Strings.string(key)
@@ -90,12 +105,43 @@ final class FolderPairWindowController: NSWindowController {
 
         footerLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         footerLabel.textColor = .secondaryLabelColor
-        for label in [headerLabel, footerLabel] {
+        adviceLabel.font = .systemFont(ofSize: 11)
+        adviceLabel.maximumNumberOfLines = 2
+        tallyLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        tallyLabel.textColor = .secondaryLabelColor
+        for label in [headerLabel, footerLabel, adviceLabel, tallyLabel] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             label.lineBreakMode = .byTruncatingMiddle
         }
 
-        let content = NSStackView(views: [scroll, headerLabel, detailScroll, footerLabel])
+        let decisionRow = NSStackView()
+        decisionRow.orientation = .horizontal
+        decisionRow.spacing = 8
+        decisionRow.translatesAutoresizingMaskIntoConstraints = false
+        for (identifier, key) in [
+            ("keepA", "folders.decision.keepA"), ("keepB", "folders.decision.keepB"),
+            ("keepBoth", "folders.decision.keepBoth"), ("skip", "folders.decision.skip"),
+        ] {
+            let button = NSButton()
+            button.title = Strings.string(key)
+            button.bezelStyle = .rounded
+            button.setButtonType(.pushOnPushOff)
+            button.identifier = NSUserInterfaceItemIdentifier(identifier)
+            button.target = self
+            button.action = #selector(decisionChosen(_:))
+            decisionButtons[identifier] = button
+            decisionRow.addView(button, in: .leading)
+        }
+        let applyButton = NSButton()
+        applyButton.title = Strings.string("folders.review.apply")
+        applyButton.bezelStyle = .rounded
+        applyButton.target = self
+        applyButton.action = #selector(simulateAndApply(_:))
+        decisionRow.addView(applyButton, in: .trailing)
+
+        let content = NSStackView(views: [
+            scroll, headerLabel, detailScroll, adviceLabel, decisionRow, tallyLabel, footerLabel,
+        ])
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 6
@@ -151,6 +197,7 @@ final class FolderPairWindowController: NSWindowController {
             detailView.string = ""
             footerLabel.stringValue = footerString()
             return
+                refreshAdvice()
         }
         headerLabel.stringValue = String(
             format: Strings.string("folders.header"),
@@ -163,19 +210,125 @@ final class FolderPairWindowController: NSWindowController {
         if !pair.onlyInA.isEmpty {
             lines.append(String(format: Strings.string("folders.onlyIn"), pair.folderA))
             lines.append(contentsOf: pair.onlyInA.map { "    " + $0 })
+            refreshAdvice()
         }
         if !pair.onlyInB.isEmpty {
             lines.append(String(format: Strings.string("folders.onlyIn"), pair.folderB))
             lines.append(contentsOf: pair.onlyInB.map { "    " + $0 })
+            refreshAdvice()
         }
         if !pair.changed.isEmpty {
             lines.append(Strings.string("folders.changedHeader"))
             lines.append(contentsOf: pair.changed.map { "    " + $0 })
+            refreshAdvice()
         }
         if lines.isEmpty { lines.append(Strings.string("folders.identical")) }
         detailView.string = lines.joined(separator: "\n")
 
         footerLabel.stringValue = footerString()
+        refreshAdvice()
+    }
+
+    private var selectedRow: Int {
+        table.clickedRow >= 0 ? table.clickedRow : table.selectedRow
+    }
+
+    /// **What the scan already knows, said before the decision instead of after the refusal.**
+    ///
+    /// A folder pair carries `only_in_a` and `only_in_b`, so the window can say "moving the second would lose 5
+    /// files it has and the first does not" while the user is choosing -- rather than letting them choose, press
+    /// apply, and read it in a refusal list. The apply still checks: the scan may be old, and its counts are what
+    /// was true then.
+    private func refreshAdvice() {
+        guard pairs.indices.contains(selectedRow) else {
+            adviceLabel.stringValue = ""
+            tallyLabel.stringValue = ""
+            return
+        }
+        let pair = pairs[selectedRow]
+        let keep = review.effectiveKeep(at: selectedRow)
+        let doomed = keep.contains(pair.folderA) ? pair.folderB : pair.folderA
+        let losing = doomed == pair.folderA ? pair.onlyInA : pair.onlyInB
+        let name = (doomed as NSString).lastPathComponent
+        if keep.count > 1 {
+            adviceLabel.stringValue = ""
+        } else if losing.isEmpty {
+            adviceLabel.stringValue = String(format: Strings.string("folders.warnNoLoss"), name)
+            adviceLabel.textColor = .secondaryLabelColor
+        } else {
+            adviceLabel.stringValue = String(
+                format: Strings.string("folders.warnLoss"), name, losing.count)
+            adviceLabel.textColor = .systemOrange
+        }
+
+        let tally = review.tally
+        tallyLabel.stringValue = String(
+            format: Strings.string("folders.tally"), tally.decided, tally.skipped, tally.undecided)
+
+        let decision = review.decision(at: selectedRow)
+        let kept = decision.keptPaths
+        for (identifier, button) in decisionButtons {
+            switch identifier {
+            case "keepA": button.state = kept == [pair.folderA] ? .on : .off
+            case "keepB": button.state = kept == [pair.folderB] ? .on : .off
+            case "keepBoth": button.state = (kept?.count ?? 0) > 1 ? .on : .off
+            default: button.state = decision == .skipped ? .on : .off
+            }
+        }
+    }
+
+    @objc private func decisionChosen(_ sender: Any?) {
+        guard let button = sender as? NSButton, let identifier = button.identifier?.rawValue,
+            pairs.indices.contains(selectedRow)
+        else { return }
+        let pair = pairs[selectedRow]
+        review.go(to: selectedRow)
+        switch identifier {
+        case "keepA": review.keep(pair.folderA)
+        case "keepB": review.keep(pair.folderB)
+        case "keepBoth": review.keepBoth()
+        default: review.skip()
+        }
+        saveDecisions()
+        table.reloadData(
+            forRowIndexes: [selectedRow],
+            columnIndexes: IndexSet(integersIn: 0..<table.tableColumns.count))
+        let next = selectedRow + 1
+        if pairs.indices.contains(next) {
+            table.selectRowIndexes([next], byExtendingSelection: false)
+            table.scrollRowToVisible(next)
+        }
+        refreshDetail()
+    }
+
+    private func saveDecisions() {
+        let document = review.decisionsForSaving(instant: ScanIdentifier.Instant(Date()))
+        savedCount = document.count
+        // Only decided pairs are in there; an empty document is still worth writing, because it is how a review
+        // that cleared its decisions stops the CLI from acting on the old ones.
+        _ = try? ScanStore(state: stateDirectory).save(document)
+    }
+
+    @objc private func simulateAndApply(_ sender: Any?) {
+        let plan = FolderApplyPlan.from(review)
+        flow.decisionsChanged(hasAny: review.tally.decided > 0)
+        guard flow.advance(.dryRun, fingerprint: plan.fingerprint) != nil else {
+            let alert = NSAlert()
+            alert.messageText = Strings.string("folders.apply.nothing")
+            alert.addButton(withTitle: Strings.string("button.ok"))
+            alert.runModal()
+            return
+        }
+        let sheet = FolderApplySheetController(
+            plan: plan, fingerprint: plan.fingerprint, flow: flow, stateDirectory: stateDirectory)
+        sheet.onApplied = { [weak self] _ in self?.refreshDetail() }
+        sheet.onUndone = { [weak self] in self?.refreshDetail() }
+        applySheet = sheet
+        if let window, let sheetWindow = sheet.window {
+            window.beginSheet(sheetWindow) { [weak self] _ in self?.applySheet = nil }
+        } else {
+            sheet.showWindow(nil)
+        }
     }
 
     @objc private func revealA(_ sender: Any?) {
@@ -198,6 +351,19 @@ final class FolderPairWindowController: NSWindowController {
         window?.contentView?.layoutSubtreeIfNeeded()
         return window?.contentView?.fittingSize ?? .zero
     }
+
+    var adviceText: String { adviceLabel.stringValue }
+    var tallyText: String { tallyLabel.stringValue }
+    var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
+    var applySheetForSelftest: FolderApplySheetController? { applySheet }
+
+    func decideForSelftest(_ identifier: String, row: Int) {
+        table.selectRowIndexes([row], byExtendingSelection: false)
+        guard let button = decisionButtons[identifier] else { return }
+        decisionChosen(button)
+    }
+
+    func simulateForSelftest() { simulateAndApply(nil) }
 
     func selectPairForSelftest(_ row: Int) {
         guard pairs.indices.contains(row) else { return }
@@ -245,6 +411,26 @@ extension FolderPairWindowController: NSTableViewDataSource, NSTableViewDelegate
             let differing = pair.onlyInA.count + pair.onlyInB.count + pair.changed.count
             field.stringValue = "\(differing)"
             field.textColor = differing == 0 ? .secondaryLabelColor : .labelColor
+        case "decision":
+            field.textColor = .labelColor
+            guard let index = pairs.firstIndex(of: pair) else {
+                field.stringValue = ""
+                break
+            }
+            switch review.decision(at: index) {
+            case .decided(let keep):
+                if keep.count > 1 {
+                    field.stringValue = Strings.string("folders.decision.keepBoth")
+                } else if keep.first == pair.folderA {
+                    field.stringValue = Strings.string("folders.decision.keepA")
+                } else {
+                    field.stringValue = Strings.string("folders.decision.keepB")
+                }
+            case .skipped:
+                field.stringValue = Strings.string("similar.state.skipped")
+            case .undecided:
+                field.stringValue = ""
+            }
         default:
             field.stringValue = ""
         }

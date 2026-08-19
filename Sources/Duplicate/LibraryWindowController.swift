@@ -598,7 +598,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         }
         guard let scan = try? ScanStore(state: stateDirectory).loadFolderScan(id: summary.scanID)
         else { return }
-        let controller = FolderPairWindowController(scan: scan)
+        let controller = FolderPairWindowController(scan: scan, stateDirectory: stateDirectory)
         folderWindows[summary.scanID] = controller
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: controller.window, queue: .main

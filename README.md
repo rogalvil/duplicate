@@ -15,15 +15,15 @@ deshacer.
 | Biblioteca de escaneos, con actualización en vivo | **funciona** |
 | Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
 | Simular, aplicar a la Papelera y deshacer la sesión | **funciona** |
-| Detector de carpetas: escanea, lista, muestra y **aplica** los pares | **funciona en Core**, sin UI de decisión |
+| Detector de carpetas: escanea, lista, decide y aplica | **funciona** |
 | Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Detector perceptual de video: escanear, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
 | Decidir pares parecidos en el visor, con el consejo de cuál conservar | **funciona**, sin aplicar todavía |
 | Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
 
-O sea: para **duplicados exactos y para parecidos el ciclo está completo** y no hace falta el CLI — escanear,
-revisar, simular, aplicar, deshacer. Lo que sigue de solo lectura es el detector de carpetas. Del perceptual, un escaneo de imágenes ya corre y guarda un documento que el
+O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,
+simular, aplicar a la Papelera, deshacer. Del perceptual, un escaneo de imágenes ya corre y guarda un documento que el
 CLI lee byte a byte; el hash está medido contra `imagehash` sobre 2,779 fotos reales: **90.4% idéntico bit a
 bit**, 99.2% dentro de dos bits, y las 16 excepciones son justo las 16 imágenes con etiqueta de rotación EXIF,
 que es la divergencia elegida a propósito. Falta la UI y **todo el video**: un escaneo de esta app escribe

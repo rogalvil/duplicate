@@ -337,6 +337,12 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   y la lista, y **pasaba con `flow.advance(.dryRun,…)` quitado**: la negativa solo ocurre al presionar el botón, y
   el arnés no lo presionaba. Presionarlo ahí movería archivos de verdad, que es lo que el modo `similar-apply` ya
   hace con limpieza, así que la hoja expone si la compuerta la autorizaría **sin aplicar**.
+- **Lo que el escaneo ya sabe se dice al decidir, no al aplicar.** Un par de carpetas carga `only_in_a` y
+  `only_in_b`, así que la ventana puede avisar "mover la segunda perdería 5 archivos que tiene y la primera no"
+  *mientras eliges* — en vez de dejarte elegir, presionar aplicar, y leerlo en una lista de rehúsas. El aplicar
+  igual verifica: el escaneo puede estar viejo y sus conteos son lo que era cierto entonces.
+- **Las carpetas colapsadas se nombran en la hoja.** Una que falta de la lista porque un ancestro ya está en ella
+  no es una omisión, y quien cuente filas pensaría que se perdió una.
 - **Para una carpeta, la verificación no es la similitud: es la contención.** "Estas dos son 95% iguales" es
   buena razón para *mirar* y pésima para borrar — el otro 5% es exactamente lo que se perdería. Antes de mover una
   carpeta, cada archivo suyo tiene que tener un gemelo byte-idéntico **en la misma ruta relativa** dentro de la que
