@@ -20,7 +20,7 @@ import DuplicateCore
 /// It shows video pairs too, even though this build cannot produce them: a scan written by `rav duplicate
 /// similar` carries them, and refusing to display what the document holds would be its own kind of lie.
 @MainActor
-final class SimilarPairWindowController: NSWindowController {
+final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     private let scan: SimilarScan
     private let allPairs: [SimilarPair]
@@ -54,6 +54,11 @@ final class SimilarPairWindowController: NSWindowController {
     private var applySheet: SimilarApplySheetController?
     private var savedCount = 0
     private var saveFailure: String?
+    private let undo: UndoManager = {
+        let manager = UndoManager()
+        manager.groupsByEvent = false
+        return manager
+    }()
 
     init(scan: SimilarScan, stateDirectory: StateDirectory = StateDirectory.current()) {
         self.scan = scan
@@ -76,6 +81,7 @@ final class SimilarPairWindowController: NSWindowController {
         window.title = String(format: Strings.string("similar.window.title"), scan.scanID)
         window.minSize = NSSize(width: 720, height: 420)
         super.init(window: window)
+        window.delegate = self
         build()
         refreshDetail()
         rebuildVisible()
@@ -84,6 +90,11 @@ final class SimilarPairWindowController: NSWindowController {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+    /// **Where ⌘Z arrives.** AppKit asks the window's delegate for the undo manager, and without this the Edit
+    /// menu's `undo:` reaches nothing and the menu item is disabled -- a review with a perfectly working undo that
+    /// is invisible, which is worse than not having one.
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
 
     private func build() {
         table.dataSource = self
@@ -432,6 +443,14 @@ final class SimilarPairWindowController: NSWindowController {
 
     private static let decisionOrder: [SimilarDecision] = [.keepA, .keepB, .keepBoth, .keepNone]
 
+    /// The size on disk, or zero when it cannot be read.
+    private static func fileSize(_ path: String) -> Int64 {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+            let size = attributes[.size] as? Int64
+        else { return 0 }
+        return size
+    }
+
     @objc private func filterChanged(_ sender: Any?) {
         filter = PairFilter(
             minimumSimilarity: (similarityPopup.selectedItem?.representedObject as? Double) ?? 0,
@@ -458,10 +477,10 @@ final class SimilarPairWindowController: NSWindowController {
         var preview = review
         preview.confirmAll(indices)
         let plan = SimilarApplyPlan.from(preview)
+        // **A `stat` per file, and that is the cost of saying the number.** On a batch of 2,106 it is 2,106 calls;
+        // the alternative is a sheet that says "some files" and asks for a destructive decision anyway.
         let bytes = plan.items.reduce(Int64(0)) { total, item in
-            total
-                + ((try? FileManager.default.attributesOfItem(atPath: item.path)[.size] as? Int64)
-                    ?? 0 ?? 0)
+            total + Self.fileSize(item.path)
         }
 
         let alert = NSAlert()
@@ -482,9 +501,9 @@ final class SimilarPairWindowController: NSWindowController {
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
             MainActor.assumeIsolated {
-                self.review.confirmAll(indices)
-                self.saveDecisions()
-                self.rebuildVisible()
+                // One undo step for the whole batch: accepting 2,106 pairs and undoing them one at a time would
+                // not be an undo.
+                self.mutate { $0.confirmAll(indices) }
             }
         }
     }
@@ -516,16 +535,12 @@ final class SimilarPairWindowController: NSWindowController {
     @objc private func skipPair(_ sender: Any?) {
         guard pairs.indices.contains(selectedRow) else { return }
         guard let index = scanIndex(forRow: selectedRow) else { return }
-        review.go(to: index)
-        review.skip()
-        saveDecisions()
-        if filter.onlyUndecided {
-            rebuildVisible()
-        } else {
-            table.reloadData(forRowIndexes: [selectedRow], columnIndexes: allColumnIndexes)
-            advanceSelection()
-            refreshDetail()
+        let advancing = !filter.onlyUndecided
+        mutate { state in
+            state.go(to: index)
+            state.skip()
         }
+        if advancing { advanceSelection() }
     }
 
     private var allColumnIndexes: IndexSet {
@@ -538,6 +553,36 @@ final class SimilarPairWindowController: NSWindowController {
         guard pairs.indices.contains(next) else { return }
         table.selectRowIndexes([next], byExtendingSelection: false)
         table.scrollRowToVisible(next)
+    }
+
+    /// Applies a change to the review and registers its inverse with the undo manager.
+    ///
+    /// **The whole state is captured, not a delta** -- the same trade the exact review makes. It is a dictionary of
+    /// small enums over at most a few thousand pairs, so a snapshot costs less than the bookkeeping a delta needs,
+    /// and an undo that restores a snapshot cannot drift from the operation it reverses.
+    ///
+    /// **And the undo saves too.** Decisions here are written as they are made, so an undo that only changed memory
+    /// would leave the file holding a decision the window no longer shows -- and the CLI reading it.
+    private func mutate(_ body: (inout SimilarReviewState) -> Void) {
+        // **Grouped explicitly rather than by event, and never while undoing.** `UndoManager` groups every
+        // registration made in one turn of the run loop, which is right for typing and wrong for a batch: accepting
+        // 2,106 pairs in one call would otherwise be indistinguishable from one decision. And opening a group
+        // inside `undo()` breaks the manager's own phase tracking, so the registration an undo makes lands back on
+        // the undo stack instead of the redo stack.
+        let grouping = !undo.isUndoing && !undo.isRedoing
+        if grouping { undo.beginUndoGrouping() }
+        defer { if grouping { undo.endUndoGrouping() } }
+        let before = review
+        body(&review)
+        // `MainActor.assumeIsolated` is not decoration: on the macOS 15 SDK that CI compiles against,
+        // `registerUndo`'s closure is not `@MainActor`, so this is a hard error there and clean locally. The
+        // assumption holds -- `UndoManager` runs the block on the thread that called `undo()`, and the only caller
+        // is the Edit menu.
+        undo.registerUndo(withTarget: self) { controller in
+            MainActor.assumeIsolated { controller.mutate { $0 = before } }
+        }
+        saveDecisions()
+        rebuildVisible()
     }
 
     /// Writes what has been decided, and **only** what has been decided.
@@ -619,10 +664,11 @@ final class SimilarPairWindowController: NSWindowController {
 
     func confirmShownForSelftest() {
         let indices = visible
-        review.confirmAll(indices)
-        saveDecisions()
-        rebuildVisible()
+        mutate { $0.confirmAll(indices) }
     }
+
+    func undoForSelftest() { undo.undo() }
+    var canUndoForSelftest: Bool { undo.canUndo }
 
     func decideForSelftest(_ decision: SimilarDecision, row: Int) {
         table.selectRowIndexes([row], byExtendingSelection: false)

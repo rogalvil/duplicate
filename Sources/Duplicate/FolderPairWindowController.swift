@@ -10,7 +10,7 @@ import DuplicateCore
 ///
 /// What it offers instead: the pairs, their overlap, what each side has that the other does not, and Finder.
 @MainActor
-final class FolderPairWindowController: NSWindowController {
+final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     private let scan: FolderScan
     private let stateDirectory: StateDirectory
     private var review: FolderReviewState
@@ -20,6 +20,11 @@ final class FolderPairWindowController: NSWindowController {
     private let tallyLabel = NSTextField(labelWithString: "")
     private var decisionButtons: [String: NSButton] = [:]
     private var savedCount = 0
+    private let undo: UndoManager = {
+        let manager = UndoManager()
+        manager.groupsByEvent = false
+        return manager
+    }()
     private var pairs: [FolderPair] = []
 
     private let table = NSTableView()
@@ -51,6 +56,7 @@ final class FolderPairWindowController: NSWindowController {
         window.setFrameAutosaveName("FolderPairWindow")
         window.minSize = NSSize(width: 760, height: 420)
         super.init(window: window)
+        window.delegate = self
         build()
         if !pairs.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
         refreshDetail()
@@ -282,22 +288,51 @@ final class FolderPairWindowController: NSWindowController {
             pairs.indices.contains(selectedRow)
         else { return }
         let pair = pairs[selectedRow]
-        review.go(to: selectedRow)
-        switch identifier {
-        case "keepA": review.keep(pair.folderA)
-        case "keepB": review.keep(pair.folderB)
-        case "keepBoth": review.keepBoth()
-        default: review.skip()
+        let row = selectedRow
+        mutate { state in
+            state.go(to: row)
+            switch identifier {
+            case "keepA": state.keep(pair.folderA)
+            case "keepB": state.keep(pair.folderB)
+            case "keepBoth": state.keepBoth()
+            default: state.skip()
+            }
         }
-        saveDecisions()
-        table.reloadData(
-            forRowIndexes: [selectedRow],
-            columnIndexes: IndexSet(integersIn: 0..<table.tableColumns.count))
-        let next = selectedRow + 1
+        let next = row + 1
         if pairs.indices.contains(next) {
             table.selectRowIndexes([next], byExtendingSelection: false)
             table.scrollRowToVisible(next)
+            refreshDetail()
         }
+    }
+
+    /// **Where ⌘Z arrives.** AppKit asks the window's delegate for the undo manager; without this the Edit menu's
+    /// `undo:` reaches nothing and the item is greyed out -- a working undo nobody can invoke.
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
+
+    /// Applies a change and registers its inverse. The whole state is captured, like the other two reviews.
+    ///
+    /// **And the undo saves too**, because decisions here are written as they are made: an undo that only changed
+    /// memory would leave the file holding a decision the window no longer shows.
+    private func mutate(_ body: (inout FolderReviewState) -> Void) {
+        // **Grouped explicitly, not by event.** `UndoManager` defaults to grouping every registration made in one
+        // turn of the run loop, which is right for typing and wrong here: two decisions taken without a turn in
+        // between -- which is what a batch, or a harness, does -- would collapse into one undo step. Measured: the
+        // first ⌘Z took a skip back and the second did nothing, because both had landed in the same group.
+        // **And not while undoing.** Opening a group inside `undo()` breaks the manager's own phase tracking: the
+        // registration the undo makes lands back on the undo stack instead of the redo stack, so pressing ⌘Z twice
+        // undoes the same step twice. Measured -- the second press kept reporting one decision.
+        let grouping = !undo.isUndoing && !undo.isRedoing
+        if grouping { undo.beginUndoGrouping() }
+        defer { if grouping { undo.endUndoGrouping() } }
+        let before = review
+        body(&review)
+        // Not decoration: `registerUndo`'s closure is not `@MainActor` on the SDK CI compiles against.
+        undo.registerUndo(withTarget: self) { controller in
+            MainActor.assumeIsolated { controller.mutate { $0 = before } }
+        }
+        saveDecisions()
+        table.reloadData()
         refreshDetail()
     }
 
@@ -356,6 +391,9 @@ final class FolderPairWindowController: NSWindowController {
     var tallyText: String { tallyLabel.stringValue }
     var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
     var applySheetForSelftest: FolderApplySheetController? { applySheet }
+
+    func undoForSelftest() { undo.undo() }
+    var canUndoForSelftest: Bool { undo.canUndo }
 
     func decideForSelftest(_ identifier: String, row: Int) {
         table.selectRowIndexes([row], byExtendingSelection: false)

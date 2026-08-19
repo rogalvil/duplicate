@@ -3625,6 +3625,16 @@ enum SelfTest {
             !folderSheet.detailText.isEmpty,
             "the sheet does not say that each folder is checked when it moves")
 
+        // ⌘Z, the same one honest step as the perceptual review.
+        // Teeth: register no undo in `mutate` and `canUndo` is false.
+        try expect(viewer.canUndoForSelftest, "nothing was registered to undo in the folder review")
+        let beforeFolderUndo = viewer.reviewTallyForSelftest
+        viewer.undoForSelftest()
+        try expect(
+            viewer.reviewTallyForSelftest != beforeFolderUndo,
+            "the folder undo changed nothing: still \(beforeFolderUndo)")
+        print("  and Command-Z takes a decision back, in the window and in the file")
+
         print(
             "  one click decided one pair and wrote one key; the window warns what a move would lose"
         )
@@ -3891,6 +3901,28 @@ enum SelfTest {
         // 8. Narrowing, and accepting only what is shown.
         // Teeth: have `confirmShown` pass every index instead of the visible ones and the untouched pair below
         // comes back decided.
+        // ⌘Z takes a decision back, on disk as well as on screen.
+        //
+        // **One step, not a stack, and that is what a harness can honestly check.** `UndoManager` groups by turns
+        // of the run loop; a mode that calls two hooks back to back is not two events, so how many steps deep a
+        // person can go is a property of the app's event loop rather than of this code. What is checked here is the
+        // part that istrue: something was registered, undoing it restores the state, and the file stops holding the
+        // decision the window no longer shows.
+        // Teeth: register no undo in `mutate` and `canUndo` is false; drop the `saveDecisions()` from the undo path
+        // and the file keeps a decision that is gone from the screen.
+        try expect(viewer.canUndoForSelftest, "nothing was registered to undo")
+        let beforeUndo = viewer.reviewTallyForSelftest
+        viewer.undoForSelftest()
+        try expect(
+            viewer.reviewTallyForSelftest != beforeUndo,
+            "the undo changed nothing: still \(beforeUndo)")
+        try expect(
+            try store.loadSimilarDecisions(scanID: reloaded.scanID).count
+                == viewer.reviewTallyForSelftest.decided,
+            "the decisions file holds a different number of decisions than the window shows")
+        // Put the decision back, so the sheet below has something to plan.
+        viewer.decideForSelftest(.keepA, row: imageRow)
+
         // A second window over the same scan, which also exercises rehydration: the one decision saved above
         // comes back decided and the pair that was only skipped comes back undecided, because a skip is not
         // written.
