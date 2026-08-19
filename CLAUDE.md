@@ -409,6 +409,20 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El desempate final de un par parecido es la profundidad, y gana el más profundo** — contraintuitivo y a
   propósito: es la regla del detector exacto, y que los dos detectores propusieran sobrevivientes distintos para
   los mismos dos archivos sería peor que una regla rara.
+- **La etapa de prefijo estaba mal calibrada y ahora el umbral es 8 MiB.** A los 256 KiB que se enviaron sondeaba
+  **1,912 de 3,421 archivos, cobraba 54% del tiempo y ahorraba 1 MB de 1.5 GB**. El argumento del plan (dos
+  imágenes de 4 GB del mismo tamaño) sigue en pie; el umbral no. A 8 MiB es indistinguible de apagarla sobre fotos.
+- **`F_NOCACHE` da 4× menos page cache, no cero**: +0.10 GB contra +0.40 GB para las mismas 1.52 GB leídas, al
+  mismo tiempo de reloj. La mayoría de los archivos están debajo del umbral y se cachean igual. Sale gratis, se
+  queda.
+- **En el corpus externo real no hay E/S que paralelizar**: 1,137 archivos, **29 candidatos por tamaño**, 0.011 GB
+  leídos. El bucketing elimina el 97% antes de abrir nada, así que el caso que el plan llamaba el importante —el
+  tope de 2 en externos— no se puede medir sobre estos datos.
+- **El barrido interno no tiene codo**: sigue mejorando hasta c=16 y el tope de 8 deja ~13%. Pero 2,350 MB/s está
+  por encima de lo que leen muchos SSD, o sea que esa corrida la sirvió el page cache y mide SHA-256, no disco. Un
+  barrido en frío necesita `sudo purge`. **Por eso la política no se cambió**: cambiar un default enviado sobre una
+  medición con esa salvedad sería el error que este archivo lleva cincuenta PRs registrando.
+- **RSS pico entre 21.7 y 54.8 MB**, contra el objetivo de < 400 MB. Sobra un orden de magnitud.
 - **La caché perceptual es la diferencia entre 177 s y 0.5 s**, medido sobre el árbol real de 2,779 imágenes y
   617 videos: **354×**, con el mismo resultado (4,771 pares las dos veces). No es optimización — un video son
   ocho decodes, así que sin caché un segundo escaneo del mismo árbol paga todo otra vez.

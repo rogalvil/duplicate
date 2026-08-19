@@ -902,6 +902,78 @@ El plan estimaba ~255× a n=50,000; medido son 270×. **Lo que no se sostiene es
 chica**: sobre 2,779 hashes el índice tarda 0.003 s y la fuerza bruta 0.004 s. A ese tamaño el cuadrático
 todavía no muerde, y el índice existe para el corpus que no cabe, no para este.
 
+## Las mediciones que el plan dijo que decidían código
+
+Cuatro de las cinco están hechas. Todas sobre un árbol real de 3,421 archivos (2.2 GB, interno) y sobre el corpus
+externo del usuario, leyendo y sin escribir nada fuera de `/tmp`.
+
+### La etapa de prefijo estaba mal calibrada, y ahora tiene número
+
+| umbral | wall | sondeados | bytes leídos |
+|---|---|---|---|
+| 256 KiB (el que se envió) | 0.89 s | 1,912 | 1.517 GB |
+| 1 MiB | 0.63 s | 535 | 1.518 GB |
+| **8 MiB (ahora)** | **0.58 s** | **2** | 1.518 GB |
+| apagada | 0.63 s | 0 | 1.518 GB |
+
+A 256 KiB la sonda **cobraba 54% del tiempo para ahorrar 1 MB de 1.5 GB**. El argumento del plan —dos imágenes de
+disco de 4 GB del mismo tamaño pasan de 8 GB de lecturas a 16 KiB— sigue siendo válido; el umbral no lo era. A
+8 MiB la sonda es indistinguible de apagarla en una biblioteca de fotos y el caso de la cola queda intacto.
+
+### `F_NOCACHE` sí protege el page cache, y menos de lo que el plan esperaba
+
+| | wall | leído | Δ page cache |
+|---|---|---|---|
+| `F_NOCACHE` (≥1 MiB) | 0.97 s | 1.52 GB | **+0.10 GB** |
+| sin `F_NOCACHE` | 1.07 s | 1.52 GB | **+0.40 GB** |
+
+Cuatro veces menos, no cero. La afirmación a falsear era "mantiene el delta cerca de cero"; el delta real es
++0.10 GB porque **la mayoría de los archivos de este corpus están por debajo del umbral** y se cachean igual. El
+tiempo es el mismo, así que la protección sale gratis. Se queda.
+
+### En el corpus externo real no hay nada que paralelizar
+
+| corpus | archivos | candidatos por tamaño | leído |
+|---|---|---|---|
+| interno (`~/duplicados`) | 3,421 | 2,259 | 1.517 GB |
+| externo (`WD12TB/Tmp/_____check`) | 1,137 | **29** | **0.011 GB** |
+
+El bucketing por tamaño elimina el 97% del corpus externo antes de abrir un archivo. Así que el caso que el plan
+llamaba el importante —"la política de concurrencia externa (tope 2) es la que importa"— **no se puede medir sobre
+estos datos**, porque no hay E/S que repartir. El tope de 2 no cuesta nada aquí, y por una razón mejor que la
+prevista.
+
+### Y el barrido interno contradice la predicción, con una salvedad que importa
+
+| c | wall | files/s | MB/s |
+|---|---|---|---|
+| 1 | 2.35 s | 963 | 662 |
+| 2 | 1.33 s | 1,692 | 1,164 |
+| 3 | 1.01 s | 2,231 | 1,534 |
+| 4 | 1.01 s | 2,228 | 1,532 |
+| 6 | 0.76 s | 2,977 | 2,047 |
+| 8 | 0.73 s | 3,106 | 2,136 |
+| 12 | 0.67 s | 3,357 | 2,308 |
+| 16 | 0.66 s | 3,417 | 2,350 |
+
+El plan predijo el codo en 3-4 y contención pasando de 8. **No hay codo**: sigue mejorando hasta 16, y el tope de
+8 de la política deja ~13% sobre la mesa.
+
+**Y la salvedad es la razón por la que la política no se cambia:** 2,350 MB/s está por encima de lo que muchos SSD
+leen, así que esta corrida la sirvió el page cache y mide throughput de SHA-256, no de disco. Un barrido en frío
+necesita `sudo purge`, que necesita root. Cambiar un default enviado sobre una medición con esa salvedad sería
+exactamente el error que este documento lleva cincuenta PRs registrando.
+
+### Memoria
+
+Pico de RSS entre **21.7 y 54.8 MB** en todas las corridas, contra el objetivo de < 400 MB del plan. Sobra un
+orden de magnitud.
+
+### La que falta
+
+`fs_usage` para contar syscalls por archivo —lo que decide si `AttrListWalker` llega a escribirse— **necesita
+root** y no se puede correr desde aquí.
+
 ## Testing
 
 ### Lo que no se puede probar con `swift test`, y se dice
