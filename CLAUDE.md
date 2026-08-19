@@ -574,11 +574,12 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Todo lo que mueve archivos tiene que refrescar la presencia, y eso incluye deshacer.** El primer
   cableado solo lo hacía tras aplicar, así que la ventana seguía diciendo "este archivo ya no existe"
   sobre un archivo que acababa de volver. Lo encontró el uso real, no un test.
-- **Cancelar antes de que el trabajo empiece no prueba los checkpoints.** El `Task` lanza en su primer punto de
-  suspensión, así que el modo pasaba con **todos** los `checkCancellation` quitados. Hay que esperar a que la fase
-  de hasheo haya avanzado y cancelar ahí. Y el plazo de 300 ms **no** es lo que atrapa la regresión —400 archivos
-  chicos se hashean rápido de todos modos—; lo que la atrapa es que un escaneo cancelado **devuelva resultado en
-  vez de lanzar**.
+- **Probar cancelación necesita trabajo que no pueda terminar solo.** Cancelar antes de que empiece no prueba
+  nada: el `Task` lanza en su primer punto de suspensión, así que el modo pasaba con **todos** los
+  `checkCancellation` quitados. Y esperar a que el hasheo avance tampoco alcanza: con 400 archivos chicos el
+  escaneo **termina entre el sondeo y el cancel** — pasó local y **falló en CI**, que es una carrera disfrazada de
+  prueba. La cura es un hasher que envuelve al real y duerme 3 ms por archivo: con dos segundos de trabajo por
+  delante, "se detuvo" y "se detuvo en menos de 300 ms" las dos significan algo.
 - **Poner `AppleLanguages` en `UserDefaults` no cambia el locale de un proceso ya lanzado.** Un modo que lo hacía
   y recorría tres identificadores afirmaba lo mismo tres veces mientras decía haber probado tres locales. La
   propiedad real se prueba construyendo un `NumberFormatter` alemán explícito y mostrando qué escribiría él.
