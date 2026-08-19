@@ -16,10 +16,10 @@ deshacer.
 | Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
 | Simular, aplicar a la Papelera y deshacer la sesión | **funciona** |
 | Detector de carpetas: escanea, lista, decide y aplica | **funciona** |
-| Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona**, sin aplicar todavía |
-| Detector perceptual de video: escanear, listar y ver los pares | **funciona**, sin aplicar todavía |
+| Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona** |
+| Detector perceptual de video: escanear, listar y ver los pares | **funciona** |
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
-| Decidir pares parecidos en el visor, con el consejo de cuál conservar | **funciona**, sin aplicar todavía |
+| Decidir pares parecidos en el visor, con el consejo de cuál conservar | **funciona** |
 | Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
 
 O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,
