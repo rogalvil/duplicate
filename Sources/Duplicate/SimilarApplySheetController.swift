@@ -174,7 +174,10 @@ final class SimilarApplySheetController: NSWindowController {
 
         isApplying = true
         applyButton.isEnabled = false
-        cancelButton.isEnabled = false
+        // **The stop button stays alive, and that is the point of this change.** Verifying and moving hundreds of
+        // items takes minutes, and a progress bar with no way out is not a choice. Cancelling stops before the
+        // next item and the journal still describes everything already moved.
+        cancelButton.title = Strings.string("apply.button.stop")
         progressBar.isHidden = false
         progressBar.doubleValue = 0
         headlineLabel.stringValue = Strings.string("apply.running")
@@ -236,9 +239,16 @@ final class SimilarApplySheetController: NSWindowController {
             listView.string = String(describing: error)
         case .success(let result):
             report = result
-            headlineLabel.stringValue = String(
-                format: Strings.string("similar.apply.done"),
-                result.moved.count, ByteSize.format(result.movedBytes))
+            if result.wasCancelled {
+                headlineLabel.stringValue = String(
+                    format: Strings.string("apply.stopped"),
+                    result.moved.count, ByteSize.format(result.movedBytes))
+                detailLabel.stringValue = Strings.string("apply.stopped.note")
+            } else {
+                headlineLabel.stringValue = String(
+                    format: Strings.string("similar.apply.done"),
+                    result.moved.count, ByteSize.format(result.movedBytes))
+            }
 
             var lines: [String] = []
             // **The refusals first**, because they are the part a reader has to act on: those files are still
@@ -302,6 +312,14 @@ final class SimilarApplySheetController: NSWindowController {
     }
 
     @objc private func dismiss(_ sender: Any?) {
+        // **While an apply is running this stops it and stays open**, because the report of what already moved --
+        // and the undo for it -- is the whole reason not to close.
+        if isApplying {
+            applyTask?.cancel()
+            cancelButton.isEnabled = false
+            cancelButton.title = Strings.string("scan.stopping")
+            return
+        }
         applyTask?.cancel()
         window?.sheetParent?.endSheet(window!)
         window?.close()

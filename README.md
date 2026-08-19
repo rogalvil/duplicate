@@ -14,7 +14,7 @@ deshacer.
 | Escaneo de duplicados exactos desde la app, con progreso y cancelación | **funciona** |
 | Biblioteca de escaneos, con actualización en vivo | **funciona** |
 | Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
-| Simular, aplicar a la Papelera y deshacer la sesión | **funciona** |
+| Simular, aplicar a la Papelera, **detener a media corrida** y deshacer la sesión | **funciona** |
 | Detector de carpetas: escanea, lista, decide y aplica | **funciona** |
 | Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona** |
 | Detector perceptual de video: escanear, listar y ver los pares | **funciona** |

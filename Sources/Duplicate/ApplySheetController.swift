@@ -43,6 +43,8 @@ final class ApplySheetController: NSWindowController {
     private var flow: ReviewFlow
     private var report: DisposalReport?
     private var progressTimer: Timer?
+    /// Held so the stop button can reach the run.
+    private var applyTask: Task<Void, Never>?
 
     private let headlineLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
@@ -179,7 +181,10 @@ final class ApplySheetController: NSWindowController {
 
         isApplying = true
         applyButton.isEnabled = false
-        cancelButton.isEnabled = false
+        // **The stop button stays alive, and that is the point of this change.** Verifying and moving hundreds of
+        // items takes minutes, and a progress bar with no way out is not a choice. Cancelling stops before the
+        // next item and the journal still describes everything already moved.
+        cancelButton.title = Strings.string("apply.button.stop")
         progressBar.isHidden = false
         progressBar.doubleValue = 0
         headlineLabel.stringValue = Strings.string("apply.running")
@@ -190,7 +195,7 @@ final class ApplySheetController: NSWindowController {
         let instant = ScanIdentifier.Instant(Date())
         let progress = AppliedCounter()
 
-        Task.detached(priority: .userInitiated) {
+        applyTask = Task.detached(priority: .userInitiated) {
             let outcome: Result<DisposalReport, any Error>
             do {
                 outcome = .success(
@@ -250,12 +255,18 @@ final class ApplySheetController: NSWindowController {
         case .success(let report):
             self.report = report
             onApplied?(report)
-            headlineLabel.stringValue = String(
-                format: Strings.string("apply.done.headline"),
-                report.movedCount, ByteSize.format(report.freedBytes)
-            )
+            headlineLabel.stringValue =
+                report.wasCancelled
+                ? String(
+                    format: Strings.string("apply.stopped"),
+                    report.movedCount, ByteSize.format(report.freedBytes))
+                : String(
+                    format: Strings.string("apply.done.headline"),
+                    report.movedCount, ByteSize.format(report.freedBytes)
+                )
 
             var notes: [String] = []
+            if report.wasCancelled { notes.append(Strings.string("apply.stopped.note")) }
             if report.quarantinedCount > 0 {
                 notes.append(
                     String(
@@ -312,6 +323,14 @@ final class ApplySheetController: NSWindowController {
     }
 
     @objc private func dismiss(_ sender: Any?) {
+        // While an apply is running this stops it and stays open: the report of what already moved -- and the undo
+        // for it -- is the whole reason not to close.
+        if isApplying {
+            applyTask?.cancel()
+            cancelButton.isEnabled = false
+            cancelButton.title = Strings.string("scan.stopping")
+            return
+        }
         guard !isApplying else { return }
         if let sheetParent = window?.sheetParent {
             sheetParent.endSheet(window!)

@@ -352,3 +352,6 @@
 "similar.confirmShown.body" = "%1$d files would be moved to the Trash when you apply: %2$@. Nothing moves now, and the pairs outside the filter stay undecided.";
 "similar.confirmShown.contradictions" = "\n\nWarning: %d files would be kept by one pair and discarded by another. Those are excluded from the apply.";
 "button.accept" = "Accept";
+"apply.button.stop" = "Stop";
+"apply.stopped" = "Stopped after %1$d files - %2$@";
+"apply.stopped.note" = "The rest were not touched. What did move is in the Trash and this window can put it back.";
