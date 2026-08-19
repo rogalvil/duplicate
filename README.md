@@ -15,7 +15,7 @@ deshacer.
 | Biblioteca de escaneos, con actualización en vivo | **funciona** |
 | Revisión de grupos con vista previa y decisiones que se guardan | **funciona** |
 | Simular, aplicar a la Papelera y deshacer la sesión | **funciona** |
-| Detector de carpetas: escanea, lista y muestra los pares | **funciona**, sin aplicar todavía |
+| Detector de carpetas: escanea, lista, muestra y **aplica** los pares | **funciona en Core**, sin UI de decisión |
 | Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Detector perceptual de video: escanear, listar y ver los pares | **funciona**, sin aplicar todavía |
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
@@ -221,7 +221,7 @@ make help       # lista todos los targets
 ```
 
 Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.md). El catálogo de los
-31 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
+32 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ## Si algo no funciona

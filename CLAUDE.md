@@ -337,6 +337,28 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   y la lista, y **pasaba con `flow.advance(.dryRun,…)` quitado**: la negativa solo ocurre al presionar el botón, y
   el arnés no lo presionaba. Presionarlo ahí movería archivos de verdad, que es lo que el modo `similar-apply` ya
   hace con limpieza, así que la hoja expone si la compuerta la autorizaría **sin aplicar**.
+- **Para una carpeta, la verificación no es la similitud: es la contención.** "Estas dos son 95% iguales" es
+  buena razón para *mirar* y pésima para borrar — el otro 5% es exactamente lo que se perdería. Antes de mover una
+  carpeta, cada archivo suyo tiene que tener un gemelo byte-idéntico **en la misma ruta relativa** dentro de la que
+  se conserva; si falta uno, se nombra y no se mueve nada. La caché de digests lo vuelve barato.
+- **El journal guarda el digest del *manifiesto*** —el SHA-256 de las líneas `relpath\0hex` ordenadas— porque un
+  directorio no tiene digest propio y el undo necesita uno para probar que lo que está en la Papelera sigue siendo
+  lo que se puso ahí. Editar cualquier archivo adentro, o agregar o quitar uno, lo cambia. Y por eso el
+  `Environment` del undo sabe digerir directorios: sin eso, restaurar una carpeta se bloquea como
+  `contentChanged`.
+- **Los pares anidados se colapsan.** Un escaneo de carpetas encuentra `Pole ↔ Pole` y `Pole/videos ↔
+  Pole/videos` como pares separados —medido en el corpus real— y mover el padre se lleva al hijo. Un plan con los
+  dos movería el padre y luego fallaría sobre una ruta que ya no existe, reportando un error por algo que
+  funcionó.
+- **Y una carpeta que contiene algo que otra decisión conserva se excluye.** Si el plan mueve `X` y otro par
+  conserva `X/sub`, mover `X` borra `X/sub`; no hay orden que lo arregle.
+- **`_folders_to_move` del CLI usa `decisions.get(key, [folder_a])`**, así que `folders-move` sobre un escaneo sin
+  revisar **mueve el `folder_b` de todos los pares**. Para archivos eso borraba copias; para carpetas borra
+  árboles. Aquí un par sin decidir no se toca.
+- **`folder-decisions/` es la forma envuelta con listas** (`{scan_id, created_at, decisions:{"a||b":[conservadas]}}`)
+  — tercera forma distinta de las tres. Y es **la única sin archivo real contra el cual verificar**: el CLI tiene el
+  slot y nunca escribió uno, así que su round-trip se prueba contra un documento sintetizado y contra el código del
+  CLI, no contra algo que el CLI haya escrito.
 - **Un escaneo perceptual NO guarda ningún digest**, así que "verificar antes de actuar" no puede ser "¿son los
   bytes que vio el escaneo?". Lo que sí se puede re-chequear es la afirmación sobre la que se decidió: **estos dos
   se parecen**. Se re-hashean los dos archivos y se vuelve a puntuar el par contra el umbral del escaneo; una foto

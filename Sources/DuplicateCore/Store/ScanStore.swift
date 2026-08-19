@@ -65,6 +65,7 @@ public struct ScanStore: Sendable {
         public let pairCount: Int
         public let involvedFolderCount: Int
         public let hasRelativePaths: Bool
+        public let hasDecisions: Bool
     }
 
     /// Summaries for every readable folder scan, newest first.
@@ -78,7 +79,8 @@ public struct ScanStore: Sendable {
                 threshold: scan.threshold,
                 pairCount: scan.pairCount,
                 involvedFolderCount: scan.involvedFolderCount,
-                hasRelativePaths: scan.hasRelativePaths
+                hasRelativePaths: scan.hasRelativePaths,
+                hasDecisions: hasFolderDecisions(scanID: scan.scanID)
             )
         }
     }
@@ -139,6 +141,40 @@ public struct ScanStore: Sendable {
                 hasDecisions: hasSimilarDecisions(scanID: scan.scanID)
             )
         }
+    }
+
+    // MARK: - Folder decisions
+
+    @discardableResult
+    public func save(_ decisions: FolderDecisionsDocument) throws -> String {
+        try state.create(.folderDecisions)
+        let path = try state.filePath(for: .folderDecisions, id: decisions.scanID)
+        let data = try JSONWriter.document(FolderDecisionsCodec.encode(decisions))
+        try data.write(to: URL(filePath: path), options: .atomic)
+        return path
+    }
+
+    public func loadFolderDecisions(scanID: String) throws -> FolderDecisionsDocument {
+        let path = try state.filePath(for: .folderDecisions, id: scanID)
+        guard let data = FileManager.default.contents(atPath: path) else {
+            throw StoreError.notFound(kind: .folderDecisions, id: scanID)
+        }
+        return try FolderDecisionsCodec.decode(JSONReader.parse(data))
+    }
+
+    /// Decisions already on disk for a folder scan, or an empty map.
+    ///
+    /// **`folder-decisions/` does not exist on this machine** -- the CLI has the slot and has never written one --
+    /// so the ordinary case here is genuinely "no file", not "a file this build has not seen".
+    public func priorFolderDecisions(scanID: String) -> [String: [String]] {
+        (try? loadFolderDecisions(scanID: scanID))?.byKey ?? [:]
+    }
+
+    public func hasFolderDecisions(scanID: String) -> Bool {
+        guard let path = try? state.filePath(for: .folderDecisions, id: scanID) else {
+            return false
+        }
+        return FileManager.default.fileExists(atPath: path)
     }
 
     // MARK: - Similar decisions

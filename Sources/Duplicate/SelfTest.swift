@@ -34,7 +34,7 @@ enum SelfTest {
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
-            "similar-window", "video", "similar-apply",
+            "similar-window", "video", "similar-apply", "folder-apply",
         ]
 
         let modes: [String]
@@ -82,6 +82,7 @@ enum SelfTest {
                 case "similar-window": try await checkSimilarWindow()
                 case "video": try await checkVideoHashing()
                 case "similar-apply": try await checkSimilarApply()
+                case "folder-apply": try await checkFolderApply()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -4003,6 +4004,120 @@ enum SelfTest {
                 + "byte-identically")
         print(
             "  a pair that stopped looking alike was refused: \(refusedReport.refused.count) of 1")
+    }
+
+    // MARK: - folder-apply
+
+    /// Moves a folder to the **real Trash** and puts it back, and refuses one that would lose a file.
+    ///
+    /// **The most dangerous action this app has**, so it gets the check the other two cannot use: not "are these
+    /// still 95% alike" -- the 5% is exactly what would be lost -- but **containment**. Every file in the folder
+    /// about to go must have a byte-identical twin at the same relative path in the folder being kept.
+    ///
+    /// Nothing is left in the Trash: the item is removed from `resultingItemURL` at the end.
+    ///
+    /// Proof of teeth: two breaks, each named beside its assertion.
+    private static func checkFolderApply() async throws {
+        let manager = FileManager.default
+        let root = NSTemporaryDirectory() + "duplicate-selftest-folderapply-\(UUID().uuidString)"
+        let tree = root + "/tree"
+        try manager.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(atPath: root) }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+
+        func write(_ relative: String, _ contents: String) throws {
+            let path = tree + "/" + relative
+            try manager.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true)
+            try Data(contents.utf8).write(to: URL(filePath: path))
+        }
+
+        // Two identical trees, and a third that holds one file the others do not.
+        for folder in ["keep", "gone"] {
+            try write("\(folder)/one.txt", "first")
+            try write("\(folder)/sub/two.txt", "second")
+        }
+        try write("extra/one.txt", "first")
+        try write("extra/sub/two.txt", "second")
+        try write("extra/only-here.txt", "the five percent")
+
+        let keepPath = DirectoryTree.canonical(tree + "/keep")
+        let gonePath = DirectoryTree.canonical(tree + "/gone")
+        let extraPath = DirectoryTree.canonical(tree + "/extra")
+
+        let scan = FolderScan(
+            scanID: "20260818-120000-000000", root: DirectoryTree.canonical(tree),
+            createdAt: "2026-08-18T12:00:00Z", threshold: 0.9,
+            pairs: [
+                FolderPair(
+                    folderA: keepPath, folderB: gonePath, similarity: 1.0, matching: 2,
+                    onlyInA: [], onlyInB: [], changed: [], totalA: 2, totalB: 2),
+                FolderPair(
+                    folderA: keepPath, folderB: extraPath, similarity: 0.8, matching: 2,
+                    onlyInA: [], onlyInB: ["only-here.txt"], changed: [], totalA: 2, totalB: 3),
+            ]
+        )
+
+        var review = FolderReviewState(scan: scan)
+        // Nothing decided means nothing planned -- the CLI would move folder_b of both pairs.
+        // Teeth: default an undecided pair to keeping folder_a and this reads 2.
+        try expect(
+            FolderApplyPlan.from(review).isEmpty,
+            "an untouched folder review planned \(FolderApplyPlan.from(review).items.count) moves")
+
+        review.keep(keepPath, at: 0)
+        review.keep(keepPath, at: 1)
+        let plan = FolderApplyPlan.from(review)
+        try expect(plan.items.count == 2, "the plan holds \(plan.items.count) folders, wanted 2")
+
+        // The decisions document, through the store.
+        _ = try ScanStore(state: state).save(
+            review.decisionsForSaving(
+                instant: ScanIdentifier.Instant(
+                    year: 2026, month: 8, day: 18, hour: 12, minute: 0, second: 0, microsecond: 0)))
+        let reloaded = try ScanStore(state: state).loadFolderDecisions(
+            scanID: "20260818-120000-000000")
+        try expect(reloaded.count == 2, "\(reloaded.count) decisions saved")
+
+        let instant = ScanIdentifier.Instant(
+            year: 2026, month: 8, day: 18, hour: 12, minute: 0, second: 0, microsecond: 0)
+        let report = try await FolderApplyRunner(
+            state: state, cacheURL: URL(filePath: root + "/hashes.v1")
+        ).run(plan, sessionID: instant.identifier, instant: instant, disposer: TrashDisposer())
+
+        // One moved, one refused for the file it would have taken with it.
+        // Teeth: drop the containment check and both folders move.
+        try expect(report.moved.count == 1, "\(report.moved.count) folders moved, wanted 1")
+        let outcome = try expectSome(report.moved.first, "no outcome")
+        defer { try? manager.removeItem(atPath: outcome.resultingPath) }
+        try expect(outcome.originalPath == gonePath, "moved \(outcome.originalPath)")
+        try expect(!manager.fileExists(atPath: gonePath), "the folder is still there")
+        try expect(manager.fileExists(atPath: keepPath), "the folder that was kept is gone")
+
+        try expect(report.refused.count == 1, "\(report.refused.count) refusals, wanted 1")
+        guard case .wouldLoseFiles(let count, let examples) = report.refused[0].reason else {
+            throw SelfTestFailure("wrong refusal: \(report.refused[0].reason)")
+        }
+        try expect(count == 1, "\(count) files would be lost, wanted 1")
+        try expect(examples == ["only-here.txt"], "the lost file is \(examples)")
+        try expect(
+            manager.fileExists(atPath: extraPath + "/only-here.txt"),
+            "the refused folder was moved anyway")
+
+        // And the undo puts the tree back, with its manifest digest re-checked.
+        let journal = try MoveJournal.load(sessionID: instant.identifier, in: state)
+        let undoPlan = UndoPlanner.plan(
+            sessionID: instant.identifier, entries: journal.entries,
+            restoredPaths: journal.restoredPaths, environment: .live(hasher: ContentHasher()))
+        let undone = UndoRunner().run(undoPlan)
+        try expect(undone.restored.count == 1, "\(undone.restored.count) folders restored")
+        try expect(
+            manager.fileExists(atPath: gonePath + "/sub/two.txt"), "the tree came back empty")
+
+        print(
+            "  moved 1 folder to the Trash and put the whole tree back; "
+                + "refused 1 that held a file the keeper lacked")
     }
 
     // MARK: - video

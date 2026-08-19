@@ -148,7 +148,7 @@ public struct DirectoryTree: Sendable {
     /// Never normalises anything else: no case folding, no Unicode normalisation, no symlink resolution.
     /// Only the slashes, which is the one thing two spellings of the same path can differ in without being
     /// different paths.
-    static func canonical(_ path: String) -> String {
+    public static func canonical(_ path: String) -> String {
         let components = path.split(separator: "/", omittingEmptySubsequences: true)
         let joined = components.joined(separator: "/")
         return path.hasPrefix("/") ? "/" + joined : joined

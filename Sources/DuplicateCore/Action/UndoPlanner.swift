@@ -100,7 +100,21 @@ public enum UndoPlanner {
         /// conformer is. The existential carries the constraint.
         public static func live(hasher: any FileHashing) -> Environment {
             let hash: @Sendable (String) -> Digest32? = { path in
-                try? hasher.fullDigest(atPath: path).digest
+                {
+                    // **A folder entry's digest is its manifest**, because a directory has no content digest of
+                    // its own. Without this the undo of a folder move is blocked as `contentChanged`: hashing a
+                    // directory returns nothing, and nothing never equals what the journal recorded.
+                    var isDirectory: ObjCBool = false
+                    guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+                    else { return nil }
+                    if isDirectory.boolValue {
+                        // Synchronous on purpose: this closure is the environment the planner calls, and the
+                        // planner is a pure function over it. A folder that was just trashed is small enough --
+                        // and its digests are in the cache -- for this to be paid once per entry.
+                        return FolderManifest.buildSynchronously(root: path, hasher: hasher)?.digest
+                    }
+                    return try? hasher.fullDigest(atPath: path).digest
+                }()
             }
             return Environment(
                 exists: { path in
