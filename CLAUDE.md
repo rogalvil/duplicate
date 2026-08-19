@@ -675,6 +675,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   escribe en el campo de búsqueda de la biblioteca. Esas dos teclas viven en `ReviewTableView.keyDown`,
   donde solo significan algo porque una lista de archivos tiene el foco. Lo demás sí va al menú, que es
   lo que le da descubribilidad, localización y el chequeo de colisiones del modo `menu`.
+- **Y tampoco llega sin `windowWillReturnUndoManager`.** AppKit le pide el manager al *delegate de la ventana*; sin
+  eso el `undo:` del menú Edición no alcanza nada y el ítem sale gris — una revisión con deshacer perfecto e
+  invisible.
+- **`UndoManager` agrupa por vuelta del run loop, y eso es correcto para escribir y falso para un lote.** Aceptar
+  2,106 pares en una llamada sería indistinguible de una decisión. Se agrupa a mano (`groupsByEvent = false` más
+  `beginUndoGrouping`), **y nunca durante un undo**: abrir un grupo dentro de `undo()` rompe el seguimiento de fase
+  del manager y la registración que hace el undo aterriza otra vez en la pila de undo en vez de la de redo.
+- **Cuántos pasos de ⌘Z se pueden dar es propiedad del run loop, no del código.** Un arnés que llama dos hooks
+  seguidos no son dos eventos, así que afirmar "dos undos" ahí prueba el agrupamiento del arnés. Lo que sí se puede
+  afirmar: que algo quedó registrado, que deshacer cambia el estado, y que **el archivo deja de tener la decisión que
+  la ventana ya no muestra** — porque estas revisiones guardan al decidir, así que un undo que solo toque memoria
+  dejaría al CLI leyendo lo contrario.
 - **`NSUndoManager` no llega al usuario sin un ítem de menú que mande `undo:`.** Registra
   perfectamente y es invisible: una revisión sin deshacer se vería como una decisión de diseño. Por eso
   existe el menú Edición, y por eso el modo `menu` afirma que alguien manda `undo:` y `redo:`.
