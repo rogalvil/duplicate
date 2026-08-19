@@ -146,7 +146,7 @@ public struct SimilarScanSession: Sendable {
                 imageConfiguration: hasher.configuration,
                 videoConfiguration: videoHasher.configuration
             ) : nil
-        await cache?.load()
+        await cache?.loadAndRepair()
 
         var paths: [String] = []
         var hashes: [PerceptualHash] = []

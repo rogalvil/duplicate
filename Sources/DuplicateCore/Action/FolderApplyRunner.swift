@@ -67,7 +67,7 @@ public struct FolderApplyRunner: Sendable {
         onProgress: (@Sendable (Int, Int) -> Void)? = nil
     ) async throws -> FolderDisposalReport {
         let cache = HashCache(url: cacheURL ?? HashCache.defaultURL())
-        await cache.load()
+        await cache.loadAndRepair()
 
         var moved: [DisposalOutcome] = []
         var failures: [ApplyFailure] = []

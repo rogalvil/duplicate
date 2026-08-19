@@ -85,7 +85,7 @@ public struct FolderScanSession: Sendable {
         try Task.checkCancellation()
 
         let cache = request.usesCache ? HashCache(url: cacheURL ?? HashCache.defaultURL()) : nil
-        await cache?.load()
+        await cache?.loadAndRepair()
 
         // **Every file, not a bucket.** `setCandidates` is the whole walk here, so the progress bar means
         // what it says instead of jumping to 100% and sitting there.
