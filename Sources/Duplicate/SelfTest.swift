@@ -4319,22 +4319,22 @@ enum SelfTest {
 
     /// Proves a cancelled scan stops quickly and leaves nothing behind.
     ///
-    /// **The three things a cancelled scan must not do**, each asserted: take long enough that a person presses
-    /// stop twice, write a scan document, or change a single file. The manifest of `(path, size, digest)` is taken
-    /// before and after and compared -- a scan is read-only apart from its hash cache, and this is what says so
-    /// rather than a comment claiming it.
+    /// **The three things a cancelled scan must not do**, each asserted: keep running, write a scan document, or
+    /// change a single file. The manifest of `(size, digest)` is taken before and after -- a scan is read-only
+    /// apart from its hash cache, and this is what says so rather than a comment claiming it.
+    ///
+    /// **The hasher is deliberately slow, and that is what makes both assertions mean something.** A first version
+    /// used 400 small files and cancelled once hashing had started; it passed locally and **failed on CI**, where
+    /// the scan finished between the poll and the cancel -- a race, not a check. With 3 ms of sleep per file there
+    /// is two seconds of work to interrupt, so "it stopped" and "it stopped inside 300 ms" are both real.
     ///
     /// **The cache appends are kept deliberately.** They are true facts about files that did not change, and
     /// discarding them would make the next run pay the whole price again.
     ///
     /// Writes only under `/tmp`.
     ///
-    /// **Proof of teeth, and which assertion actually has them.** Removing every `checkCancellation` from the
-    /// finder makes the scan run to completion and *return a result*: `a cancelled scan returned a result instead
-    /// of throwing`. The 300 ms deadline is **not** what catches it -- 400 small files hash quickly whether or not
-    /// anyone is listening -- and a deadline that only fires on a corpus a selftest should not create is worth
-    /// keeping as a guard and worth not claiming as the check. Removing one checkpoint of the four changes
-    /// nothing here, which is also worth knowing.
+    /// Proof of teeth: remove the `checkCancellation` calls from `DuplicateFinder` and this fails with
+    /// `a cancelled scan returned a result instead of throwing`.
     private static func checkCancellation() async throws {
         let manager = FileManager.default
         let root = NSTemporaryDirectory() + "duplicate-selftest-cancel-\(UUID().uuidString)"
@@ -4343,45 +4343,41 @@ enum SelfTest {
         defer { try? manager.removeItem(atPath: root) }
         let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
 
-        // Enough files, in enough size classes, that a scan has real work to interrupt.
+        // Pairs of equal size, so every file is a candidate and the slow hasher is actually reached.
         for index in 0..<400 {
-            let payload = String(repeating: "x", count: 200 + index % 7)
-            try Data(payload.utf8).write(to: URL(filePath: tree + "/f\(index).bin"))
+            let payload = String(repeating: "x", count: 200 + index % 20)
+            try Data(payload.utf8).write(to: URL(filePath: tree + "/a\(index).bin"))
+            try Data(payload.utf8).write(to: URL(filePath: tree + "/b\(index).bin"))
         }
 
         let hasher = ContentHasher()
         func manifest() throws -> [String: String] {
             var result: [String: String] = [:]
             for name in try manager.contentsOfDirectory(atPath: tree) {
-                let path = tree + "/" + name
-                let digest = try hasher.fullDigest(atPath: path)
+                let digest = try hasher.fullDigest(atPath: tree + "/" + name)
                 result[name] = "\(digest.byteCount):\(digest.digest.hexString)"
             }
             return result
         }
         let before = try manifest()
 
+        let counters = ProgressCounters()
         let session = ScanSession(
             store: ScanStore(state: state),
+            finder: DuplicateFinder(hasher: SlowHasher(wrapping: hasher, microseconds: 3_000)),
             cacheURL: URL(filePath: root + "/hashes.v1")
         )
-        // **Cancelled mid-scan, not before it starts.** A first version cancelled immediately and passed with
-        // every `checkCancellation` removed -- the task threw at its first suspension point, so the checkpoints
-        // were never what stopped it. Waiting until files are actually being hashed is what makes the deadline
-        // mean something.
-        let counters = ProgressCounters()
         let task = Task {
             try await session.run(
                 ScanSession.Request(root: tree), at: Date(), progress: counters)
         }
         var waited = 0
-        while counters.snapshot().filesHashed < 5, waited < 2_000 {
+        while counters.snapshot().filesHashed < 5, waited < 5_000 {
             try await Task.sleep(for: .milliseconds(2))
             waited += 2
         }
-        try expect(
-            counters.snapshot().filesHashed >= 5,
-            "the scan never got going, so cancelling it proves nothing")
+        let reached = counters.snapshot().filesHashed
+        try expect(reached >= 5, "the scan never got going, so cancelling it proves nothing")
 
         let started = ContinuousClock.now
         task.cancel()
@@ -4395,6 +4391,9 @@ enum SelfTest {
 
         try expect(cancelled, "a cancelled scan returned a result instead of throwing")
         try expect(
+            reached < before.count,
+            "the scan had already hashed all \(before.count) files, so nothing was interrupted")
+        try expect(
             elapsed < .milliseconds(300),
             "a cancelled scan took \(elapsed) to stop, past the 300 ms the plan asks for")
         try expect(
@@ -4404,8 +4403,8 @@ enum SelfTest {
         try expect(after == before, "a cancelled scan changed \(after.count) files on disk")
 
         print(
-            "  a cancelled scan stopped in \(elapsed), wrote no document, "
-                + "and left all \(before.count) files byte-identical")
+            "  interrupted after \(reached) of \(before.count) files, stopped in \(elapsed), "
+                + "wrote no document, left every file byte-identical")
     }
 
     // MARK: - keeper
@@ -4868,6 +4867,31 @@ enum SelfTest {
             return nil
         }
         return arguments[index + 1]
+    }
+}
+
+/// Wraps a hasher and sleeps, so a scan has work that can be interrupted.
+///
+/// **Not a fake hasher -- the real one, slowed down.** The production digest is what the scan produces either way;
+/// the sleep only buys the harness a window in which cancellation is a decision rather than a race.
+private struct SlowHasher: FileHashing {
+    let wrapped: any FileHashing
+    let microseconds: UInt32
+
+    init(wrapping wrapped: any FileHashing, microseconds: UInt32) {
+        self.wrapped = wrapped
+        self.microseconds = microseconds
+    }
+
+    func usesPrefixStage(forSize size: Int64) -> Bool { wrapped.usesPrefixStage(forSize: size) }
+
+    func prefixDigest(atPath path: String, size: Int64) throws -> Digest32 {
+        try wrapped.prefixDigest(atPath: path, size: size)
+    }
+
+    func fullDigest(atPath path: String) throws -> HashResult {
+        usleep(microseconds)
+        return try wrapped.fullDigest(atPath: path)
     }
 }
 

@@ -209,10 +209,16 @@ struct ContentHasherPrefixTests {
     func skipsProbeForSmallFiles() {
         // Below the threshold the probe costs a second open of a file one pread could consume whole,
         // so it is overhead rather than insurance.
+        //
+        // **8 MiB, not the 256 KiB this test used to pin.** Measured over a real 3,421-file tree: at 256 KiB the
+        // probe fired on 1,912 files, cost 0.31 s of 0.89, and saved 1 MB of 1.517 GB. The threshold moved and
+        // this expectation moved with it -- the tail case the probe exists for is a pair of multi-gigabyte files,
+        // not a photograph.
         let hasher = ContentHasher()
         #expect(!hasher.usesPrefixStage(forSize: 1024))
         #expect(!hasher.usesPrefixStage(forSize: 256 << 10))
-        #expect(hasher.usesPrefixStage(forSize: (256 << 10) + 1))
+        #expect(!hasher.usesPrefixStage(forSize: 8 << 20))
+        #expect(hasher.usesPrefixStage(forSize: (8 << 20) + 1))
     }
 
     @Test("Length participates, so files sharing both windows still differ")

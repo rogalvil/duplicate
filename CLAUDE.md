@@ -409,6 +409,20 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El desempate final de un par parecido es la profundidad, y gana el más profundo** — contraintuitivo y a
   propósito: es la regla del detector exacto, y que los dos detectores propusieran sobrevivientes distintos para
   los mismos dos archivos sería peor que una regla rara.
+- **La etapa de prefijo estaba mal calibrada y ahora el umbral es 8 MiB.** A los 256 KiB que se enviaron sondeaba
+  **1,912 de 3,421 archivos, cobraba 54% del tiempo y ahorraba 1 MB de 1.5 GB**. El argumento del plan (dos
+  imágenes de 4 GB del mismo tamaño) sigue en pie; el umbral no. A 8 MiB es indistinguible de apagarla sobre fotos.
+- **`F_NOCACHE` da 4× menos page cache, no cero**: +0.10 GB contra +0.40 GB para las mismas 1.52 GB leídas, al
+  mismo tiempo de reloj. La mayoría de los archivos están debajo del umbral y se cachean igual. Sale gratis, se
+  queda.
+- **En el corpus externo real no hay E/S que paralelizar**: 1,137 archivos, **29 candidatos por tamaño**, 0.011 GB
+  leídos. El bucketing elimina el 97% antes de abrir nada, así que el caso que el plan llamaba el importante —el
+  tope de 2 en externos— no se puede medir sobre estos datos.
+- **El barrido interno no tiene codo**: sigue mejorando hasta c=16 y el tope de 8 deja ~13%. Pero 2,350 MB/s está
+  por encima de lo que leen muchos SSD, o sea que esa corrida la sirvió el page cache y mide SHA-256, no disco. Un
+  barrido en frío necesita `sudo purge`. **Por eso la política no se cambió**: cambiar un default enviado sobre una
+  medición con esa salvedad sería el error que este archivo lleva cincuenta PRs registrando.
+- **RSS pico entre 21.7 y 54.8 MB**, contra el objetivo de < 400 MB. Sobra un orden de magnitud.
 - **La caché perceptual es la diferencia entre 177 s y 0.5 s**, medido sobre el árbol real de 2,779 imágenes y
   617 videos: **354×**, con el mismo resultado (4,771 pares las dos veces). No es optimización — un video son
   ocho decodes, así que sin caché un segundo escaneo del mismo árbol paga todo otra vez.
@@ -560,11 +574,12 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Todo lo que mueve archivos tiene que refrescar la presencia, y eso incluye deshacer.** El primer
   cableado solo lo hacía tras aplicar, así que la ventana seguía diciendo "este archivo ya no existe"
   sobre un archivo que acababa de volver. Lo encontró el uso real, no un test.
-- **Cancelar antes de que el trabajo empiece no prueba los checkpoints.** El `Task` lanza en su primer punto de
-  suspensión, así que el modo pasaba con **todos** los `checkCancellation` quitados. Hay que esperar a que la fase
-  de hasheo haya avanzado y cancelar ahí. Y el plazo de 300 ms **no** es lo que atrapa la regresión —400 archivos
-  chicos se hashean rápido de todos modos—; lo que la atrapa es que un escaneo cancelado **devuelva resultado en
-  vez de lanzar**.
+- **Probar cancelación necesita trabajo que no pueda terminar solo.** Cancelar antes de que empiece no prueba
+  nada: el `Task` lanza en su primer punto de suspensión, así que el modo pasaba con **todos** los
+  `checkCancellation` quitados. Y esperar a que el hasheo avance tampoco alcanza: con 400 archivos chicos el
+  escaneo **termina entre el sondeo y el cancel** — pasó local y **falló en CI**, que es una carrera disfrazada de
+  prueba. La cura es un hasher que envuelve al real y duerme 3 ms por archivo: con dos segundos de trabajo por
+  delante, "se detuvo" y "se detuvo en menos de 300 ms" las dos significan algo.
 - **Poner `AppleLanguages` en `UserDefaults` no cambia el locale de un proceso ya lanzado.** Un modo que lo hacía
   y recorría tres identificadores afirmaba lo mismo tres veces mientras decía haber probado tres locales. La
   propiedad real se prueba construyendo un `NumberFormatter` alemán explícito y mostrando qué escribiría él.

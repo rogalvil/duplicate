@@ -49,8 +49,21 @@ public struct ContentHasher: FileHashing, Sendable {
         public var noCacheThreshold: Int64
         /// Files larger than this get a prefix probe before the full read.
         ///
-        /// Below it, the probe costs a second `open` of a file that one `pread` could have consumed
-        /// whole, so it is pure overhead.
+        /// **8 MiB, raised from 256 KiB after measuring it.** The plan's argument for the probe was the tail: two
+        /// 4 GB disk images of the same size go from 8 GB of reads to 16 KiB. That argument is sound and the
+        /// threshold was not: swept over a real 3,421-file tree, 256 KiB probed **1,912 files, cost 0.31 s of
+        /// 0.89, and saved 1 MB of 1.517 GB**. It was buying nothing and charging 54% for it.
+        ///
+        /// | threshold | wall | probed | bytes read |
+        /// |---|---|---|---|
+        /// | 256 KiB | 0.89 s | 1,912 | 1.517 GB |
+        /// | 1 MiB | 0.63 s | 535 | 1.518 GB |
+        /// | **8 MiB** | **0.58 s** | **2** | 1.518 GB |
+        /// | off | 0.63 s | 0 | 1.518 GB |
+        ///
+        /// At 8 MiB the probe is free -- indistinguishable from off on a photo library -- and the tail case it
+        /// exists for is untouched. Below it the probe costs a second `open` of a file one `pread` could have
+        /// consumed whole.
         public var prefixThreshold: Int64
         /// How many bytes to take from each end during the probe.
         public var prefixWindow: Int
@@ -58,7 +71,7 @@ public struct ContentHasher: FileHashing, Sendable {
         public init(
             chunkBytes: Int = 1 << 20,
             noCacheThreshold: Int64 = 1 << 20,
-            prefixThreshold: Int64 = 256 << 10,
+            prefixThreshold: Int64 = 8 << 20,
             prefixWindow: Int = 4 << 10
         ) {
             self.chunkBytes = chunkBytes
