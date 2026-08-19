@@ -23,7 +23,16 @@ import DuplicateCore
 final class SimilarPairWindowController: NSWindowController {
 
     private let scan: SimilarScan
-    private let pairs: [SimilarPair]
+    private let allPairs: [SimilarPair]
+    /// The indices currently on screen, in scan order. **Narrowing decides nothing** -- this is the only thing a
+    /// filter changes.
+    private var visible: [Int] = []
+    private var filter = PairFilter()
+    private let similarityPopup = NSPopUpButton()
+    private let kindPopup = NSPopUpButton()
+    private let undecidedToggle = NSButton()
+    private let countLabel = NSTextField(labelWithString: "")
+    private let confirmShownButton = NSButton()
     private let stateDirectory: StateDirectory
     private var review: SimilarReviewState
     /// Facts already probed, by path. Filled for the pair being looked at, never for all of them.
@@ -48,7 +57,7 @@ final class SimilarPairWindowController: NSWindowController {
 
     init(scan: SimilarScan, stateDirectory: StateDirectory = StateDirectory.current()) {
         self.scan = scan
-        self.pairs = scan.pairs
+        self.allPairs = scan.pairs
         self.stateDirectory = stateDirectory
         // Rehydrated from disk, so reopening a scan shows what was already decided -- including a document the
         // CLI wrote, which decides every pair.
@@ -69,7 +78,8 @@ final class SimilarPairWindowController: NSWindowController {
         super.init(window: window)
         build()
         refreshDetail()
-        if !pairs.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
+        rebuildVisible()
+        if !visible.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
     }
 
     @available(*, unavailable)
@@ -147,6 +157,56 @@ final class SimilarPairWindowController: NSWindowController {
         skipButton.action = #selector(skipPair(_:))
         decisionRow.addView(skipButton, in: .leading)
 
+        similarityPopup.target = self
+        similarityPopup.action = #selector(filterChanged(_:))
+        for value in PairFilter.similarityChoices {
+            let title: String
+            if value == 0 {
+                title = Strings.string("similar.filter.similarity.any")
+            } else if value == 1.0 {
+                title = Strings.string("similar.filter.identical")
+            } else {
+                title = String(
+                    format: Strings.string("similar.filter.similarity.value"), Int(value * 100))
+            }
+            similarityPopup.addItem(withTitle: title)
+            similarityPopup.lastItem?.representedObject = value
+        }
+        similarityPopup.selectItem(at: 0)
+
+        kindPopup.target = self
+        kindPopup.action = #selector(filterChanged(_:))
+        for (key, kind) in [
+            ("similar.filter.kind.any", nil), ("similar.filter.kind.image", MediaKind.image),
+            ("similar.filter.kind.video", MediaKind.video),
+        ] as [(String, MediaKind?)] {
+            kindPopup.addItem(withTitle: Strings.string(key))
+            kindPopup.lastItem?.representedObject = kind?.rawValue
+        }
+        kindPopup.selectItem(at: 0)
+
+        undecidedToggle.setButtonType(.switch)
+        undecidedToggle.title = Strings.string("similar.filter.undecided")
+        undecidedToggle.target = self
+        undecidedToggle.action = #selector(filterChanged(_:))
+
+        countLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        countLabel.textColor = .secondaryLabelColor
+        countLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        confirmShownButton.bezelStyle = .rounded
+        confirmShownButton.target = self
+        confirmShownButton.action = #selector(confirmShown(_:))
+
+        let filterRow = NSStackView(views: [
+            NSTextField(labelWithString: Strings.string("similar.filter.similarity")),
+            similarityPopup, kindPopup, undecidedToggle, countLabel,
+        ])
+        filterRow.orientation = .horizontal
+        filterRow.spacing = 8
+        filterRow.translatesAutoresizingMaskIntoConstraints = false
+        filterRow.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
         // **A button, not only a menu item.** The last time an action of this app lived behind a keyboard
         // shortcut alone, nothing on screen said a review could be applied at all.
         applyButton.title = Strings.string("similar.review.apply")
@@ -161,8 +221,11 @@ final class SimilarPairWindowController: NSWindowController {
         panes.spacing = 12
         panes.translatesAutoresizingMaskIntoConstraints = false
 
+        decisionRow.addView(confirmShownButton, in: .trailing)
+
         let content = NSStackView(views: [
-            scroll, headerLabel, panes, adviceLabel, decisionRow, tallyLabel, footerLabel,
+            filterRow, scroll, headerLabel, panes, adviceLabel, decisionRow, tallyLabel,
+            footerLabel,
         ])
         content.orientation = .vertical
         content.alignment = .leading
@@ -177,6 +240,9 @@ final class SimilarPairWindowController: NSWindowController {
             content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            filterRow.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
+            filterRow.trailingAnchor.constraint(
+                lessThanOrEqualTo: content.trailingAnchor, constant: -14),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
             scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 150),
@@ -191,6 +257,33 @@ final class SimilarPairWindowController: NSWindowController {
             panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
         ])
         window?.contentView = container
+    }
+
+    /// The pairs on screen, in scan order. Every row index in this window is an index into this.
+    private var pairs: [SimilarPair] { visible.map { allPairs[$0] } }
+
+    /// The scan index behind a row, because a decision belongs to the pair and not to the row.
+    private func scanIndex(forRow row: Int) -> Int? {
+        visible.indices.contains(row) ? visible[row] : nil
+    }
+
+    private func rebuildVisible() {
+        let selected = scanIndex(forRow: table.selectedRow)
+        visible = filter.matchingIndices(in: allPairs) { review.decision(at: $0) }
+        table.reloadData()
+        countLabel.stringValue = String(
+            format: Strings.string("similar.filter.count"), visible.count, allPairs.count)
+        confirmShownButton.title = String(
+            format: Strings.string("similar.confirmShown"), visible.count)
+        confirmShownButton.isEnabled = !visible.isEmpty
+        // The selection follows the pair, not the row: a filter that removes rows above it would otherwise move
+        // the selection to a different pair without saying so.
+        if let selected, let row = visible.firstIndex(of: selected) {
+            table.selectRowIndexes([row], byExtendingSelection: false)
+        } else if !visible.isEmpty {
+            table.selectRowIndexes([0], byExtendingSelection: false)
+        }
+        refreshDetail()
     }
 
     private var selectedRow: Int {
@@ -230,9 +323,12 @@ final class SimilarPairWindowController: NSWindowController {
         }
         leftPane.show(path: pair.fileA, thumbnailer: thumbnailer)
         rightPane.show(path: pair.fileB, thumbnailer: thumbnailer)
-        refreshAdvice(row: selectedRow, pair: pair)
-        refreshDecisionButtons(row: selectedRow)
-        probeFactsIfNeeded(row: selectedRow, pair: pair)
+        // **Everything below is keyed on the scan index, not the row.** A filter makes those different numbers,
+        // and a decision belongs to the pair.
+        guard let index = scanIndex(forRow: selectedRow) else { return }
+        refreshAdvice(row: index, pair: pair)
+        refreshDecisionButtons(row: index)
+        probeFactsIfNeeded(row: index, pair: pair)
     }
 
     /// The suggestion and its reason, or the decision already made.
@@ -336,30 +432,100 @@ final class SimilarPairWindowController: NSWindowController {
 
     private static let decisionOrder: [SimilarDecision] = [.keepA, .keepB, .keepBoth, .keepNone]
 
+    @objc private func filterChanged(_ sender: Any?) {
+        filter = PairFilter(
+            minimumSimilarity: (similarityPopup.selectedItem?.representedObject as? Double) ?? 0,
+            kind: (kindPopup.selectedItem?.representedObject as? String).flatMap(
+                MediaKind.init(rawValue:)),
+            onlyUndecided: undecidedToggle.state == .on
+        )
+        rebuildVisible()
+    }
+
+    /// Accepts the suggestion for every pair currently shown.
+    ///
+    /// **The sheet names what it will cost before it happens**, and the counts come from the review rather than
+    /// from the filter: the files that would move, and any that another decision keeps. Nothing moves here -- this
+    /// writes decisions, and applying is still its own step behind its own gate.
+    ///
+    /// **Only the shown pairs.** That is the invariant that keeps this from becoming the "decide everything"
+    /// button the CLI has: every index handed to `confirmAll` is one this window put on screen.
+    @objc private func confirmShown(_ sender: Any?) {
+        let indices = visible
+        guard !indices.isEmpty, let window else { return }
+
+        // What accepting would plan, computed on a copy so the question can be asked before the answer is taken.
+        var preview = review
+        preview.confirmAll(indices)
+        let plan = SimilarApplyPlan.from(preview)
+        let bytes = plan.items.reduce(Int64(0)) { total, item in
+            total
+                + ((try? FileManager.default.attributesOfItem(atPath: item.path)[.size] as? Int64)
+                    ?? 0 ?? 0)
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = String(
+            format: Strings.string("similar.confirmShown.title"), indices.count)
+        var body = String(
+            format: Strings.string("similar.confirmShown.body"),
+            plan.items.count, ByteSize.format(bytes))
+        if !plan.contradicted.isEmpty {
+            body += String(
+                format: Strings.string("similar.confirmShown.contradictions"),
+                plan.contradicted.count)
+        }
+        alert.informativeText = body
+        alert.addButton(withTitle: Strings.string("button.accept"))
+        alert.addButton(withTitle: Strings.string("button.cancel"))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            MainActor.assumeIsolated {
+                self.review.confirmAll(indices)
+                self.saveDecisions()
+                self.rebuildVisible()
+            }
+        }
+    }
+
     @objc private func decisionChosen(_ sender: Any?) {
         guard let button = sender as? NSButton,
             SimilarPairWindowController.decisionOrder.indices.contains(button.tag),
             pairs.indices.contains(selectedRow)
         else { return }
         let decision = SimilarPairWindowController.decisionOrder[button.tag]
-        review.go(to: selectedRow)
+        guard let index = scanIndex(forRow: selectedRow) else { return }
+        review.go(to: index)
         review.confirm(decision)
         // Saved as it goes, for the same reason the exact review does: a decision the user made and an app that
         // forgot it are indistinguishable from the outside.
         saveDecisions()
-        table.reloadData(forRowIndexes: [selectedRow], columnIndexes: allColumnIndexes)
-        advanceSelection()
-        refreshDetail()
+        // **Rebuilt, not reloaded.** With "not decided yet" on, deciding a pair removes it from the list; leaving
+        // the row where it was would show a pair the state has already moved past -- which a real screenshot of
+        // the exact review caught once, the sidebar highlighting group 31 while the header said 32 of 880.
+        if filter.onlyUndecided {
+            rebuildVisible()
+        } else {
+            table.reloadData(forRowIndexes: [selectedRow], columnIndexes: allColumnIndexes)
+            advanceSelection()
+            refreshDetail()
+        }
     }
 
     @objc private func skipPair(_ sender: Any?) {
         guard pairs.indices.contains(selectedRow) else { return }
-        review.go(to: selectedRow)
+        guard let index = scanIndex(forRow: selectedRow) else { return }
+        review.go(to: index)
         review.skip()
         saveDecisions()
-        table.reloadData(forRowIndexes: [selectedRow], columnIndexes: allColumnIndexes)
-        advanceSelection()
-        refreshDetail()
+        if filter.onlyUndecided {
+            rebuildVisible()
+        } else {
+            table.reloadData(forRowIndexes: [selectedRow], columnIndexes: allColumnIndexes)
+            advanceSelection()
+            refreshDetail()
+        }
     }
 
     private var allColumnIndexes: IndexSet {
@@ -443,6 +609,21 @@ final class SimilarPairWindowController: NSWindowController {
 
     func simulateForSelftest() { simulateAndApply(nil) }
 
+    var shownCountForSelftest: Int { visible.count }
+    var countText: String { countLabel.stringValue }
+
+    func setFilterForSelftest(minimumSimilarity: Double = 0, onlyUndecided: Bool = false) {
+        filter = PairFilter(minimumSimilarity: minimumSimilarity, onlyUndecided: onlyUndecided)
+        rebuildVisible()
+    }
+
+    func confirmShownForSelftest() {
+        let indices = visible
+        review.confirmAll(indices)
+        saveDecisions()
+        rebuildVisible()
+    }
+
     func decideForSelftest(_ decision: SimilarDecision, row: Int) {
         table.selectRowIndexes([row], byExtendingSelection: false)
         guard let button = decisionButtons[decision] else { return }
@@ -477,8 +658,10 @@ final class SimilarPairWindowController: NSWindowController {
         case "a": return (pair.fileA as NSString).lastPathComponent
         case "b": return (pair.fileB as NSString).lastPathComponent
         case "decision":
-            guard let row = pairs.firstIndex(of: pair) else { return "" }
-            switch review.decision(at: row) {
+            guard let row = pairs.firstIndex(of: pair), let index = scanIndex(forRow: row) else {
+                return ""
+            }
+            switch review.decision(at: index) {
             case .decided(let decision): return SimilarAdviceText.label(for: decision)
             case .skipped: return Strings.string("similar.state.skipped")
             case .undecided: return Strings.string("similar.state.undecided")

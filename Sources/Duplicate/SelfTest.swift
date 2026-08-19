@@ -3888,7 +3888,48 @@ enum SelfTest {
             try store.loadSimilarDecisions(scanID: reloaded.scanID).count == 1,
             "a skip reached the decisions file")
 
-        // 8. The sheet: a dry run of what was decided, and the gate refusing before it.
+        // 8. Narrowing, and accepting only what is shown.
+        // Teeth: have `confirmShown` pass every index instead of the visible ones and the untouched pair below
+        // comes back decided.
+        // A second window over the same scan, which also exercises rehydration: the one decision saved above
+        // comes back decided and the pair that was only skipped comes back undecided, because a skip is not
+        // written.
+        let batch = SimilarPairWindowController(scan: reloaded, stateDirectory: state)
+        defer { batch.window?.close() }
+        try expect(
+            batch.reviewTallyForSelftest.decided == 1,
+            "the reopened window shows \(batch.reviewTallyForSelftest) instead of one decision")
+
+        batch.setFilterForSelftest(minimumSimilarity: 1.0)
+        try expect(
+            batch.shownCountForSelftest == reloaded.pairs.count(where: { $0.similarity >= 1.0 }),
+            "the 100% filter shows \(batch.shownCountForSelftest) of \(reloaded.pairCount)")
+        try expect(
+            batch.countText.contains("\(reloaded.pairCount)"),
+            "the count line does not say how many pairs there are: \(batch.countText)")
+
+        // **A filter that hides a pair must not decide it.**
+        batch.setFilterForSelftest(minimumSimilarity: 2.0)
+        try expect(batch.shownCountForSelftest == 0, "an impossible filter still shows pairs")
+        batch.confirmShownForSelftest()
+        try expect(
+            batch.reviewTallyForSelftest.decided == 1,
+            "accepting an empty list decided \(batch.reviewTallyForSelftest.decided) pairs")
+
+        // And accepting the shown set decides exactly those.
+        batch.setFilterForSelftest(onlyUndecided: true)
+        let undecidedShown = batch.shownCountForSelftest
+        try expect(undecidedShown >= 1, "nothing was left undecided to accept")
+        batch.confirmShownForSelftest()
+        try expect(
+            batch.reviewTallyForSelftest.undecided == 0,
+            "\(batch.reviewTallyForSelftest.undecided) pairs are still undecided after accepting them"
+        )
+        try expect(
+            try store.loadSimilarDecisions(scanID: reloaded.scanID).count == reloaded.pairCount,
+            "the decisions file does not hold every accepted pair")
+
+        // 9. The sheet: a dry run of what was decided, and the gate refusing before it.
         // Teeth: have the viewer skip `flow.advance(.dryRun,…)` and the sheet's apply refuses.
         viewer.simulateForSelftest()
         let sheet = try expectSome(viewer.applySheetForSelftest, "no apply sheet appeared")
@@ -3923,6 +3964,9 @@ enum SelfTest {
         print(
             "  one click decided one pair and wrote one key; a skip wrote none")
         print("  the sheet simulates what would move and says every pair is re-checked first")
+        print(
+            "  narrowing decided nothing; accepting \(undecidedShown) shown pairs wrote exactly those"
+        )
     }
 
     // MARK: - similar-apply
