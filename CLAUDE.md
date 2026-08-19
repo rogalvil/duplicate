@@ -515,6 +515,15 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   (0.1% de rango); lo que cambia es la coincidencia con Python. Pedirle 32 px a ImageIO es un desastre (10.9%
   idéntico) porque a ese tamaño devuelve su reducción más barata. El Jaccard ≥0.98 que pedía el plan **solo se
   alcanza con decode completo**, a 2.65× el tiempo, y no compra mejores respuestas.
+- **Las dos métricas obvias del diferencial contra `imagehash` son ciegas al error que importa.** Quitar el
+  `+ 0x8000` de la conversión a grises —la fórmula truncada que el plan especificó mal— deja **88.0% de hashes
+  idénticos y un peor caso de 4 bits**, o sea que una tasa de coincidencia y una distancia máxima las dos pasan.
+  Lo que sí lo atrapa son **6 pares que una implementación llama casi idénticos (≤2 bits) y la otra ajenos
+  (>5 bits)**: esa es la discrepancia que movería un archivo. Por eso el modo `phash-differential` afirma sobre
+  los flips de clase y no solo sobre promedios.
+- **El diferencial contra `imagehash` lee un archivo de referencia, no lanza Python.** Un subproceso desde el
+  bundle firmado no es reproducible y no se puede diffear; la referencia sí, y su rancidez se maneja grabando
+  cada ruta —un corpus con un archivo más falla en vez de comparar de menos.
 - **Las únicas divergencias sistemáticas contra `imagehash` son las 16 imágenes con rotación EXIF**, de 2,779.
   Nosotros aplicamos la orientación y Pillow no: una copia que solo difiere en el flag debería coincidir con su
   original. Sin ellas el peor caso es de 4 bits.

@@ -60,6 +60,7 @@ La segunda columna de la tabla no es aspiracional. Cada línea se ejecutó.
 | `progress` | 20,000 eventos y 1,000 snapshots: los conteos cuadran, la fase no queda vieja, y leer 1,000 veces cuesta menos de 50 ms | que `snapshot()` aloque por llamada |
 | `volumes` | Imprime los `VolumeTraits` de cada volumen montado y la concurrencia que le toca, y **afirma que un externo recibe el mínimo** | devolver el máximo para un volumen removible — falla solo en una máquina con disco externo |
 | `realroot PATH=` | Invariantes de solo lectura sobre un directorio real: todo grupo tiene ≥2 archivos, el orden `(-size, digest)` se sostiene, y ninguna ruta sale de una Papelera. **No escribe nada fuera de `/tmp`** | formas reales de filesystem; sin `--path` se salta diciéndolo |
+| `phash-differential --reference` | Compara nuestro hash contra `imagehash` sobre el corpus real del usuario: **90.9% idéntico** entre los 2,761 sin rotación, peor caso **4 bits**, **96.7% de Jaccard** entre los conjuntos de pares, y **cero pares** que una implementación llame casi idénticos y la otra ajenos | dos roturas: bajar el decode a 32 px (10.9% idéntico), y quitar el `+ 0x8000` de la conversión a grises — que deja **88.0% y 4 bits, o sea las dos métricas obvias pasando**, y produce 6 flips de clase. Sin `--reference` salta diciendo el comando que la genera |
 | `about` | El panel muestra fecha de compilación y número de build de verdad | quitar la sustitución de `__BUILD_NUMBER__` |
 | `icon` | El `.icns` está en el bundle y trae las siete resoluciones | quitar el `cp Resources/AppIcon.icns` del Makefile |
 
@@ -67,8 +68,9 @@ La segunda columna de la tabla no es aspiracional. Cada línea se ejecutó.
 
 Importa porque el corpus del usuario tiene 119 escaneos que no se pueden perder.
 
-- **Solo lectura sobre el corpus real**: `json-roundtrip`, `scans`, `decisions`, y la medición de tiempo
-  al final de `library`. Nunca escriben ahí.
+- **Solo lectura sobre el corpus real**: `json-roundtrip`, `scans`, `decisions`, la medición de tiempo
+  al final de `library`, y `phash-differential`, que decodifica las fotos del corpus y no escribe nada.
+  Nunca escriben ahí.
 - **Escriben solo en `/tmp`**: `scan`, `cache`, `storage`, `review`, `gate`, `library`,
   `review-window`, `walk-permissions`, `digest`, `state-dir`, `trash-exclusion`.
 - **Tocan la Papelera real**: `trash` y `undo`. Mandan archivos temporales suyos y los limpian por
@@ -114,6 +116,16 @@ SKIPPED: no JSON found (6 directories absent)
 SKIPPED: /Users/runner/.local/state/rav/duplicate/scans is not readable
 SKIPPED: /Users/runner/.local/state/rav/duplicate/decisions is not readable
 SKIPPED: no real corpus to time
+```
+
+Y `phash-differential` salta también, por una razón distinta: su oráculo es otra implementación, así
+que necesita un archivo de referencia generado con `imagehash` y Pillow sobre un corpus de fotos
+reales. El salto nombra el comando que lo produce, que es la única forma de que un salto no sea un
+modo olvidado:
+
+```
+SKIPPED: pass --reference <file.json> to run this
+generate it with: python3 scripts/phash-reference.py <corpus> <file.json>
 ```
 
 Para no perder del todo la garantía de interoperabilidad, hay un paso extra que corre

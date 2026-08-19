@@ -35,7 +35,7 @@ enum SelfTest {
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
             "similar-window", "video", "similar-apply", "folder-apply", "cancel", "keeper",
-            "format", "progress", "volumes", "realroot",
+            "format", "progress", "volumes", "realroot", "phash-differential",
         ]
 
         let modes: [String]
@@ -90,6 +90,7 @@ enum SelfTest {
                 case "progress": try await checkProgressCoalescing(arguments: arguments)
                 case "volumes": try checkVolumeTraits()
                 case "realroot": try await checkRealRoot(arguments: arguments)
+                case "phash-differential": try checkPerceptualDifferential(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -4435,6 +4436,196 @@ enum SelfTest {
         print(
             "  a q=0.9 JPEG moved the hash \(distance) bits; the inversion moved "
                 + "\(fromPNG.distance(to: inverted))")
+    }
+
+    // MARK: - phash-differential
+
+    /// Compares this app's perceptual hash against `imagehash.phash` over a real corpus.
+    ///
+    /// **The one assertion in the project whose oracle is another implementation.** Everything else here
+    /// checks the app against itself or against a derived answer; this checks it against the library the CLI
+    /// uses, over the user's own photographs, which is the only place the resampler and the decode size can be
+    /// caught drifting. It needs a corpus and Python, so CI skips it -- loudly, naming the command.
+    ///
+    /// **What it does not assert, and why.** The plan asked for a Jaccard of 0.98 on the pair sets. Measured,
+    /// that is only reachable with a full decode, at 2.65x the time, and it does not find better pairs -- the
+    /// decode sweep is flat from 128 to 4096. So the floors here are the measured behaviour of the shipped
+    /// configuration, and the assertion that actually protects a user is the third one: no pair may be called
+    /// near-identical by one implementation and unrelated by the other, because that is the disagreement that
+    /// would move a file.
+    ///
+    /// **The EXIF-rotated files are expected to differ and are separated, not tolerated.** We apply the
+    /// orientation and Pillow does not; a copy that differs only in the rotation flag should match its original,
+    /// so this is us being right. Measured, 18 of 2,779 carry a rotation flag; widening the tolerance for all of
+    /// them to absorb 18 would hide the next real drift.
+    ///
+    /// Measured at the shipped configuration over the user's 2,779 photographs: **90.9% of the unrotated hashes
+    /// are identical to `imagehash` 4.3.2, the worst case is 4 bits, and the pair sets agree 96.7%.**
+    ///
+    /// Teeth, and the second one is why the flip assertion exists. Dropping `decodeMaxPixelSize` to 32 collapses
+    /// the identical rate to 10.9% and fails the first assertion. Taking the `+ 0x8000` out of the grayscale
+    /// conversion -- the truncating formula the plan wrongly specified -- leaves the rate at **88.0% and the
+    /// worst case at 4 bits, so both of the obvious metrics still pass**, and produces **6 pairs one
+    /// implementation calls near-identical and the other calls unrelated**. Those are the pairs that would move
+    /// a file.
+    private static func checkPerceptualDifferential(arguments: [String]) throws {
+        guard let referencePath = value(for: "--reference", in: arguments) else {
+            print("  SKIPPED: pass --reference <file.json> to run this")
+            print("  generate it with: python3 scripts/phash-reference.py <corpus> <file.json>")
+            return
+        }
+        guard let data = FileManager.default.contents(atPath: referencePath) else {
+            throw SelfTestFailure("cannot read the reference at \(referencePath)")
+        }
+        let document = try JSONReader.parse(data)
+        let images = try expectSome(
+            document["images"]?.arrayValue, "the reference has no images array")
+        let library = document["imagehash"]?.stringValue ?? "unknown"
+        let corpus = document["corpus"]?.stringValue ?? "unknown"
+        try expect(images.count >= 500, "a differential over \(images.count) images proves little")
+
+        struct Subject {
+            let path: String
+            let reference: PerceptualHash
+            let ours: PerceptualHash
+            let rotated: Bool
+        }
+
+        let hasher = ImageHasher()
+        var subjects: [Subject] = []
+        var missing = 0
+        var unreadable: [String] = []
+        for entry in images {
+            guard let path = entry["path"]?.stringValue,
+                let hex = entry["hash"]?.stringValue,
+                let reference = PerceptualHash(hex: hex)
+            else {
+                throw SelfTestFailure("a reference entry is missing its path or hash")
+            }
+            // A file that moved since the reference was written is a stale reference, not a failure of the
+            // hasher, and saying so is the difference between regenerating and debugging.
+            guard FileManager.default.fileExists(atPath: path) else {
+                missing += 1
+                continue
+            }
+            let orientation = entry["orientation"]?.intValue ?? 1
+            do {
+                let ours = try hasher.hash(fileURL: URL(filePath: path))
+                subjects.append(
+                    Subject(
+                        path: path, reference: reference, ours: ours, rotated: orientation != 1))
+            } catch {
+                unreadable.append(path)
+            }
+        }
+        try expect(
+            missing * 20 <= images.count,
+            "\(missing) of \(images.count) referenced files are gone -- regenerate the reference")
+        try expect(
+            unreadable.count * 100 <= images.count,
+            "we failed to hash \(unreadable.count) files the reference could: \(unreadable.prefix(3))"
+        )
+        try expect(subjects.count >= 500, "only \(subjects.count) files were comparable")
+
+        let straight = subjects.filter { !$0.rotated }
+        let identical = straight.count { $0.reference == $0.ours }
+        let rate = Double(identical) / Double(straight.count)
+        let worst = straight.map { $0.reference.distance(to: $0.ours) }.max() ?? 0
+
+        // Measured over 2,779 real photographs at the shipped configuration: 90.9% identical among the
+        // unrotated files and a worst case of 4 bits. The floors sit below the measurement with room for a
+        // different corpus, and far above what a broken resampler or decode size produces.
+        try expect(
+            rate >= 0.85,
+            "only \(percentage(rate)) of the unrotated hashes are identical to \(library)")
+        try expect(
+            worst <= 6, "the worst unrotated disagreement is \(worst) bits, over the 6 allowed")
+
+        // The safety property. A pair one implementation calls near-identical and the other calls unrelated
+        // is the disagreement that would move a file, and it must not exist among the files where we claim to
+        // agree with the library at all.
+        var flips: [(String, String, Int, Int)] = []
+        for i in straight.indices {
+            for j in (i + 1)..<straight.count {
+                let ours = straight[i].ours.distance(to: straight[j].ours)
+                let theirs = straight[i].reference.distance(to: straight[j].reference)
+                let near = min(ours, theirs)
+                let far = max(ours, theirs)
+                if near <= 2 && far > 5 {
+                    flips.append((straight[i].path, straight[j].path, ours, theirs))
+                }
+            }
+        }
+        try expect(
+            flips.isEmpty,
+            "\(flips.count) pairs flip class, first: \(flips.first.map { "\($0.2) vs \($0.3) bits" } ?? "")"
+        )
+
+        // And the pair sets themselves, through the production index rather than a brute-force loop, so a
+        // regression in the LSH shows up here too.
+        let index = MultiIndexLSH(maximumDistance: 5)
+        let paths = straight.map(\.path)
+        let ourRun = index.matches(in: straight.map(\.ours))
+        let theirRun = index.matches(in: straight.map(\.reference))
+        let ourPairs = pathPairs(ourRun.matches, of: paths, classes: ourRun.candidates.classes)
+        let theirPairs = pathPairs(
+            theirRun.matches, of: paths, classes: theirRun.candidates.classes)
+        let shared = ourPairs.intersection(theirPairs).count
+        let union = ourPairs.union(theirPairs).count
+        let jaccard = union == 0 ? 1.0 : Double(shared) / Double(union)
+        try expect(
+            jaccard >= 0.90,
+            "the pair sets agree on only \(percentage(jaccard)) -- \(ourPairs.count) ours, \(theirPairs.count) theirs"
+        )
+
+        print("  \(subjects.count) images from \(corpus) against \(library)")
+        print(
+            "  \(percentage(rate)) identical among \(straight.count) unrotated, worst case \(worst) bits, "
+                + "\(subjects.count - straight.count) EXIF-rotated separated")
+        print(
+            "  pairs at 5 bits: \(ourPairs.count) ours, \(theirPairs.count) theirs, "
+                + "\(percentage(jaccard)) Jaccard, no pair flips between near and unrelated")
+        if missing > 0 {
+            print("  \(missing) referenced files are gone since the reference was written")
+        }
+    }
+
+    /// The pairs of paths an LSH run found, as unordered path pairs so two hash sets can be compared.
+    ///
+    /// Classes carry member indices rather than paths, and a class can hold many members -- identical hashes
+    /// collapse, and 2,779 real photographs make 1,630 classes -- so every member pair of a matched class pair
+    /// is a pair of files.
+    private static func pathPairs(
+        _ matches: [MultiIndexLSH.Match], of paths: [String], classes: [MultiIndexLSH.HashClass]
+    ) -> Set<String> {
+        var pairs: Set<String> = []
+        for match in matches {
+            for a in classes[match.a].members {
+                for b in classes[match.b].members {
+                    let (first, second) =
+                        PathOrder.lessThan(paths[a], paths[b])
+                        ? (paths[a], paths[b]) : (paths[b], paths[a])
+                    pairs.insert(first + "\u{0}" + second)
+                }
+            }
+        }
+        // Members of one class are all within zero bits of each other, so they pair too.
+        for item in classes where item.members.count > 1 {
+            for i in item.members.indices {
+                for j in (i + 1)..<item.members.count {
+                    let a = paths[item.members[i]]
+                    let b = paths[item.members[j]]
+                    let (first, second) = PathOrder.lessThan(a, b) ? (a, b) : (b, a)
+                    pairs.insert(first + "\u{0}" + second)
+                }
+            }
+        }
+        return pairs
+    }
+
+    /// A rate as a percentage with one decimal, for the report lines.
+    private static func percentage(_ value: Double) -> String {
+        String(format: "%.1f%%", value * 100)
     }
 
     // MARK: - cancel

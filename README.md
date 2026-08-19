@@ -23,11 +23,14 @@ deshacer.
 | Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
 
 O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,
-simular, aplicar a la Papelera, deshacer. Del perceptual, un escaneo de imágenes ya corre y guarda un documento que el
-CLI lee byte a byte; el hash está medido contra `imagehash` sobre 2,779 fotos reales: **90.4% idéntico bit a
-bit**, 99.2% dentro de dos bits, y las 16 excepciones son justo las 16 imágenes con etiqueta de rotación EXIF,
-que es la divergencia elegida a propósito. Falta la UI y **todo el video**: un escaneo de esta app escribe
-`vid_threshold` y ningún par de video, y eso cambia lo que encuentra, no cómo se ve.
+simular, aplicar a la Papelera, deshacer. Imágenes y video, los dos, con documentos que el CLI lee byte a byte.
+
+El hash perceptual está medido contra `imagehash` sobre las 2,779 fotos reales del corpus, y el modo
+`phash-differential` vuelve a medirlo cuando se le pide: **90.9% idéntico bit a bit** entre las 2,761 sin
+rotación, peor caso de **4 bits**, **96.7% de Jaccard** entre los dos conjuntos de pares, y **ningún par** que
+una implementación llame casi idéntico y la otra ajeno. Las 18 imágenes con etiqueta de rotación EXIF se
+separan en vez de tolerarse: nosotros aplicamos la orientación y Pillow no, así que ahí diferir es lo
+correcto — una copia que solo cambia el flag debería coincidir con su original.
 
 ## Requisitos
 
