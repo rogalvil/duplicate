@@ -41,6 +41,12 @@ public enum DisposalError: Error, Equatable, Sendable {
     case noFreeName(path: String)
     /// The file on disk no longer matches the digest the scan recorded.
     case contentChanged(path: String)
+    /// The verification was cancelled before it finished.
+    ///
+    /// **Its own case because every other one accuses the file.** `missing` says it is gone, `contentChanged`
+    /// says it was edited; a cancelled re-hash means neither, and reporting one of them would tell someone their
+    /// file is damaged because they pressed Stop.
+    case cancelled(path: String)
 }
 
 /// Removes one file. Injected so the planner and the UI can be driven without touching a filesystem.
@@ -270,6 +276,9 @@ public struct VerifyingDisposer: ItemDisposing {
         guard let want = expected[path] else {
             throw DisposalError.contentChanged(path: path)
         }
+        // A cancelled re-hash is not a missing file. Reporting `.missing` would tell the reader their file is
+        // gone because they pressed Stop, which is both false and alarming.
+        if Task.isCancelled { throw DisposalError.cancelled(path: path) }
         guard let fresh = try? hasher.fullDigest(atPath: path) else {
             throw DisposalError.missing(path: path)
         }

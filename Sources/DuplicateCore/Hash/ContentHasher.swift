@@ -144,6 +144,14 @@ public struct ContentHasher: FileHashing, Sendable {
         var hasher = SHA256()
         var offset: Int64 = 0
         while true {
+            // **The checkpoint that makes a 50 GB file abortable.** Without it, cancelling a scan waits for the
+            // current file to finish, so the plan's "stopped in under 300 ms" held only for libraries of small
+            // files -- exactly the ones where cancelling does not matter. The bound is now one chunk: a 1 MiB
+            // read, well under a millisecond on this machine and still small on a spinning disk.
+            //
+            // `Task.isCancelled` works in synchronous code, and outside a task it is simply false, so a caller
+            // that is not in one -- a test, the selftest -- reads every byte as before.
+            if Task.isCancelled { throw CancellationError() }
             let chunk = try reader.read(at: offset)
             if chunk.count == 0 { break }
             hasher.update(bufferPointer: chunk)

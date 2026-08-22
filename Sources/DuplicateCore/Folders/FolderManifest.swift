@@ -68,6 +68,8 @@ public struct FolderManifest: Sendable, Hashable {
         var entries: [String: Digest32] = [:]
         for entry in walk.entries {
             let relative = PathElision.relative(DirectoryTree.canonical(entry.path), to: canonical)
+            // The synchronous build is only reached from the undo planner, where a short manifest fails its
+            // digest comparison and blocks the restore -- the safe direction. Left as it is on purpose.
             guard let result = try? hasher.fullDigest(atPath: entry.path) else { continue }
             entries[relative] = result.digest
         }
@@ -103,7 +105,22 @@ public struct FolderManifest: Sendable, Hashable {
                 entries[relative] = known
                 continue
             }
-            guard let result = try? hasher.fullDigest(atPath: entry.path) else { continue }
+            // **A cancelled hash must not turn into a missing entry.** `ContentHasher` stops between chunks, and
+            // a `try?` here would drop that file from the manifest and carry on.
+            //
+            // Measured, the reachable damage is a false accusation rather than a deletion, because the checkpoint
+            // above catches every position except one: the **last** file of a build. Cancel there and the loop
+            // ends normally with a short manifest. On the keeper's build -- the second of the two, with nothing
+            // between it and the comparison -- that reports `wouldLoseFiles(count: 1, examples: ["f2.txt"])` for
+            // a file sitting in both folders. Someone pressed Stop and was told their folders differ.
+            let result: HashResult
+            do {
+                result = try hasher.fullDigest(atPath: entry.path)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue
+            }
             if let cache { await cache.store(result.digest, for: entry) }
             entries[relative] = result.digest
         }

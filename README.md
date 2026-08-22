@@ -22,6 +22,7 @@ deshacer.
 | Decidir pares parecidos en el visor, con el consejo, **lote por filtro** y ⌘Z | **funciona** |
 | Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
 | Progreso con etapa durante el apply: verificar y mover se distinguen | **funciona** |
+| Cancelar dentro del hasheo de un archivo grande, no solo entre archivos | **funciona** |
 
 O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,
 simular, aplicar a la Papelera, deshacer. Imágenes y video, los dos, con documentos que el CLI lee byte a byte.
@@ -270,6 +271,13 @@ Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.m
 
 El detalle y las alternativas que se descartaron están en
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Qué hace, capacidad por capacidad
+
+[`docs/CAPACIDADES.md`](docs/CAPACIDADES.md) es el inventario detallado de lo que la app hace hoy: los cuatro
+detectores, la revisión, la acción destructiva, el deshacer y la interoperabilidad, cada uno con cómo se
+verifica. Trae además una sección de **solapamientos y candidatos a revisión** — el código que calcula algo
+que ninguna ventana muestra — para que agregar o quitar funcionalidad se decida leyendo, no adivinando.
 
 ## Licencia
 

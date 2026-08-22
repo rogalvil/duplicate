@@ -402,3 +402,79 @@ struct ApplyRunnerTests {
         }
     }
 }
+
+/// **A 50 GB file used to hold a cancellation hostage.** `ContentHasher.fullDigest` had no checkpoint, so
+/// "stopped in under 300 ms" was true only for libraries of small files -- the ones where stopping does not
+/// matter. These pin the checkpoint and the three places a cancelled hash could have been mislabelled.
+@Suite("Cancelling inside a single file")
+struct CancellationInsideAFileTests {
+
+    private func scratchFile(_ bytes: Int) throws -> (directory: String, path: String) {
+        let directory = NSTemporaryDirectory() + "duplicate-chunkcancel-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(
+            atPath: directory, withIntermediateDirectories: true)
+        let path = directory + "/big.bin"
+        try Data((0..<bytes).map { UInt8($0 % 251) }).write(to: URL(filePath: path))
+        return (directory, path)
+    }
+
+    @Test("A cancelled task stops the hash between chunks")
+    func hashStopsBetweenChunks() async throws {
+        let (directory, path) = try scratchFile(64 * 1024)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+
+        // A 4 KiB chunk over 64 KiB is sixteen reads, so there are fifteen checkpoints after the first.
+        let hasher = ContentHasher(configuration: .init(chunkBytes: 4096))
+        let task = Task {
+            while !Task.isCancelled { await Task.yield() }
+            return Result { try hasher.fullDigest(atPath: path) }
+        }
+        task.cancel()
+        let outcome = await task.value
+        #expect(throws: CancellationError.self) { try outcome.get() }
+
+        // And outside a task nothing changes: the same hasher reads the file whole.
+        let full = try hasher.fullDigest(atPath: path)
+        #expect(full.byteCount == 64 * 1024)
+    }
+
+    @Test("A cancelled verification is not a missing file")
+    func verifyingDisposerReportsCancellation() async throws {
+        let (directory, path) = try scratchFile(8192)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+
+        let disposer = VerifyingDisposer(
+            wrapping: UnreachedDisposer(), hasher: ContentHasher(),
+            expected: [path: Digest32(hexString: String(repeating: "a", count: 64))!])
+        let outcome = await Task {
+            while !Task.isCancelled { await Task.yield() }
+            return Result { try disposer.dispose(path: path) }
+        }.cancelAndValue()
+
+        // `.missing` would say the file is gone and `.contentChanged` would say it was edited. Neither is true:
+        // the only thing that happened is that someone pressed Stop.
+        do {
+            _ = try outcome.get()
+            Issue.record("a cancelled verification reported success")
+        } catch let error as DisposalError {
+            #expect(error == .cancelled(path: path))
+        }
+        #expect(FileManager.default.fileExists(atPath: path))
+    }
+}
+
+extension Task where Failure == Never {
+    /// Cancels, then awaits. The two lines this replaces read as if the order did not matter, and it does.
+    fileprivate func cancelAndValue() async -> Success {
+        cancel()
+        return await value
+    }
+}
+
+/// Never disposes anything: it proves the verification refused before any move was attempted.
+private struct UnreachedDisposer: ItemDisposing {
+    func dispose(path: String) throws -> DisposalOutcome {
+        Issue.record("the disposer was reached despite the verification refusing")
+        throw DisposalError.missing(path: path)
+    }
+}
