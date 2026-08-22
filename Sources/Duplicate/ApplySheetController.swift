@@ -31,6 +31,37 @@ final class AppliedCounter: Sendable {
     }
 }
 
+/// Why one file did not move, in the user's language.
+///
+/// **This is the one list a user has to read after a destructive action, and it was printing Swift.** A
+/// failure came out as `contentChanged(path: "/Users/…")`, which names the case of an enum rather than saying
+/// what happened -- and the two things a reader needs from this list are what went wrong and whether their file
+/// is still there. Every case here answers both.
+///
+/// Shared by the three sheets rather than written in each, because a failure means the same thing whichever
+/// detector produced it, and three copies is three chances to describe the same state differently.
+func disposalFailureText(_ error: DisposalError) -> String {
+    switch error {
+    case .missing(let path):
+        return String(
+            format: Strings.string("apply.failure.missing"), (path as NSString).lastPathComponent)
+    case .contentChanged(let path):
+        return String(
+            format: Strings.string("apply.failure.contentChanged"),
+            (path as NSString).lastPathComponent)
+    case .trashUnavailable(_, let reason):
+        return String(format: Strings.string("apply.failure.trashUnavailable"), reason)
+    case .quarantineFailed(_, let reason):
+        return String(format: Strings.string("apply.failure.quarantineFailed"), reason)
+    case .noFreeName:
+        return Strings.string("apply.failure.noFreeName")
+    // Not expected in a report -- the runners break out of the loop on a cancellation instead of recording it --
+    // but a case that says "cancelled" is better than a case that says nothing if one ever arrives.
+    case .cancelled:
+        return Strings.string("apply.failure.cancelled")
+    }
+}
+
 /// The sentence for a progress report, or `nil` when there is nothing new to say.
 ///
 /// Here rather than in Core, because Core never produces prose. The path keeps its first and last two
@@ -345,8 +376,10 @@ final class ApplySheetController: NSWindowController {
                 }
                 .joined(separator: "\n")
             } else {
-                listView.string = report.failures.map { "\($0.path)  \u{2014}  \($0.reason)" }
-                    .joined(separator: "\n")
+                listView.string = report.failures.map {
+                    "\($0.path)  \u{2014}  \(disposalFailureText($0.reason))"
+                }
+                .joined(separator: "\n")
             }
             undoButton.isHidden = report.movedCount == 0
         }

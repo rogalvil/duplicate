@@ -284,7 +284,8 @@ final class FolderApplySheetController: NSWindowController {
                 lines.append(
                     String(format: Strings.string("apply.done.failed"), result.failures.count))
                 for failure in result.failures.prefix(50) {
-                    lines.append("    \(failure.path)  —  \(failure.reason)")
+                    lines.append(
+                        "    \(failure.path)  —  \(disposalFailureText(failure.reason))")
                 }
             }
             if result.stoppedEarly { lines.append(Strings.string("apply.done.stoppedEarly")) }

@@ -372,3 +372,9 @@
 "apply.progress.verifying" = "Verifying %1$d of %2$d: %3$@";
 "apply.progress.verifying.files" = "Verifying %1$d of %2$d: %3$@ — %4$d files checked";
 "apply.progress.moving" = "Moving %1$d of %2$d: %3$@";
+"apply.failure.missing" = "%@ is not there any more, so nothing was moved";
+"apply.failure.contentChanged" = "%@ changed since the scan, so it was left alone";
+"apply.failure.trashUnavailable" = "the Trash refused this file and quarantine could not take it either: %@";
+"apply.failure.quarantineFailed" = "quarantine could not take this file: %@";
+"apply.failure.noFreeName" = "every name in the quarantine folder was taken, so the file stayed where it is";
+"apply.failure.cancelled" = "stopped before this file was checked, so it was left where it is";

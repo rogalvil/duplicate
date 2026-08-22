@@ -131,6 +131,7 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Detener sigue vivo durante el apply | Cerrar la hoja mientras corre **detiene y no cierra** |
 | Etapa en el progreso | `verifying(filesChecked:)` / `moving` / `done`, porque verificar un par de carpetas digiere miles de archivos antes de mover nada |
 | Veinte fallas seguidas detienen | Una sola no: un archivo bloqueado no aborta los otros 3,997 |
+| Los fallos se leen | Cada razón dice qué pasó y si el archivo sigue en su lugar, no el nombre de un caso de enum. Una sola función para las tres hojas: un fallo significa lo mismo venga del detector que venga |
 | Cancelación no acusa | Una cancelación nunca se reporta como archivo ilegible, ni como carpeta ilegible, ni como "estas dos carpetas difieren" |
 
 ## 7. Biblioteca, ventanas y sistema
@@ -216,9 +217,8 @@ primero lo que puede perder algo o mentirle, al final lo que solo es incómodo o
    parecido en el panel para que las flechas sean la comparación.
 2. ~~"Mostrar en Finder" solo en la revisión exacta.~~ **Hecho**: los tres visores lo tienen, y en un par
    revela **los dos** archivos —Finder selecciona varios, y elegir uno en silencio sería elegir por el usuario.
-3. **Los fallos de un apply se renderizan interpolando el enum.** El usuario lee
-   `contentChanged(path: "/Users/…")` en la única lista que *tiene* que leer después de una acción destructiva.
-   Localizar esas razones es el trabajo de una tarde y toca el camino más delicado.
+3. ~~Los fallos de un apply interpolan el enum.~~ **Hecho**: una función compartida por las tres hojas dice qué
+   pasó y si el archivo sigue ahí, en los dos idiomas.
 4. ~~El journal crece para siempre.~~ **Hecho**: **Sesiones > Limpiar sesiones ya deshechas…** borra solo los
    journals de sesiones cuyos archivos **todos** volvieron —lo dice el propio journal con sus `undone_at`— con los
    conteos en pantalla antes de confirmar. Las dos reglas más amplias quedaron rechazadas por escrito.
