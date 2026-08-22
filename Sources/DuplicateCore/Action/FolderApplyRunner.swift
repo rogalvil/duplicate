@@ -127,10 +127,23 @@ public struct FolderApplyRunner: Sendable {
 
             // Two builds, one number: to the reader this is one pair being checked, so the keeper's count
             // continues where the doomed folder's left off instead of restarting at zero.
-            guard
-                let doomed = try? await FolderManifest.build(
+            //
+            // **And a cancelled manifest is not an unreadable folder.** `FolderManifest.build` checks for
+            // cancellation once per file, which is what makes a 10,506-file verification abortable -- but a
+            // `try?` swallowing that error filed the folder under "could not be read", which is an accusation
+            // about the user's data for something the user just asked for. Breaking out is also right on its
+            // own terms: everything past this point re-reads the same tree.
+            let doomedManifest: FolderManifest?
+            do {
+                doomedManifest = try await FolderManifest.build(
                     root: item.path, walker: walker, hasher: hasher, cache: cache, onFile: emit)
-            else {
+            } catch is CancellationError {
+                cancelled = true
+                break
+            } catch {
+                doomedManifest = nil
+            }
+            guard let doomed = doomedManifest else {
                 refused.append((item.path, .unreadable(path: item.path)))
                 onProgress?(
                     ApplyProgress(
@@ -139,10 +152,17 @@ public struct FolderApplyRunner: Sendable {
                 continue
             }
             tally.base = doomed.entries.count
-            guard
-                let keeper = try? await FolderManifest.build(
+            let keeperManifest: FolderManifest?
+            do {
+                keeperManifest = try await FolderManifest.build(
                     root: item.keeper, walker: walker, hasher: hasher, cache: cache, onFile: emit)
-            else {
+            } catch is CancellationError {
+                cancelled = true
+                break
+            } catch {
+                keeperManifest = nil
+            }
+            guard let keeper = keeperManifest else {
                 refused.append((item.path, .unreadable(path: item.path)))
                 onProgress?(
                     ApplyProgress(

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import DuplicateCore
@@ -375,5 +376,78 @@ struct FolderReviewStateTests {
         state.skip()
         #expect(state.tally == (decided: 0, skipped: 1, undecided: 0))
         #expect(state.decisionsForSaving(instant: noon).count == 0)
+    }
+}
+
+/// A hasher that cancels its own task partway through, so the cancellation lands *inside* a manifest build.
+///
+/// **Deliberately not a slow hasher plus a sleep.** The first version of this test did that, and it passed on its
+/// own and failed inside the full suite: whether 120 ms of wall clock lands in the middle of 600 ms of hashing
+/// depends on machine load, which makes it a race dressed up as a test. Cancelling on the tenth file always lands
+/// in the first manifest of a hundred-file folder, and the test runs in milliseconds.
+private struct CancellingHasher: FileHashing {
+    let after: Int
+    private let inner = ContentHasher()
+    // A class, because `Atomic` is noncopyable and a `FileHashing` is a value passed by copy.
+    private let seen = Counter()
+
+    private final class Counter: Sendable {
+        private let value = Atomic<Int>(0)
+        func next() -> Int { value.add(1, ordering: .relaxed).newValue }
+    }
+
+    init(after: Int) { self.after = after }
+
+    func usesPrefixStage(forSize size: Int64) -> Bool { inner.usesPrefixStage(forSize: size) }
+
+    func prefixDigest(atPath path: String, size: Int64) throws -> Digest32 {
+        try inner.prefixDigest(atPath: path, size: size)
+    }
+
+    func fullDigest(atPath path: String) throws -> HashResult {
+        let count = seen.next()
+        if count == after {
+            // Cancels the task the runner is on, which the manifest's per-file `checkCancellation` then throws.
+            withUnsafeCurrentTask { $0?.cancel() }
+        }
+        return try inner.fullDigest(atPath: path)
+    }
+}
+
+@Suite("Cancelling a folder apply")
+struct FolderApplyCancellationTests {
+
+    /// **A cancelled manifest is not an unreadable folder.** The `try?` that used to wrap the build filed a
+    /// cancellation under "could not be read" -- an accusation about the user's data for something the user just
+    /// asked for, and `unreadable` is the refusal that sends someone looking for damage.
+    @Test("Cancelling during verification is cancellation, not an unreadable folder")
+    func cancellationIsNotUnreadable() async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        for folder in ["keep", "gone"] {
+            for index in 0..<100 {
+                _ = try scratch.write("\(folder)/f\(index).txt", "contents \(index)")
+            }
+        }
+
+        var review = FolderReviewState(
+            scan: folderScan(
+                [folderPair(scratch.tree + "/keep", scratch.tree + "/gone")], root: scratch.tree))
+        review.keep(scratch.tree + "/keep")
+        let plan = FolderApplyPlan.from(review)
+        let disposer = RecordingDisposer()
+
+        let report = try await Task {
+            try await FolderApplyRunner(
+                state: scratch.state, hasher: CancellingHasher(after: 10),
+                cacheURL: URL(filePath: scratch.root + "/hashes.v1")
+            ).run(plan, sessionID: noon.identifier, instant: noon, disposer: disposer)
+        }.value
+
+        #expect(report.wasCancelled)
+        #expect(report.moved.isEmpty, "a folder moved after the apply was cancelled")
+        #expect(disposer.disposed.isEmpty)
+        // The whole point: no refusal at all, and above all not an unreadable one.
+        #expect(report.refused.isEmpty, "a cancelled apply reported refusals: \(report.refused)")
     }
 }

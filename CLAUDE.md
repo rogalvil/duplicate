@@ -635,6 +635,21 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Confirmar es lo que convierte un preview en decisión.** Dejar el keep set correcto no alcanza: si el
   heurístico ya eligió bien, no hay nada que alternar y el grupo sigue `.undecided`. Eso es el
   tri-estado funcionando, y un arnés que solo alterna casillas obtiene un plan vacío — ya pasó.
+- **Una cancelación tragada por un `try?` acusa a los datos del usuario.** Cancelar durante la verificación de una
+  carpeta hacía que `FolderManifest.build` lanzara `CancellationError`, el `try?` la volviera `nil`, y el runner
+  reportara `.unreadable` sobre una carpeta perfectamente sana —con `wasCancelled: false`, o sea que ni la ventana
+  sabía que se había detenido—. Y `unreadable` es justo la rehúsa que manda a alguien a buscar daño. Lo mismo pasaba
+  en el perceptual: un decode de video cancelado volvía como "no pude leer este archivo". Las dos ahora viajan como
+  cancelación: `catch is CancellationError` en el runner de carpetas, y un veredicto `.cancelled` en el verificador
+  perceptual que **no** es una rehúsa —nada se decidió sobre ese par, así que no puede aparecer en una lista que se
+  lee como "estos los revisé y los dejé en paz".
+- **Y para imágenes hay que chequear `Task.isCancelled` a mano.** `ImageHasher` es síncrono y no tiene punto de
+  cancelación, así que sin ese chequeo un par de imágenes en vuelo se terminaba de verificar y **se movía** después
+  de presionar Detener. Medido con el diente puesto: el veredicto salía `.stillAlike` y `allowsMove == true`.
+- **Un test de cancelación con `sleep` es una carrera disfrazada.** La primera versión dormía 120 ms sobre 600 ms de
+  hasheo: pasó sola y **falló dentro de la suite completa**, donde la carga de la máquina mueve las dos cosas. La
+  versión determinista es un hasher que cancela su propia tarea en su décima llamada —siempre dentro del primer
+  manifiesto de una carpeta de cien archivos, y corre en 43 ms.
 - **Cancelar un apply no puede lanzar: tiene que devolver reporte.** Lanzar desde el chequeo al inicio del loop
   **se saltaba el `flush()` final**, así que hasta 31 archivos ya movidos quedaban en la Papelera **sin entrada en el
   journal** — o sea invisibles para el deshacer. Ahora rompe el loop, hace el flush y devuelve el reporte con
