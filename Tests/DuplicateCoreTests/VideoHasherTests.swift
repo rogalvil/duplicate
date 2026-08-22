@@ -200,8 +200,12 @@ struct VideoSimilarityTests {
         let one = hashes([0])
         #expect(VideoSimilarity.similarity(many, one) == 1.0)
         #expect(VideoSimilarity.similarity(one, many) == 0.125)
-        // Which straddles the threshold, so the pair is found in one direction and not the other.
-        #expect(VideoSimilarity.directionsDisagree(many, one))
+        // Which straddles the threshold, so the pair is found in one direction and not the other. Stated with
+        // the two numbers rather than through a helper: the helper existed only for this and nothing in the app
+        // ever asked it anything.
+        let ratio = VideoSimilarity.defaultFrameRatio
+        #expect(VideoSimilarity.similarity(many, one) >= ratio)
+        #expect(VideoSimilarity.similarity(one, many) < ratio)
     }
 
     /// The greedy `break`: one frame of B can partner every frame of A.
@@ -285,9 +289,10 @@ struct VideoAsymmetryTests {
         let backward = VideoSimilarity.similarity(shortHashes, longHashes)
         #expect(forward == 1.0)
         #expect(backward < forward)
+        let ratio = VideoSimilarity.defaultFrameRatio
         #expect(
-            VideoSimilarity.directionsDisagree(longHashes, shortHashes),
-            "forward \(forward), backward \(backward) -- both on the same side of 0.70"
+            forward >= ratio && backward < ratio,
+            "forward \(forward), backward \(backward) -- both on the same side of \(ratio)"
         )
         // And the oriented answer is the same whichever way the caller holds it.
         let a = VideoSimilarity.orientedSimilarity(

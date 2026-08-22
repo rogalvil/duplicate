@@ -130,19 +130,6 @@ public actor HashCache {
         (hits, misses, entries.count, pending.count)
     }
 
-    // MARK: - Verification
-
-    /// Whether a digest still matches what is on disk right now.
-    ///
-    /// The safety valve. Called immediately before a file is moved to the Trash, with the cache bypassed,
-    /// so a stale or corrupt row becomes an error message instead of a deleted file that was not a
-    /// duplicate. The cost is one read of only the files being acted on, which is trivial next to a scan.
-    public func verify(_ entry: FileEntry, against hasher: some FileHashing) -> Bool {
-        guard let expected = entries[HashCacheKey(entry: entry) ?? .invalid] else { return false }
-        guard let fresh = try? hasher.fullDigest(atPath: entry.path) else { return false }
-        return fresh.digest == expected
-    }
-
     // MARK: - Persisting
 
     /// Appends everything pending. A no-op when the cache is read-only or has nothing to write.

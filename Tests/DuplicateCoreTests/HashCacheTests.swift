@@ -480,40 +480,12 @@ struct HashCacheTests {
         #expect(stats.live == 1)
     }
 
-    @Test("Verification re-reads the file instead of trusting the row")
-    func verificationRereadsTheFile() async throws {
-        // The safety valve, and the reason it is acceptable to trust the cache at all. A corrupt-but-CRC-
-        // valid row, or an inode reused inside the same mtime nanosecond, would otherwise put two
-        // non-identical files in one group and the user would trash a file that is not a duplicate.
-        let tree = try ScratchTree()
-        defer { tree.remove() }
-        let scratch = try CacheScratch()
-        defer { scratch.remove() }
-
-        let path = try tree.write("f.bin", bytes: ScratchTree.pattern(500))
-        let hasher = ContentHasher()
-        let real = try hasher.fullDigest(atPath: path)
-        let walked = FileEntry(
-            path: path,
-            size: 500,
-            identity: FileIdentity(volume: 1, inode: 1),
-            generation: 1,
-            modifiedNanoseconds: 1
-        )
-
-        let cache = HashCache(url: scratch.url)
-        await cache.load()
-        await cache.store(real.digest, for: walked)
-        #expect(await cache.verify(walked, against: hasher))
-
-        // Now poison the row, as a corrupt-but-CRC-valid entry would.
-        await cache.store(digest("f"), for: walked)
-        #expect(!(await cache.verify(walked, against: hasher)))
-
-        // And a file that no longer exists cannot be verified.
-        try FileManager.default.removeItem(atPath: path)
-        #expect(!(await cache.verify(walked, against: hasher)))
-    }
+    // **The safety valve moved, it did not disappear.** `HashCache.verify(_:against:)` used to live here and no
+    // production code ever called it: `VerifyingDisposer` re-reads the file itself, immediately before the move,
+    // with the cache bypassed. Two verification paths for one destructive check is worse than one, because a
+    // reader cannot tell which runs. The property -- a corrupt-but-CRC-valid row must not get a file deleted --
+    // is asserted in `DisposerTests` under "Refuses a file that changed since the scan" and "A group's removal
+    // set survives verification end to end".
 
     @Test("The default location is under Caches, never the shared state directory")
     func defaultLocationIsCaches() {

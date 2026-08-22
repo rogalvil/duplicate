@@ -408,6 +408,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Las facts de media se piden por par, no por escaneo.** Probar los 2,460 archivos de un escaneo real antes de
   dibujar la ventana repetiría buena parte del escaneo; se piden para el par que se está viendo, con un contador
   de generación que tira la respuesta que llega después de que la selección se movió.
+- **Una pieza que calcula un dato "para que alguien lo reporte" es peor que código muerto.** Tiene test y
+  comentario, así que **parece una capacidad**. El inventario de `docs/CAPACIDADES.md` encontró cuatro en su
+  primera pasada; la regla es decidir cada una: se cablea o se borra. Se cablearon `isAmbiguous` (aviso al cerrar)
+  y `usableCount` (cuántos cuadros sostienen un veredicto de video); se borraron `HashCache.verify` —dos caminos
+  de verificación para un chequeo destructivo es peor que uno, porque quien lee no sabe cuál corre— y
+  `VideoSimilarity.directionsDisagree`, informativo y a costa de una segunda pasada sobre 190,036 pares.
+- **Un test que usa un ayudante para afirmar una propiedad esconde la propiedad.** Los dos tests de la asimetría
+  de video llamaban a `directionsDisagree`; ahora comparan los dos números contra el ratio, que dice lo mismo y
+  se lee sin ir a buscar otra función.
+- **El guard de `frames > 0` en el encabezado de video no es paranoia.** Las facts llegan por sonda asíncrona, así
+  que antes de que responda la duración es nil: sin el guard, un par recién seleccionado anuncia "juzgado con 0 de
+  8 cuadros". El diente lo destapa.
 - **Las contradicciones se avisan al cerrar, no en cada clic.** El conflicto solo importa cuando el conjunto de
   decisiones está terminado, y una hoja tras cada elección haría imposible decidir 4,771 pares.
 - **"Descartar los dos" va en rojo.** Es la única opción del visor que puede quitar dos archivos de una, y en el

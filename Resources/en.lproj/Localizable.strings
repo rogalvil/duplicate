@@ -283,6 +283,7 @@
 "library.empty.similar" = "No perceptual scans yet.\n\nPress Command-N and choose \"Similar images\".";
 "similar.header.image" = "%1$.2f%% alike - %2$d of 64 bits differ";
 "similar.header.video" = "%1$.2f%% of the sampled frames match";
+"similar.header.video.fewFrames" = "%1$.2f%% of sampled frames match — judged on %2$d of %3$d frames";
 "similar.state.missing" = "This file is no longer there.";
 "scan.includeVideo" = "Include videos (slower)";
 "similar.decision.keepA" = "Keep the first";
@@ -308,6 +309,8 @@
 "similar.why.qualityRatio" = "%@x the normalised quality";
 "similar.contradiction.title" = "One file is kept by one pair and discarded by another";
 "similar.contradiction.body" = "%1$d files are in that position, %2$@ among them. Acting on every decision would delete a file you chose to keep elsewhere. Decide those pairs again before applying.";
+"similar.ambiguousKey.title" = "A decision was saved under a key that cannot be read back";
+"similar.ambiguousKey.body" = "%1$d of the pairs you decided contain \"||\" in a path, which is the separator this format uses. The CLI would read those keys as a different pair, so check them before running a move: %2$@";
 "similar.saved" = "Decisions saved";
 "similar.apply.headline" = "%1$d files from %2$d pairs would go to the Trash";
 "similar.apply.verifyNote" = "Each pair is scored again at the moment it is moved. One that no longer looks alike is skipped.";

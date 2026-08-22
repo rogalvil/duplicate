@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR de cancelación dentro de un archivo. 39 modos de selftest, 762 tests, 94.60% de
-cobertura sobre `DuplicateCore`.
+Última actualización: PR "reportar o irse". 39 modos de selftest, 762 tests, 94.68% de cobertura sobre
+`DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -111,6 +111,8 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Avisos al decidir, no al aplicar | Un par de carpetas dice "mover la segunda perdería 5 archivos" *mientras eliges* |
 | Presencia de archivos | El panel distingue "el archivo ya no está" de "la miniatura no llega". Se refresca también al deshacer |
 | Miniaturas | Clave por digest en grupos exactos (ocho archivos idénticos = **una** miniatura) y **por ruta** en pares perceptuales, donde son fotos distintas |
+| Cuántos cuadros sostienen un veredicto de video | El encabezado dice "juzgado con 4 de 8 cuadros" cuando el clip es tan corto que algunas marcas caen pasado su final |
+| Claves impartibles avisadas | Un par decidido cuya clave `a||b` no se puede volver a partir se reporta al cerrar. Medido: ninguna ruta del corpus lo tiene, y por eso se avisa en vez de confiar |
 
 ## 6. Acción destructiva y deshacer
 
@@ -171,16 +173,17 @@ sobrevivientes que `rav duplicate move`.
 
 Sin actuar sobre ellos: es la lista para decidir después.
 
-**Código escrito para reportar algo que nadie reporta.** Cuatro piezas calculan un dato útil que ninguna
-ventana muestra ni ningún reporte incluye. Cada una tiene test y comentario explicando por qué el número
-importa, lo que las hace peores que código muerto: parecen una capacidad.
+**Código escrito para reportar algo que nadie reporta — resuelto.** Las cuatro piezas que este documento
+encontró en su primera versión ya se decidieron una por una: dos reportan y dos se fueron. La regla que salió
+de ahí: una pieza que calcula un dato para "que alguien lo reporte" es peor que código muerto, porque tiene
+test y comentario y por lo tanto **parece una capacidad**.
 
-| Pieza | Qué calcula | Quién lo usa |
+| Pieza | Qué calculaba | Resolución |
 |---|---|---|
-| `HashCache.verify(_:against:)` | Si un digest guardado sigue coincidiendo con el disco | **Nadie.** `VerifyingDisposer` hace su propia verificación |
-| `VideoSimilarity.directionsDisagree` | Cuántos pares cambian de lado del umbral al invertir la comparación | **Nadie.** Su doc dice "reportado para que quien llame pueda contarlos" |
-| `SimilarPairKey.isAmbiguous` | Si una ruta contiene `||` y rompería la clave | **Nadie.** `CLAUDE.md` afirma que "lo reporta en vez de esconderlo", y no hay quien lo reporte |
-| `VideoFrameSampler.usableCount` | Cuántas de las ocho marcas caen dentro del video | **Nadie.** Escrito para avisar "este clip se juzgó con tres cuadros" |
+| `SimilarPairKey.isAmbiguous` | Si una ruta contiene `||` y rompería la clave | **Cableado.** `SimilarReviewState.ambiguousKeys` lista los pares *decididos* con clave impartible, y el visor avisa al cerrar, junto a las contradicciones. Un par sin decidir no escribe clave, así que no cuenta |
+| `VideoFrameSampler.usableCount` | Cuántas de las ocho marcas caen dentro del video | **Cableado.** El encabezado de un par de video dice "juzgado con 4 de 8 cuadros" cuando son menos de ocho: "83% de los cuadros coinciden" sobre tres cuadros es una afirmación mucho más débil que sobre ocho |
+| `HashCache.verify(_:against:)` | Si un digest guardado sigue coincidiendo con el disco | **Borrado.** `VerifyingDisposer` re-lee el archivo él mismo, justo antes de mover y con la caché puenteada. Dos caminos de verificación para un chequeo destructivo es peor que uno: quien lee no puede saber cuál corre |
+| `VideoSimilarity.directionsDisagree` | Pares que cambian de lado del umbral al invertir la comparación | **Borrado.** La orientación se fija por bytes, así que el número es informativo y costaba una segunda pasada sobre 190,036 pares. Los dos tests que lo usaban ahora afirman la propiedad con los dos números, que se lee mejor |
 
 **Otros puntos a decidir:**
 
@@ -195,6 +198,9 @@ importa, lo que las hace peores que código muerto: parecen una capacidad.
 - **Dos ramas del disposer no son alcanzables** con un `FileManager` real y están marcadas como tal.
 - **El montaje de red es el único caso que la cuarentena rescata de verdad**, y es el camino menos probado
   del código destructivo. No se puede fabricar aquí sin servidor.
+- **Pedido y pendiente**: ver la metadata del archivo (tamaño y fecha) debajo de la vista previa, con manera
+  de ocultarla si no cabe. Hoy el panel muestra la ruta completa y la miniatura, y las facts de media
+  (resolución, codec, bitrate, duración) solo se usan para el consejo, no se muestran tal cual.
 
 ## Deuda conocida
 

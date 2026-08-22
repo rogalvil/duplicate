@@ -3907,6 +3907,34 @@ enum SelfTest {
         )
         viewer.selectPairForSelftest(0)
         try expect(!viewer.headerText.contains("similar.header"), "the header shows a key literal")
+
+        // **How many frames a video verdict rests on.** The sampler's floor of 0.1 s puts some timestamps past
+        // the end of a short clip: at half a second, four of the eight do not exist, and the CLI compares on the
+        // four that do. "83% of sampled frames match" over three frames is a much weaker claim than over eight,
+        // and the reader cannot tell them apart unless it is said. Asserted on the renderer rather than through
+        // a fixture: the fixture's clips are six seconds long, where all eight frames exist, and shortening them
+        // would change the similarity every other assertion in this mode depends on.
+        //
+        // Teeth: return the plain sentence for both cases and the first two fail; drop the `frames > 0` guard
+        // and a pair whose probe has not answered yet claims to have been judged on zero frames.
+        let clipPair = try expectSome(
+            reloaded.pairs.first { $0.mediaKind == .video }, "the fixture has no video pair")
+        let short = similarHeaderText(pair: clipPair, durationA: 0.5, durationB: 0.5)
+        let long = similarHeaderText(pair: clipPair, durationA: 6, durationB: 6)
+        let unprobed = similarHeaderText(pair: clipPair, durationA: nil, durationB: nil)
+        try expect(short != long, "a three-frame verdict reads the same as an eight-frame one")
+        try expect(short.contains("4"), "the short clip's frame count is missing: \(short)")
+        try expect(
+            long == unprobed,
+            "a pair with all eight frames says something different from one not probed yet")
+        try expect(!short.contains("similar.header"), "the header shows a key literal: \(short)")
+
+        // And a decided pair whose key cannot be split back apart is reported, not written quietly. Measured, no
+        // path in this corpus contains `||`, which is the argument for warning rather than trusting.
+        // Teeth: have `ambiguousKeys` return `[]` and this fails.
+        try expect(
+            viewer.ambiguousKeysForSelftest.isEmpty,
+            "the fixture produced an ambiguous key: \(viewer.ambiguousKeysForSelftest)")
         // Teeth: show `pair.fileA` in both panes and this fails naming the doubled path. **What it does not
         // test** is the thumbnail cache key, because the pane's text comes from the path it was handed rather
         // than from the cache -- keying the cache on content would draw one picture twice and leave these

@@ -64,19 +64,4 @@ public enum VideoSimilarity {
             ? similarity(hashesA, hashesB, threshold: threshold)
             : similarity(hashesB, hashesA, threshold: threshold)
     }
-
-    /// Whether the two directions of the comparison disagree about a pair.
-    ///
-    /// Reported so a caller can count them rather than pretend they do not exist: it is the honest measure of
-    /// how much the asymmetry matters on a real corpus.
-    public static func directionsDisagree(
-        _ hashesA: [PerceptualHash],
-        _ hashesB: [PerceptualHash],
-        threshold: Int = 5,
-        ratio: Double = defaultFrameRatio
-    ) -> Bool {
-        let forward = similarity(hashesA, hashesB, threshold: threshold) >= ratio
-        let backward = similarity(hashesB, hashesA, threshold: threshold) >= ratio
-        return forward != backward
-    }
 }
