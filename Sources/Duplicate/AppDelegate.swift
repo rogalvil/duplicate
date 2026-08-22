@@ -162,6 +162,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// app, not about one scan, so it must work with the library focused, with a review focused, or with a
     /// perceptual pair focused. `NSApplication` forwards an unhandled action to its delegate, which is exactly
     /// the reach a global preference needs.
+    /// Deletes the journals of sessions whose files have all been put back.
+    ///
+    /// **The rule is narrow because a journal is the only record of where a file went.** Only a session every
+    /// one of whose moves has an `undone_at` record is offered -- the undo already ran, so the file has nothing
+    /// left to say. "Older than N days" and "its Trash items are gone" were both rejected: the second reads an
+    /// unmounted external volume as an emptied Trash, and this user's corpus lives on one.
+    ///
+    /// Confirmed with the counts on screen, because deleting a record silently is the same shape of mistake as
+    /// deleting a file silently.
+    @objc func pruneUndoneSessions(_ sender: Any?) {
+        let state = StateDirectory.current()
+        let plan = JournalPruner.plan(in: state)
+        let alert = NSAlert()
+        guard !plan.isEmpty else {
+            alert.alertStyle = .informational
+            alert.messageText = Strings.string("sessions.prune.nothing.title")
+            alert.informativeText = String(
+                format: Strings.string("sessions.prune.nothing.body"),
+                plan.stillUndoable.count
+            )
+            alert.addButton(withTitle: Strings.string("button.close"))
+            alert.runModal()
+            return
+        }
+        alert.alertStyle = .warning
+        alert.messageText = Strings.string("sessions.prune.title")
+        alert.informativeText = String(
+            format: Strings.string("sessions.prune.body"),
+            plan.prunable.count, ByteSize.format(plan.reclaimableBytes),
+            plan.stillUndoable.count
+        )
+        alert.addButton(withTitle: Strings.string("sessions.prune.confirm"))
+        alert.addButton(withTitle: Strings.string("button.cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let removed = JournalPruner.prune(plan, in: state)
+        let done = NSAlert()
+        done.alertStyle = .informational
+        done.messageText = Strings.string("sessions.prune.done.title")
+        done.informativeText = String(
+            format: Strings.string("sessions.prune.done.body"), removed.count)
+        done.addButton(withTitle: Strings.string("button.close"))
+        done.runModal()
+    }
+
     @objc func toggleFileMetadata(_ sender: Any?) {
         MetadataPreference.toggle()
     }

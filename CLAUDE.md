@@ -232,6 +232,17 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **El journal es JSON Lines (`.jsonl`), no un array JSON.** No se puede hacer append a un `[…]`
   pretty-printed sin reescribirlo, y un crash a media escritura tiene que dejar legible todo lo
   anterior. Una línea truncada cuesta esa línea y nada más.
+- **Podar un journal necesita una regla *provable*, no probable.** El journal es el único registro de dónde
+  quedó un archivo. La única condición que se ofrece es "todos sus archivos ya volvieron", y lo dice el journal
+  mismo con sus `undone_at`. Rechazadas por escrito: "sus ítems de Papelera ya no están" leería un **volumen
+  externo desmontado** como una Papelera vaciada —y el corpus de este usuario vive en uno—, y "más viejo que N
+  días" cambia una capacidad real por kilobytes.
+- **Una sesión vacía o ilegible NO es podable**, y el diente lo prueba: quitando el `movedCount > 0` de la regla,
+  el journal que no se pudo parsear se vuelve borrable y se borra —o sea que se destruye la única evidencia de que
+  hubo algo ahí.
+- **Los `undone_at` los escribe `UndoCoordinator`, en el ejecutable, no `UndoRunner`.** Así que un arnés que
+  maneje el runner directo nunca produce una sesión podable: la aserción de poda tiene que pasar por el
+  coordinador, o estaría afirmando sobre un journal que ningún undo real produce.
 - **Un `undone_at` se agrega, no reescribe la línea original.** Así el journal sigue siendo un log
   veraz de lo que pasó en orden, en vez de un resumen mutable del estado actual — y un rewrite que
   falle a la mitad perdería todo.

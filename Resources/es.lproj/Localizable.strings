@@ -183,6 +183,14 @@
 "menu.group.simulate" = "Simular la aplicación...";
 "menu.sessions" = "Sesiones";
 "menu.sessions.undoLast" = "Deshacer la última sesión...";
+"menu.sessions.prune" = "Limpiar sesiones ya deshechas…";
+"sessions.prune.title" = "¿Borrar el registro de las sesiones que ya se devolvieron?";
+"sessions.prune.body" = "%1$d sesiones tienen todos sus archivos de vuelta, así que sus journals ya no ofrecen nada. Borrarlos libera %2$@. %3$d sesiones todavía tienen archivos que nunca se restauraron y se dejan en paz.";
+"sessions.prune.confirm" = "Borrar";
+"sessions.prune.nothing.title" = "No hay nada que limpiar";
+"sessions.prune.nothing.body" = "Ninguna sesión tiene todos sus archivos de vuelta. %1$d sesiones todavía tienen archivos que se podrían restaurar, y su journal es el único registro de dónde quedaron.";
+"sessions.prune.done.title" = "Limpiado";
+"sessions.prune.done.body" = "Se borraron %1$d journals de sesión.";
 "undo.noSessions.title" = "Todavía no se ha aplicado nada";
 "undo.noSessions.body" = "No hay ninguna sesión que deshacer. La app registra cada archivo que mueve, y no hay registros.";
 /* %@ es el id de la sesión. */
