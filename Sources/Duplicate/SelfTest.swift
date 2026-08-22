@@ -3757,6 +3757,16 @@ enum SelfTest {
         try expect(
             viewer.reviewTallyForSelftest != beforeFolderUndo,
             "the folder undo changed nothing: still \(beforeFolderUndo)")
+        // Quick Look and Reveal on both folders. A folder previews as its icon and item count rather than as a
+        // picture, and that is still the fastest way to see that one side is gone -- which in this user's real
+        // folder scans is the common case.
+        // Teeth: return `[]` from `quickLookPaths` and this fails.
+        viewer.selectPairForSelftest(0)
+        let folderLook = viewer.quickLookPathsForSelftest
+        try expect(
+            folderLook.count == 2,
+            "Quick Look would show \(folderLook.count) of the pair's 2 folders")
+
         print("  and Command-Z takes a decision back, in the window and in the file")
 
         print(
@@ -3978,6 +3988,20 @@ enum SelfTest {
             viewer.leftMetadataForSelftest.text == probed,
             "the line lost what it said across a toggle")
         print("  the panes name the size, the date and the resolution: \(probed)")
+
+        // **Quick Look and Reveal, the two things this viewer could not do.** A thumbnail capped at 280 points
+        // is enough to tell two photographs apart and not always enough to decide between them -- the difference
+        // the detector found can be finer than the picture it draws -- and until now there was no way to look
+        // closer or to go find the file. Asserted on the path list rather than by opening the panel:
+        // `QLPreviewPanel` is a shared system window, and a mode that opened one would leave it up for the next
+        // mode and assert against a window it does not own.
+        //
+        // Teeth: return `[]` from `quickLookPaths` and both fail; hand it one side of the pair and the count does.
+        let looked = viewer.quickLookPathsForSelftest
+        try expect(looked.count == 2, "Quick Look would show \(looked.count) of the pair's 2 files")
+        try expect(
+            reloaded.pairs.contains { Set([$0.fileA, $0.fileB]) == Set(looked) },
+            "Quick Look would show \(looked), which is not any pair in the scan")
 
         // And a decided pair whose key cannot be split back apart is reported, not written quietly. Measured, no
         // path in this corpus contains `||`, which is the argument for warning rather than trusting.

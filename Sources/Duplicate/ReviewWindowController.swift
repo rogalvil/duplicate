@@ -1,5 +1,6 @@
 import AppKit
 import DuplicateCore
+@preconcurrency import Quartz
 
 /// A table that answers to the keys a file list should answer to.
 ///
@@ -47,6 +48,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
     private let groupTable = NSTableView()
     private let fileTable = ReviewTableView()
+    private let quickLook = QuickLookCoordinator()
     private let headerLabel = NSTextField(labelWithString: "")
     private let subheaderLabel = NSTextField(labelWithString: "")
     private let tallyLabel = NSTextField(labelWithString: "")
@@ -941,6 +943,23 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         }
     }
 
+    /// Opens Quick Look on the selected file, or closes it.
+    ///
+    /// **The thumbnail is 280 points and the decision can be finer than that.** This is the look the app exists
+    /// for; the thumbnail is the index.
+    @objc func toggleQuickLook(_ sender: Any?) {
+        _ = quickLook.toggle(paths: quickLookPaths(), controller: self)
+    }
+
+    /// The selected file, or the whole group when nothing is selected: arrowing through a group in the panel is
+    /// the same comparison the list makes, at full size.
+    private func quickLookPaths() -> [String] {
+        guard let presentation else { return [] }
+        let row = fileTable.selectedRow
+        return presentation.rows.indices.contains(row)
+            ? [presentation.rows[row].path] : presentation.rows.map(\.path)
+    }
+
     @objc func revealSelectedFile(_ sender: Any?) {
         guard let presentation else { return }
         let row = fileTable.clickedRow >= 0 ? fileTable.clickedRow : fileTable.selectedRow
@@ -1021,6 +1040,12 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             return true
         }
     }
+
+    /// What Quick Look would show for the current selection, without opening a panel.
+    ///
+    /// Asserted instead of the panel itself: `QLPreviewPanel` is a shared system window, and a mode that opened
+    /// it would leave one on screen for the next mode and assert against a window it does not own.
+    var quickLookPathsForSelftest: [String] { quickLookPaths() }
 
     // MARK: - Selftest hooks
 
@@ -1339,5 +1364,30 @@ extension ReviewWindowController: NSWindowDelegate {
             }
         }
         return false
+    }
+}
+
+/// **Quick Look asks the responder chain for permission and then for a data source.** Without these three the
+/// panel opens empty, which looks exactly like a broken preview rather than like missing wiring.
+extension ReviewWindowController {
+    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
+
+    /// **`MainActor.assumeIsolated`, and it is not decoration.** These come from `NSResponder`, which this SDK
+    /// does not annotate, so they arrive `nonisolated` while `QLPreviewPanel.dataSource` is main-actor isolated.
+    /// Locally that is a warning; on the SDK CI compiles against it is the kind of thing that turns into a hard
+    /// error, which is the fifth time this project has met that gap. Quick Look only ever calls these on the main
+    /// thread, which is what the assumption states.
+    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = quickLook
+            panel.delegate = quickLook
+        }
+    }
+
+    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = nil
+            panel.delegate = nil
+        }
     }
 }

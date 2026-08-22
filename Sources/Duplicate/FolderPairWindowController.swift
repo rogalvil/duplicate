@@ -1,5 +1,6 @@
 import AppKit
 import DuplicateCore
+@preconcurrency import Quartz
 
 /// Shows what a folder scan found.
 ///
@@ -30,6 +31,7 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     private let table = NSTableView()
     private let headerLabel = NSTextField(labelWithString: "")
     private let detailView = NSTextView()
+    private let quickLook = QuickLookCoordinator()
     private let footerLabel = NSTextField(labelWithString: "")
 
     init(scan: FolderScan, stateDirectory: StateDirectory = StateDirectory.current()) {
@@ -376,6 +378,39 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         Reveal.folder(at: pair.folderB)
     }
 
+    /// Opens Quick Look on both folders, or closes it.
+    ///
+    /// A folder previews as its Finder icon and item count rather than as a picture, which is less than a photo
+    /// gives -- and still the fastest way to see that one of the two is not there any more, which in this
+    /// user's real folder scans is the common case.
+    @objc func toggleQuickLook(_ sender: Any?) {
+        _ = quickLook.toggle(paths: quickLookPaths(), controller: self)
+    }
+
+    private func quickLookPaths() -> [String] {
+        guard let pair = selectedPairForQuickLook else { return [] }
+        return [pair.folderA, pair.folderB]
+    }
+
+    /// Opens both folders in Finder.
+    @objc func revealSelectedFile(_ sender: Any?) {
+        guard let pair = selectedPairForQuickLook else { return }
+        for path in [pair.folderA, pair.folderB] {
+            Reveal.folder(at: path)
+        }
+    }
+
+    /// The pair under the selection, or nil.
+    private var selectedPairForQuickLook: FolderPair? {
+        pairs.indices.contains(selectedRow) ? pairs[selectedRow] : nil
+    }
+
+    /// What Quick Look would show for the current selection, without opening a panel.
+    ///
+    /// Asserted instead of the panel itself: `QLPreviewPanel` is a shared system window, and a mode that opened
+    /// it would leave one on screen for the next mode and assert against a window it does not own.
+    var quickLookPathsForSelftest: [String] { quickLookPaths() }
+
     // MARK: - Selftest hooks
 
     var pairRowCount: Int { table.numberOfRows }
@@ -498,5 +533,30 @@ extension FolderPairWindowController: NSTableViewDataSource, NSTableViewDelegate
             field.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell
+    }
+}
+
+/// **Quick Look asks the responder chain for permission and then for a data source.** Without these three the
+/// panel opens empty, which looks exactly like a broken preview rather than like missing wiring.
+extension FolderPairWindowController {
+    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
+
+    /// **`MainActor.assumeIsolated`, and it is not decoration.** These come from `NSResponder`, which this SDK
+    /// does not annotate, so they arrive `nonisolated` while `QLPreviewPanel.dataSource` is main-actor isolated.
+    /// Locally that is a warning; on the SDK CI compiles against it is the kind of thing that turns into a hard
+    /// error, which is the fifth time this project has met that gap. Quick Look only ever calls these on the main
+    /// thread, which is what the assumption states.
+    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = quickLook
+            panel.delegate = quickLook
+        }
+    }
+
+    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = nil
+            panel.delegate = nil
+        }
     }
 }

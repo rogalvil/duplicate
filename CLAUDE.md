@@ -755,6 +755,20 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   toca. Tres de seis corridas guardaban dos entradas —una por tamaño— con código correcto. La propiedad
   estable, y la que la clave por digest existe para dar, es que el **segundo archivo del grupo no falle**
   la caché.
+- **Quick Look no se abre solo: pide permiso al responder chain y luego una fuente de datos.** Sin
+  `acceptsPreviewPanelControl` más `begin/endPreviewPanelControl`, el panel abre **vacío**, que se ve igual que
+  una vista previa rota y no como cableado faltante. Y los tres son `nonisolated` porque vienen de `NSResponder`,
+  mientras `QLPreviewPanel.dataSource` sí está aislado al main actor: van con `MainActor.assumeIsolated` o el SDK
+  de CI lo vuelve error duro. **Sexta divergencia entre SDKs.**
+- **`QLPreviewPanelDataSource` no está anotado**, así que declarar la conformancia en un tipo `@MainActor` es
+  error de compilación por cruzar código aislado. La conformancia va en una extensión `nonisolated` con
+  `assumeIsolated` adentro.
+- **⌘Y y no la barra espaciadora.** El espacio ya es el toggle de conservar en la revisión exacta, donde una
+  lista de archivos tiene el foco; robarlo sería cambiar un gesto por otro. ⌘Y es el otro atajo de Vista rápida
+  de Finder.
+- **Un modo de selftest no abre el panel de Quick Look.** `QLPreviewPanel` es una ventana **compartida del
+  sistema**: abrirla la dejaría en pantalla para el siguiente modo, que además afirmaría sobre una ventana que no
+  es suya. Se afirma la lista de rutas que el panel recibiría.
 - **Un atajo de menú es global.** Return o espacio como `keyEquivalent` dispararían mientras el usuario
   escribe en el campo de búsqueda de la biblioteca. Esas dos teclas viven en `ReviewTableView.keyDown`,
   donde solo significan algo porque una lista de archivos tiene el foco. Lo demás sí va al menú, que es

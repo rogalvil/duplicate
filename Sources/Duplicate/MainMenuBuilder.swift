@@ -145,6 +145,15 @@ enum MainMenuBuilder {
     /// display switch, not in the Group menu, which is about deciding.
     private static func viewMenu() -> NSMenu {
         let menu = NSMenu(title: Strings.string("menu.view"))
+        // **Command-Y and not the space bar.** Space is already the keep toggle in the exact review, where a
+        // list of files has focus, and stealing it would trade one gesture for another. Command-Y is Finder's
+        // other Quick Look shortcut, so it is not a new thing to learn.
+        menu.addItem(
+            withTitle: Strings.string("menu.view.quickLook"),
+            action: #selector(ReviewWindowController.toggleQuickLook(_:)),
+            keyEquivalent: "y"
+        )
+        menu.addItem(.separator())
         let item = menu.addItem(
             withTitle: Strings.string("menu.view.metadata"),
             action: #selector(AppDelegate.toggleFileMetadata(_:)),

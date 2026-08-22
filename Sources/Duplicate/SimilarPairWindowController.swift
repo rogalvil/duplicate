@@ -1,5 +1,6 @@
 import AppKit
 import DuplicateCore
+@preconcurrency import Quartz
 
 /// Shows the pairs of one perceptual scan, side by side.
 ///
@@ -42,6 +43,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     private let table = NSTableView()
     private let thumbnailer = QuickLookThumbnailer()
     private let leftPane = SimilarSidePane()
+    private let quickLook = QuickLookCoordinator()
     private let rightPane = SimilarSidePane()
     private let headerLabel = NSTextField(labelWithString: "")
     private let footerLabel = NSTextField(labelWithString: "")
@@ -650,6 +652,40 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         Reveal.item(at: pair.fileA)
     }
 
+    /// Opens Quick Look on **both** sides of the pair, or closes it.
+    ///
+    /// Both, in the window's own order, because the panel's arrow keys then become the comparison: this is the
+    /// full-size version of what the two panes are showing side by side, and a panel holding one of the two
+    /// would answer half the question.
+    @objc func toggleQuickLook(_ sender: Any?) {
+        _ = quickLook.toggle(paths: quickLookPaths(), controller: self)
+    }
+
+    private func quickLookPaths() -> [String] {
+        guard let pair = selectedPair else { return [] }
+        return [pair.fileA, pair.fileB]
+    }
+
+    /// Shows both files in Finder.
+    ///
+    /// **Both, and that is the honest answer to an ambiguous request.** A pair has two files and the menu item
+    /// says "in Finder"; picking one silently would be picking for the user. Finder selects several items at
+    /// once, so this is one action, not a choice they did not ask to make.
+    @objc func revealSelectedFile(_ sender: Any?) {
+        guard let pair = selectedPair else { return }
+        let urls = [pair.fileA, pair.fileB]
+            .filter { FileManager.default.fileExists(atPath: $0) }
+            .map { URL(filePath: $0) }
+        guard !urls.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+
+    /// What Quick Look would show for the current selection, without opening a panel.
+    ///
+    /// Asserted instead of the panel itself: `QLPreviewPanel` is a shared system window, and a mode that opened
+    /// it would leave one on screen for the next mode and assert against a window it does not own.
+    var quickLookPathsForSelftest: [String] { quickLookPaths() }
+
     // MARK: - Selftest hooks
 
     var pairRowCount: Int { table.numberOfRows }
@@ -1015,5 +1051,30 @@ func similarHeaderText(pair: SimilarPair, durationA: Double?, durationB: Double?
         return String(
             format: Strings.string("similar.header.video.fewFrames"),
             pair.similarity * 100, frames, total)
+    }
+}
+
+/// **Quick Look asks the responder chain for permission and then for a data source.** Without these three the
+/// panel opens empty, which looks exactly like a broken preview rather than like missing wiring.
+extension SimilarPairWindowController {
+    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
+
+    /// **`MainActor.assumeIsolated`, and it is not decoration.** These come from `NSResponder`, which this SDK
+    /// does not annotate, so they arrive `nonisolated` while `QLPreviewPanel.dataSource` is main-actor isolated.
+    /// Locally that is a warning; on the SDK CI compiles against it is the kind of thing that turns into a hard
+    /// error, which is the fifth time this project has met that gap. Quick Look only ever calls these on the main
+    /// thread, which is what the assumption states.
+    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = quickLook
+            panel.delegate = quickLook
+        }
+    }
+
+    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = nil
+            panel.delegate = nil
+        }
     }
 }
