@@ -213,6 +213,11 @@ public struct ApplyRunner: Sendable {
                 )
                 consecutive = 0
                 if pending.count >= 32 { try flush() }
+            } catch DisposalError.cancelled {
+                // Not a failure: nothing happened to this file, and listing it under failures would ask the
+                // reader to go look at a file that is exactly where they left it.
+                cancelled = true
+                break
             } catch let error as DisposalError {
                 failures.append(ApplyFailure(path: item.path, reason: error))
                 consecutive += 1

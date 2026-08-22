@@ -129,6 +129,12 @@ public struct SimilarApplyRunner: Sendable {
             // And if it cannot be read, the file is not moved. The verification just read this file, so a failure
             // here is close to impossible -- but a journal entry with an invented digest would let an undo
             // "verify" a restored file against nothing, which is worse than refusing a deletion.
+            // Checked before the read, not inferred from its failure: a cancelled hash coming back as
+            // `.unreadable` is the bug this project just fixed one layer up.
+            if Task.isCancelled {
+                cancelled = true
+                break
+            }
             guard let digest = try? hasher.fullDigest(atPath: item.path) else {
                 refused.append((item.path, .unreadable(path: item.path)))
                 onProgress?(

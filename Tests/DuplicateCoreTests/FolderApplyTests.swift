@@ -450,4 +450,50 @@ struct FolderApplyCancellationTests {
         // The whole point: no refusal at all, and above all not an unreadable one.
         #expect(report.refused.isEmpty, "a cancelled apply reported refusals: \(report.refused)")
     }
+
+    /// **A manifest cut short by a cancellation must never reach the containment check.**
+    ///
+    /// Measured, and narrower than it first looks. Cancelling on the *doomed* folder's last file is harmless:
+    /// the keeper's build starts with its own per-file checkpoint and throws immediately. The reachable case is
+    /// the **keeper's** last file -- there is no checkpoint between that and the comparison, so a `try?` there
+    /// leaves the keeper short, the doomed folder appears to hold a file the keeper lacks, and the run reports
+    /// `wouldLoseFiles` naming a file that is sitting in both folders. Which is the accusation flavour again:
+    /// the user pressed Stop and got told their two folders differ.
+    @Test("A manifest cut short by a cancellation never reaches the containment check")
+    func cancellationOnTheLastFileDoesNotMoveTheFolder() async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        for folder in ["keep", "gone"] {
+            for index in 0..<5 {
+                _ = try scratch.write("\(folder)/f\(index).txt", "contents \(index)")
+            }
+        }
+
+        var review = FolderReviewState(
+            scan: folderScan(
+                [folderPair(scratch.tree + "/keep", scratch.tree + "/gone")], root: scratch.tree))
+        review.keep(scratch.tree + "/keep")
+        let plan = FolderApplyPlan.from(review)
+        let disposer = RecordingDisposer()
+
+        // Five files each, doomed hashed first, so the tenth hash is the keeper's last one.
+        let report = try await Task {
+            try await FolderApplyRunner(
+                state: scratch.state, hasher: CancellingHasher(after: 10),
+                cacheURL: URL(filePath: scratch.root + "/hashes.v1")
+            ).run(plan, sessionID: noon.identifier, instant: noon, disposer: disposer)
+        }.value
+
+        #expect(report.wasCancelled)
+        #expect(
+            disposer.disposed.isEmpty,
+            "a folder was moved on a manifest cut short by a cancellation")
+        #expect(report.moved.isEmpty)
+        #expect(
+            report.refused.isEmpty,
+            "a cancellation was reported as the two folders differing: \(report.refused)")
+        #expect(
+            FileManager.default.fileExists(atPath: scratch.tree + "/gone/f4.txt"),
+            "the folder left the disk")
+    }
 }

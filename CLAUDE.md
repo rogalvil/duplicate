@@ -5,7 +5,9 @@ coeficiente de Dice, media por hash perceptual. Swift nativo, AppKit programáti
 externas. Puerto de `rav duplicate` (`/Users/roger/me/code/cli`).
 
 El detalle de arquitectura y las alternativas descartadas están en
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). **Lo que la app hace hoy, capacidad por capacidad, está en
+[`docs/CAPACIDADES.md`](docs/CAPACIDADES.md), y se actualiza en el mismo PR que cambia la funcionalidad** —
+incluida su sección de solapamientos, que es donde se anota el código que calcula algo que nadie muestra.
 
 ## Comandos
 
@@ -635,6 +637,20 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Confirmar es lo que convierte un preview en decisión.** Dejar el keep set correcto no alcanza: si el
   heurístico ya eligió bien, no hay nada que alternar y el grupo sigue `.undecided`. Eso es el
   tri-estado funcionando, y un arnés que solo alterna casillas obtiene un plan vacío — ya pasó.
+- **Un archivo grande tenía la cancelación de rehén.** `ContentHasher.fullDigest` no revisaba nada, así que el
+  "detenido en menos de 300 ms" del plan valía solo para bibliotecas de archivos chicos —justo las que no importa
+  detener—. Ahora revisa `Task.isCancelled` **entre chunks**, así que el límite es una lectura de 1 MiB. Funciona en
+  código síncrono, y fuera de una tarea es `false`, o sea que un test o el selftest leen cada byte como antes.
+- **Agregar un punto de cancelación a una función envuelta en ocho `try?` es el cambio, no la línea.** Cada `try?`
+  convierte la cancelación en el error local de su sitio. Auditados: en `VerifyingDisposer` salía `.missing`, o sea
+  "tu archivo ya no está" por presionar Detener; en el runner perceptual salía `.unreadable`; y en
+  `FolderManifest.build` el `try?` dejaba una entrada afuera. Los tres se arreglaron; los otros cinco fallan hacia
+  el lado seguro y quedan documentados en el sitio.
+- **La única posición donde un manifiesto corto se escapa es el último archivo de un build.** El checkpoint por
+  archivo atrapa todas las demás. Medido: cancelar en el último archivo de la carpeta *conservada* —lo único entre
+  ese hash y la comparación— reportaba `wouldLoseFiles(count: 1, examples: ["f2.txt"])` sobre un archivo que está
+  en las dos carpetas. Cancelar en el último de la carpeta condenada es inocuo, porque el segundo build lanza en su
+  primer checkpoint. Mi comentario decía "una carpeta movida que no debía" y estaba exagerado.
 - **Una cancelación tragada por un `try?` acusa a los datos del usuario.** Cancelar durante la verificación de una
   carpeta hacía que `FolderManifest.build` lanzara `CancellationError`, el `try?` la volviera `nil`, y el runner
   reportara `.unreadable` sobre una carpeta perfectamente sana —con `wasCancelled: false`, o sea que ni la ventana
