@@ -16,7 +16,7 @@ public enum SimilarRefusal: Sendable, Equatable {
             self = .noLongerAlike(similarity: similarity, threshold: threshold)
         case .unreadable(let path): self = .unreadable(path: path)
         case .missing(let path): self = .missing(path: path)
-        case .stillAlike: return nil
+        case .stillAlike, .cancelled: return nil
         }
     }
 }
@@ -109,6 +109,12 @@ public struct SimilarApplyRunner: Sendable {
                     stage: .verifying(filesChecked: 0)))
             let verdict = await verifier.verify(
                 item, imageThreshold: plan.imageThreshold, videoThreshold: plan.videoThreshold)
+            // A cancelled verification is not a refusal: nothing was decided about this pair, so it must not
+            // appear in a report the user reads as "these I checked and left alone".
+            if verdict == .cancelled {
+                cancelled = true
+                break
+            }
             if let refusal = SimilarRefusal(verdict) {
                 refused.append((item.path, refusal))
                 onProgress?(

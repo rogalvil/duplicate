@@ -25,6 +25,14 @@ public struct SimilarVerifier: Sendable {
         case noLongerAlike(similarity: Double, threshold: Double)
         /// The file to move is not there any more, so there is nothing to do.
         case missing(path: String)
+        /// The verification was cancelled part-way.
+        ///
+        /// **A separate case because the alternative accuses the user's data of something.** A cancelled video
+        /// decode used to come back as `unreadable`, so stopping an apply reported "could not read this file"
+        /// about a file that is perfectly fine -- and `unreadable` is the one refusal that suggests the user go
+        /// look for damage. `Task.checkCancellation` inside ``VideoHasher`` is what makes a 300 ms decode
+        /// abortable at all, so the error it throws has to travel as itself.
+        case cancelled
 
         public var allowsMove: Bool {
             if case .stillAlike = self { return true }
@@ -57,6 +65,9 @@ public struct SimilarVerifier: Sendable {
 
         switch item.mediaKind {
         case .image:
+            // Checked before the two decodes rather than relying on them to notice: `ImageHasher` is
+            // synchronous and has no cancellation point, so this is the only place an image pair can stop.
+            if Task.isCancelled { return .cancelled }
             guard let a = try? imageHasher.hash(fileURL: URL(filePath: item.path)) else {
                 return .unreadable(path: item.path)
             }
@@ -71,12 +82,20 @@ public struct SimilarVerifier: Sendable {
                     similarity: similarity,
                     threshold: 1.0 - Double(imageThreshold) / Double(PerceptualHash.bitCount))
         case .video:
-            guard let a = try? await videoHasher.hashes(fileURL: URL(filePath: item.path)),
-                !a.hashes.isEmpty
-            else { return .unreadable(path: item.path) }
-            guard let b = try? await videoHasher.hashes(fileURL: URL(filePath: item.counterpart)),
-                !b.hashes.isEmpty
-            else { return .unreadable(path: item.counterpart) }
+            let a: VideoHasher.Result
+            let b: VideoHasher.Result
+            do {
+                a = try await videoHasher.hashes(fileURL: URL(filePath: item.path))
+                b = try await videoHasher.hashes(fileURL: URL(filePath: item.counterpart))
+            } catch is CancellationError {
+                return .cancelled
+            } catch {
+                // Which of the two failed is not knowable from here, and naming the wrong one would send the
+                // reader to the wrong file. The one being moved is the one they can act on.
+                return .unreadable(path: item.path)
+            }
+            guard !a.hashes.isEmpty else { return .unreadable(path: item.path) }
+            guard !b.hashes.isEmpty else { return .unreadable(path: item.counterpart) }
             // Oriented by bytes, the same way the scan computed it -- the comparison is asymmetric, so asking it
             // in the other direction could answer differently and refuse a move the scan's own number allows.
             let similarity = VideoSimilarity.orientedSimilarity(

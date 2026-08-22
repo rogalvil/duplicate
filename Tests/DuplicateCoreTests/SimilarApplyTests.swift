@@ -578,4 +578,33 @@ struct SimilarApplyCancellationTests {
         #expect(report.wasCancelled == false)
         #expect(report.moved.count == 1)
     }
+
+    /// **A cancelled verification must not be reported as an unreadable file.** It used to be: a cancelled
+    /// decode came back as `.unreadable`, so stopping an apply told the user "could not read this file" about a
+    /// file that is fine -- and of all the refusals, that is the one that sends them looking for damage.
+    @Test("Cancelling during verification is cancellation, not an unreadable file")
+    func cancellationIsNotUnreadable() async throws {
+        let scratch = try ApplyScratch()
+        defer { scratch.remove() }
+        let a = try scratch.image("a.png", .uniform(128))
+        let b = try scratch.image("b.png", .uniform(128))
+        let item = SimilarApplyItem(
+            path: a, counterpart: b, pairKey: "\(a)||\(b)", mediaKind: .image,
+            recordedSimilarity: 1.0)
+
+        // Both files are right there, so nothing about this pair is unreadable or missing. The only thing that
+        // changed is that the task was cancelled -- which is what a user pressing Stop looks like from here.
+        let task = Task {
+            while !Task.isCancelled { await Task.yield() }
+            return await SimilarVerifier().verify(item, imageThreshold: 5, videoThreshold: 0.7)
+        }
+        task.cancel()
+        let verdict = await task.value
+        #expect(verdict == .cancelled)
+        #expect(verdict.allowsMove == false)
+
+        // And it is not a refusal: nothing was decided about this pair, so it must not appear in a report the
+        // user reads as "these I checked and left alone".
+        #expect(SimilarRefusal(verdict) == nil)
+    }
 }
