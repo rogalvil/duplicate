@@ -29,6 +29,14 @@ enum SelfTest {
 
         // The catalogue, in the order `--mode all` runs them: cheap and structural first, so a broken
         // bundle fails in a second instead of after a Trash round-trip.
+        // **The preference goes to a throwaway suite for the whole run.** A mode that writes the real domain
+        // leaves the app configured differently afterwards -- and a deliberate failure while proving a mode's
+        // teeth leaves it configured *wrongly*, which is how a later mode came to fail with "hidden by default"
+        // and point at innocent code.
+        let preferenceSuite = "com.rogalvil.duplicate.selftest.\(getpid())"
+        MetadataPreference.defaults = UserDefaults(suiteName: preferenceSuite) ?? .standard
+        defer { UserDefaults.standard.removePersistentDomain(forName: preferenceSuite) }
+
         let allModes = [
             "bundle", "state-dir", "l10n", "menu", "json-roundtrip", "scans", "digest",
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
@@ -2405,6 +2413,15 @@ enum SelfTest {
         )
         try expect(controller.preview.isShowingPlaceholder == false, "the placeholder is still up")
 
+        // **The same preference governs both window kinds**, or "Show File Metadata" is a lie rather than a
+        // setting: it would hide the line in a perceptual pair and leave it in the exact review.
+        // Teeth: drop the observer from `PreviewPane.build` and this fails.
+        try expect(!controller.preview.isDetailHidden, "the detail line is hidden by default")
+        MetadataPreference.isEnabled = false
+        try expect(controller.preview.isDetailHidden, "the exact review ignores the preference")
+        MetadataPreference.isEnabled = true
+        try expect(!controller.preview.isDetailHidden, "the detail line did not come back")
+
         // 3. Toggling makes it a real decision.
         controller.toggleForSelftest()
         try expect(
@@ -3928,6 +3945,39 @@ enum SelfTest {
             long == unprobed,
             "a pair with all eight frames says something different from one not probed yet")
         try expect(!short.contains("similar.header"), "the header shows a key literal: \(short)")
+
+        // **The metadata line: the numbers a perceptual pair is actually decided on.** Two photos that look
+        // alike differ in exactly these ways -- 4032x3024 against 1024x768, 8 MB against 400 KB -- and the app
+        // was reading all of it to make its suggestion while showing the reader none of it.
+        //
+        // Teeth: drop the `metadataLabel.stringValue` assignment from `show(path:thumbnailer:)` and the first
+        // two fail; drop the `leftPane.show(facts:)` from the probe's completion and the resolution never
+        // arrives; make `applyMetadataPreference` ignore the preference and the last two fail.
+        try expect(MetadataPreference.isEnabled, "the metadata line is off by default")
+        let meta = viewer.leftMetadataForSelftest
+        try expect(!meta.hidden, "the metadata line is hidden with the preference on")
+        try expect(!meta.text.isEmpty, "the metadata line is empty")
+        try expect(
+            meta.text.contains("B") || meta.text.contains("KB") || meta.text.contains("MB"),
+            "the metadata line does not say a size: \(meta.text)")
+
+        await viewer.awaitFactsForSelftest()
+        let probed = viewer.leftMetadataForSelftest.text
+        try expect(
+            probed.contains("\u{00D7}"),
+            "the resolution never reached the pane after the probe: \(probed)")
+
+        // Off, and back on with the same text: turning the line back on cannot re-probe a video.
+        MetadataPreference.isEnabled = false
+        try expect(
+            viewer.leftMetadataForSelftest.hidden, "the metadata line stayed after switching it off"
+        )
+        MetadataPreference.isEnabled = true
+        try expect(!viewer.leftMetadataForSelftest.hidden, "the metadata line did not come back")
+        try expect(
+            viewer.leftMetadataForSelftest.text == probed,
+            "the line lost what it said across a toggle")
+        print("  the panes name the size, the date and the resolution: \(probed)")
 
         // And a decided pair whose key cannot be split back apart is reported, not written quietly. Measured, no
         // path in this corpus contains `||`, which is the argument for warning rather than trusting.

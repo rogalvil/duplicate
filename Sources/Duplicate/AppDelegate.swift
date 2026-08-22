@@ -1,7 +1,8 @@
 import AppKit
 import DuplicateCore
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var libraryWindow: LibraryWindowController?
     private let stateDirectory: StateDirectory
 
@@ -155,6 +156,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `@MainActor` explicitly, not inherited: an `@objc` menu action is called through the responder
     /// chain, and Swift will not assume the caller is on the main actor without being told.
     @MainActor
+    /// Turns the metadata line in the preview panes on and off.
+    ///
+    /// **On the app delegate rather than a window controller.** It is a statement about how the user reads this
+    /// app, not about one scan, so it must work with the library focused, with a review focused, or with a
+    /// perceptual pair focused. `NSApplication` forwards an unhandled action to its delegate, which is exactly
+    /// the reach a global preference needs.
+    @objc func toggleFileMetadata(_ sender: Any?) {
+        MetadataPreference.toggle()
+    }
+
+    /// Puts the checkmark on the metadata item.
+    ///
+    /// Not an `override`: this comes from `NSMenuItemValidation`, and writing `override` is a compile error that
+    /// reads as if the method were wrong -- a trap this project has already hit once.
+    @MainActor
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(toggleFileMetadata(_:)) {
+            item.state = MetadataPreference.isEnabled ? .on : .off
+        }
+        return true
+    }
+
     @objc func showAboutPanel(_ sender: Any?) {
         AboutPanel.show()
     }

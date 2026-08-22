@@ -560,6 +560,11 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   y un error honesto, nunca un movimiento equivocado.
 - **Se guarda por clave de grupo, no por índice.** Un índice solo significa algo para un documento exacto;
   `size:digest` sobrevive un re-escaneo del mismo contenido, que es justo para lo que sirve guardarlo.
+- **Y un selftest que escribe el dominio real de `UserDefaults` hace lo mismo, peor.** Pasó al probar los dientes
+  del toggle de metadata: el modo falló a propósito con la preferencia en `false`, quedó persistida, y desde ahí
+  **otro** modo empezó a fallar con "the detail line is hidden by default" —una falla apuntando a código inocente—.
+  `MetadataPreference.defaults` se inyecta y el arnés apunta a una suite desechable que borra al terminar. Dos
+  corridas seguidas de `--mode all` dan 39 OK y no dejan la clave en el dominio real.
 - **Un selftest que usa un default de `~/Library/Caches` contamina la siguiente corrida.** Pasó: la foto
   de una corrida anterior hizo que un chequeo de dientes fallara en la aserción equivocada. El directorio
   se inyecta y el modo apunta a `/tmp`.

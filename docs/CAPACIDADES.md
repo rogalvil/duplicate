@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR "reportar o irse". 39 modos de selftest, 762 tests, 94.68% de cobertura sobre
-`DuplicateCore`.
+Última actualización: PR de metadata bajo la vista previa. 39 modos de selftest, 762 tests, 94.68% de
+cobertura sobre `DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -111,6 +111,7 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Avisos al decidir, no al aplicar | Un par de carpetas dice "mover la segunda perdería 5 archivos" *mientras eliges* |
 | Presencia de archivos | El panel distingue "el archivo ya no está" de "la miniatura no llega". Se refresca también al deshacer |
 | Miniaturas | Clave por digest en grupos exactos (ocho archivos idénticos = **una** miniatura) y **por ruta** en pares perceptuales, donde son fotos distintas |
+| Metadata del archivo bajo la vista previa | Tamaño y fecha de inmediato, y al responder la sonda la resolución, el codec y la duración: `3.9 KB · 22 ago 2026, 12:26 p.m. · 320×240 · h264 · 0:06`. En los dos visores, con **Ver > Mostrar metadata del archivo** (⌘⌥I) para ocultarla |
 | Cuántos cuadros sostienen un veredicto de video | El encabezado dice "juzgado con 4 de 8 cuadros" cuando el clip es tan corto que algunas marcas caen pasado su final |
 | Claves impartibles avisadas | Un par decidido cuya clave `a||b` no se puede volver a partir se reporta al cerrar. Medido: ninguna ruta del corpus lo tiene, y por eso se avisa en vez de confiar |
 
@@ -198,9 +199,8 @@ test y comentario y por lo tanto **parece una capacidad**.
 - **Dos ramas del disposer no son alcanzables** con un `FileManager` real y están marcadas como tal.
 - **El montaje de red es el único caso que la cuarentena rescata de verdad**, y es el camino menos probado
   del código destructivo. No se puede fabricar aquí sin servidor.
-- **Pedido y pendiente**: ver la metadata del archivo (tamaño y fecha) debajo de la vista previa, con manera
-  de ocultarla si no cabe. Hoy el panel muestra la ruta completa y la miniatura, y las facts de media
-  (resolución, codec, bitrate, duración) solo se usan para el consejo, no se muestran tal cual.
+- **La metadata en el visor de carpetas sigue pendiente.** Ahí el detalle es la lista de archivos del par, y
+  el tamaño de una carpeta exige recorrerla — otra decisión, no la misma línea.
 
 ## Deuda conocida
 
