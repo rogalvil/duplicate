@@ -3442,6 +3442,32 @@ enum SelfTest {
             report.failures[0].reason == .contentChanged(path: dupB),
             "the failure reads \(report.failures[0].reason)"
         )
+
+        // **The one list a user has to read after a destructive action, and it was printing Swift.** A failure
+        // came out as `contentChanged(path: "/Users/…")`: the name of an enum case instead of what happened and
+        // whether the file is still there.
+        //
+        // Teeth: interpolate the reason again and the first check fails on the parenthesis.
+        let sentence = disposalFailureText(report.failures[0].reason)
+        try expect(
+            !sentence.contains("("), "the failure still reads as an enum case: \(sentence)")
+        try expect(
+            !sentence.hasPrefix("apply.failure"), "the failure reads as its own key: \(sentence)")
+        try expect(
+            sentence.contains((dupB as NSString).lastPathComponent),
+            "the failure does not name the file: \(sentence)")
+        for error in [
+            DisposalError.missing(path: dupB),
+            .trashUnavailable(path: dupB, reason: "no such volume"),
+            .quarantineFailed(path: dupB, reason: "read-only"),
+            .noFreeName(path: dupB),
+            .cancelled(path: dupB),
+        ] {
+            let text = disposalFailureText(error)
+            try expect(!text.isEmpty, "a failure case renders nothing")
+            try expect(
+                !text.hasPrefix("apply.failure"), "a failure case reads as its own key: \(text)")
+        }
         try expect(
             FileManager.default.fileExists(atPath: dupA) == false, "the duplicate did not move")
         try expect(
