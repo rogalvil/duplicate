@@ -312,4 +312,26 @@ struct SimilarReviewStateFactsTests {
         state.updateSuggestion(at: 9, factsA: nil, factsB: nil)
         #expect(state.suggestions.count == 1)
     }
+
+    /// **The hole in the CLI's key format, and why it is reported rather than trusted.** A decision is stored
+    /// against `"a||b"` with no escaping, so a path containing `||` produces a key that splits into a different
+    /// pair -- and a wrong pair means the wrong file deleted. Measured, no path in this user's corpus has it.
+    @Test("A decided pair whose key cannot be split apart is reported")
+    func reportsAmbiguousKeys() {
+        var review = SimilarReviewState(
+            scan: scan([
+                pair("/a/one.jpg", "/a/two.jpg"),
+                pair("/a/we||rd.jpg", "/a/four.jpg"),
+            ]))
+        // Undecided, so no key is written and there is nothing to warn about yet.
+        #expect(review.ambiguousKeys.isEmpty)
+
+        review.go(to: 0)
+        _ = review.confirm(.keepA)
+        #expect(review.ambiguousKeys.isEmpty, "a clean pair was called ambiguous")
+
+        review.go(to: 1)
+        _ = review.confirm(.keepA)
+        #expect(review.ambiguousKeys == ["/a/we||rd.jpg||/a/four.jpg"])
+    }
 }

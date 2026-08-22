@@ -265,6 +265,24 @@ public struct SimilarReviewState: Sendable {
     /// the first and kept by neither -- fine. But A~B keeping A and A~C keeping C says remove A and keep A, and
     /// acting on both would delete a file the user chose to keep in another pair. Reported so the UI can refuse
     /// or ask, never resolved silently.
+    /// Decided pairs whose key cannot be parsed back apart.
+    ///
+    /// **The hole in the CLI's key format, surfaced where it can still be acted on.** A decision is stored
+    /// against `"a||b"` with no escaping, so a path containing `||` produces a key that splits into the wrong
+    /// pair -- and the file it names is one that gets deleted. Measured, no path in this user's corpus contains
+    /// it, which is exactly why this has to be reported rather than trusted: the day one does, the failure is a
+    /// deletion attributed to the wrong pair, and nothing else in either tool would notice.
+    ///
+    /// Only decided pairs are listed. An undecided pair writes no key, so its ambiguity costs nothing.
+    public var ambiguousKeys: [String] {
+        scan.pairs.enumerated().compactMap { index, pair in
+            guard decisions[index]?.decision != nil, SimilarPairKey.isAmbiguous(pair) else {
+                return nil
+            }
+            return SimilarPairKey.key(for: pair)
+        }
+    }
+
     public var contradictions: [String] {
         var kept: Set<String> = []
         for (index, pair) in scan.pairs.enumerated() {

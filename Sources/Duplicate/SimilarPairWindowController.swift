@@ -321,17 +321,9 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         // `1 - hamming/64`, so bits are the honest unit. A video similarity is the *fraction of sampled frames
         // that matched* -- there is no 64-bit distance behind it, and printing "0 of 64 bits differ" under a
         // video pair, which is what shipped a moment ago, states a measurement that was never taken.
-        switch pair.mediaKind {
-        case .image:
-            headerLabel.stringValue = String(
-                format: Strings.string("similar.header.image"),
-                pair.similarity * 100,
-                Int(((1.0 - pair.similarity) * 64.0).rounded())
-            )
-        case .video:
-            headerLabel.stringValue = String(
-                format: Strings.string("similar.header.video"), pair.similarity * 100)
-        }
+        headerLabel.stringValue = similarHeaderText(
+            pair: pair, durationA: facts[pair.fileA]?.duration,
+            durationB: facts[pair.fileB]?.duration)
         leftPane.show(path: pair.fileA, thumbnailer: thumbnailer)
         rightPane.show(path: pair.fileB, thumbnailer: thumbnailer)
         // **Everything below is keyed on the scan index, not the row.** A filter makes those different numbers,
@@ -409,11 +401,12 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// Warns when one file is kept by one pair and discarded by another.
+    /// Warns when one file is kept by one pair and discarded by another, or when a saved key cannot be parsed.
     ///
     /// **Shown on close rather than on every click**: the conflict only matters when the set of decisions is done
     /// with, and a sheet after each choice would make deciding impossible.
     func presentContradictionsIfNeeded() {
+        presentAmbiguousKeysIfNeeded()
         let conflicting = review.contradictions
         guard let first = conflicting.first else { return }
         let alert = NSAlert()
@@ -422,6 +415,25 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         alert.informativeText = String(
             format: Strings.string("similar.contradiction.body"),
             conflicting.count, (first as NSString).lastPathComponent)
+        alert.addButton(withTitle: Strings.string("button.close"))
+        alert.runModal()
+    }
+
+    /// Warns when a decision was saved under a key that cannot be split back apart.
+    ///
+    /// **The hole in the CLI's key format, said out loud on the one occasion it can still be fixed.** A decision
+    /// is stored against `"a||b"` with no escaping, so a path containing `||` yields a key that parses into a
+    /// different pair -- and what a wrong pair costs is the wrong file deleted. Measured, no path in this user's
+    /// corpus has it; that is the argument for warning rather than for trusting, because the day one appears
+    /// nothing else in either tool would notice.
+    private func presentAmbiguousKeysIfNeeded() {
+        let ambiguous = review.ambiguousKeys
+        guard let first = ambiguous.first else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = Strings.string("similar.ambiguousKey.title")
+        alert.informativeText = String(
+            format: Strings.string("similar.ambiguousKey.body"), ambiguous.count, first)
         alert.addButton(withTitle: Strings.string("button.close"))
         alert.runModal()
     }
@@ -650,6 +662,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
     var contradictionsForSelftest: [String] { review.contradictions }
 
+    var ambiguousKeysForSelftest: [String] { review.ambiguousKeys }
+
     var applySheetForSelftest: SimilarApplySheetController? { applySheet }
 
     func simulateForSelftest() { simulateAndApply(nil) }
@@ -854,4 +868,39 @@ final class SimilarSidePane: NSView {
     var pathText: String { pathLabel.stringValue }
     var stateText: String { stateLabel.stringValue }
     var hasImage: Bool { imageView.image != nil }
+}
+
+/// What the number over a pair means, in the user's language.
+///
+/// **The second number is not the same quantity for the two kinds.** An image similarity is `1 - hamming/64`, so
+/// bits are the honest unit. A video similarity is the *fraction of sampled frames that matched* -- there is no
+/// 64-bit distance behind it, and printing "0 of 64 bits differ" under a video pair, which is what shipped once,
+/// states a measurement that was never taken.
+///
+/// **And for a video it says how many frames the number rests on, when it is fewer than eight.** The sampler puts
+/// frames at `interval·(i+1)` with a floor of 0.1 s, so a short clip has timestamps past its own end: at half a
+/// second, four of the eight. The CLI hashes the ones that exist and compares on those, so "83% of sampled frames
+/// match" over three frames is a far weaker claim than over eight -- and the reader cannot see the difference
+/// unless it is said. Durations are optional because the probe is asynchronous: before it answers, the plain
+/// sentence is the honest one.
+func similarHeaderText(pair: SimilarPair, durationA: Double?, durationB: Double?) -> String {
+    switch pair.mediaKind {
+    case .image:
+        return String(
+            format: Strings.string("similar.header.image"),
+            pair.similarity * 100,
+            Int(((1.0 - pair.similarity) * 64.0).rounded())
+        )
+    case .video:
+        let total = VideoFrameSampler.defaultFrameCount
+        let frames = min(
+            VideoFrameSampler.usableCount(duration: durationA ?? 0),
+            VideoFrameSampler.usableCount(duration: durationB ?? 0))
+        guard frames > 0, frames < total else {
+            return String(format: Strings.string("similar.header.video"), pair.similarity * 100)
+        }
+        return String(
+            format: Strings.string("similar.header.video.fewFrames"),
+            pair.similarity * 100, frames, total)
+    }
 }
