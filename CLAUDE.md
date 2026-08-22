@@ -237,6 +237,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   restaurado* (pudo haberlo devuelto el propio Finder, que la app no puede ver); cualquier otra cosa
   se bloquea. El runner **vuelve a chequear** justo antes de mover, porque el plan pudo mostrarse al
   usuario minutos antes.
+- **La cuarentena no puede rescatar un volumen de solo lectura, y ese era la mitad de su razón de ser.** Mover un
+  archivo *fuera* de un volumen read-only tiene que borrar el origen, así que ahí falla igual que la Papelera. La
+  respuesta honesta es una rehúsa con el archivo todavía en su lugar, no una copia que deja dos. Probado con una
+  imagen APFS de solo lectura hecha con `hdiutil` y sin root, que es lo que también cubre las ramas de error del
+  disposer: **79.86% → 93.06%** en `Disposer.swift`.
+- **Y el miedo a exFAT del plan está muerto: medido, `trashItem` funciona en FAT32** y crea `.Trashes/501` igual que
+  en APFS. Así que el único caso que la cuarentena de verdad rescata es un montaje de red — que no se puede fabricar
+  en esta máquina sin servidor.
+- **Dos ramas del disposer no son alcanzables con un `FileManager` real y se quedan documentadas, no cubiertas**:
+  que `trashItem` no lance y tampoco reporte destino, y el default de `Application Support` cuando
+  `urls(for:in:)` devuelve vacío. Las dos se conservan porque su alternativa es prometer algo que el journal no
+  puede cumplir.
 - **`FileManager.trashItem` funciona en todos los volúmenes de esta máquina.** Medido: boot y `$HOME`
   aterrizan en `~/.Trash`, WD12TB y SED4TB en `<volumen>/.Trashes/501`. Era el riesgo más grande del
   plan (que el externo fuera exFAT y no pudiera), y está descartado. La cuarentena es fallback de

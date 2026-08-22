@@ -407,3 +407,192 @@ struct VerifyingDisposerTests {
         #expect(!inner.seen.contains(keeper), "the keeper was disposed")
     }
 }
+
+/// A real read-only APFS volume, made with `hdiutil` and no root.
+///
+/// **The disposer's error branches are only reachable on a volume that refuses writes**, and mocking the
+/// filesystem away would test the wrong thing for the one component whose whole job is to move a real file.
+/// So this makes one: a 10 MB disk image, written to while it is writable, then detached and re-attached
+/// read-only.
+///
+/// It skips loudly rather than passing quietly when `hdiutil` is unavailable or the attach fails -- a sandbox
+/// or a runner without disk-image support would otherwise report success for a test that never ran.
+private struct ReadOnlyVolume {
+    let mountPoint: String
+    let filePath: String
+    private let imagePath: String
+
+    /// - Returns: nil when no volume could be made, which the caller reports as a skip.
+    init?(fileNamed name: String = "victim.txt", contents: String = "on a read-only volume") {
+        let scratch = NSTemporaryDirectory() + "duplicate-ro-\(UUID().uuidString)"
+        guard
+            (try? FileManager.default.createDirectory(
+                atPath: scratch, withIntermediateDirectories: true)) != nil
+        else { return nil }
+        imagePath = scratch + "/ro.dmg"
+        let volumeName = "RavRO\(abs(name.hashValue % 10_000))"
+        mountPoint = "/Volumes/" + volumeName
+        filePath = mountPoint + "/" + name
+
+        guard
+            ReadOnlyVolume.run(
+                "hdiutil",
+                [
+                    "create", "-size", "10m", "-fs", "APFS", "-volname", volumeName,
+                    "-type", "UDIF", "-ov", imagePath,
+                ]),
+            ReadOnlyVolume.run("hdiutil", ["attach", imagePath, "-nobrowse"]),
+            (try? Data(contents.utf8).write(to: URL(filePath: filePath))) != nil,
+            ReadOnlyVolume.run("hdiutil", ["detach", mountPoint]),
+            ReadOnlyVolume.run("hdiutil", ["attach", imagePath, "-nobrowse", "-readonly"]),
+            FileManager.default.fileExists(atPath: filePath)
+        else {
+            ReadOnlyVolume.run("hdiutil", ["detach", mountPoint, "-force"])
+            try? FileManager.default.removeItem(atPath: scratch)
+            return nil
+        }
+    }
+
+    func remove() {
+        ReadOnlyVolume.run("hdiutil", ["detach", mountPoint, "-force"])
+        try? FileManager.default.removeItem(
+            atPath: (imagePath as NSString).deletingLastPathComponent)
+    }
+
+    @discardableResult
+    private static func run(_ tool: String, _ arguments: [String]) -> Bool {
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/env")
+        process.arguments = [tool] + arguments
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+}
+
+@Suite("Disposer on a volume that refuses writes")
+struct ReadOnlyVolumeDisposerTests {
+
+    @Test("The Trash is unavailable on a read-only volume, and it says so")
+    func trashRefusesOnAReadOnlyVolume() throws {
+        guard let volume = ReadOnlyVolume() else {
+            print("SKIPPED: could not make a read-only disk image with hdiutil")
+            return
+        }
+        defer { volume.remove() }
+
+        // The size is readable -- the file is there -- so this is the `trashItem` branch and not `.missing`.
+        // That distinction is the point: "I could not reach the Trash" and "that file is gone" call for
+        // different things from the reader.
+        #expect(throws: DisposalError.self) {
+            _ = try TrashDisposer().dispose(path: volume.filePath)
+        }
+        do {
+            _ = try TrashDisposer().dispose(path: volume.filePath)
+        } catch let error as DisposalError {
+            guard case .trashUnavailable(let path, let reason) = error else {
+                Issue.record("wrong error: \(error)")
+                return
+            }
+            #expect(path == volume.filePath)
+            #expect(!reason.isEmpty, "the refusal carries no reason to show")
+        }
+        #expect(FileManager.default.fileExists(atPath: volume.filePath), "the file left the volume")
+    }
+
+    @Test("Quarantine cannot rescue a file it cannot remove, and refuses rather than half-copying")
+    func quarantineRefusesWhenTheSourceCannotBeRemoved() throws {
+        guard let volume = ReadOnlyVolume(fileNamed: "trapped.txt") else {
+            print("SKIPPED: could not make a read-only disk image with hdiutil")
+            return
+        }
+        defer { volume.remove() }
+
+        // **This is the finding, and it is the opposite of what the fallback's name suggests.** A read-only
+        // volume is one of the two cases the quarantine exists for -- but a move off such a volume has to
+        // delete the source, so the quarantine cannot help either. The honest outcome is a refusal with the
+        // file still there, not a copy that leaves two.
+        let quarantine = NSTemporaryDirectory() + "duplicate-q-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: quarantine) }
+        do {
+            let outcome = try FallbackDisposer(quarantineRoot: quarantine, sessionID: "S1")
+                .dispose(path: volume.filePath)
+            Issue.record("the fallback claimed to move a file off a read-only volume: \(outcome)")
+        } catch let error as DisposalError {
+            guard case .quarantineFailed(let path, let reason) = error else {
+                Issue.record("wrong error: \(error)")
+                return
+            }
+            #expect(path == volume.filePath)
+            #expect(!reason.isEmpty)
+        }
+        #expect(FileManager.default.fileExists(atPath: volume.filePath), "the file left the volume")
+    }
+
+    @Test("A quarantine root that cannot be created is reported, not ignored")
+    func quarantineRootOnAReadOnlyVolume() throws {
+        guard let volume = ReadOnlyVolume(fileNamed: "doomed.txt") else {
+            print("SKIPPED: could not make a read-only disk image with hdiutil")
+            return
+        }
+        defer { volume.remove() }
+
+        let scratch = NSTemporaryDirectory() + "duplicate-src-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: scratch) }
+        let source = scratch + "/movable.txt"
+        try Data("movable".utf8).write(to: URL(filePath: source))
+
+        // The file is fine and the destination is impossible. Reported as a quarantine failure naming the
+        // source, because that is the path the reader has to go look at.
+        do {
+            _ = try QuarantineDisposer(root: volume.mountPoint + "/quarantine", sessionID: "S1")
+                .dispose(path: source)
+            Issue.record("a quarantine on a read-only volume reported success")
+        } catch let error as DisposalError {
+            guard case .quarantineFailed(let path, _) = error else {
+                Issue.record("wrong error: \(error)")
+                return
+            }
+            #expect(path == source)
+        }
+        #expect(FileManager.default.fileExists(atPath: source), "the source moved anyway")
+    }
+
+    @Test("A thousand taken names is reported as such, not as a mystery failure")
+    func exhaustedSuffixes() throws {
+        // The resolver tries `-2` through `-1000`. Filling all of them is the only way to reach the branch, and
+        // it is worth reaching: `noFreeName` says "something other than a collision is going on" -- a directory
+        // full of a thousand near-identical names -- while a bare move failure would blame the filesystem.
+        let scratch = NSTemporaryDirectory() + "duplicate-full-\(UUID().uuidString)"
+        let session = scratch + "/S1"
+        try FileManager.default.createDirectory(atPath: session, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: scratch) }
+
+        let empty = Data()
+        try empty.write(to: URL(filePath: session + "/victim.txt"))
+        for counter in 2...1000 {
+            try empty.write(to: URL(filePath: session + "/victim-\(counter).txt"))
+        }
+
+        let source = scratch + "/victim.txt"
+        try Data("real".utf8).write(to: URL(filePath: source))
+        do {
+            _ = try QuarantineDisposer(root: scratch, sessionID: "S1").dispose(path: source)
+            Issue.record("it found a free name in a full directory")
+        } catch let error as DisposalError {
+            guard case .noFreeName(let path) = error else {
+                Issue.record("wrong error: \(error)")
+                return
+            }
+            #expect(path == session + "/victim.txt")
+        }
+        #expect(FileManager.default.fileExists(atPath: source), "the source moved anyway")
+    }
+}

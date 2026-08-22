@@ -87,6 +87,9 @@ public struct TrashDisposer: ItemDisposing {
                 reason: (error as NSError).localizedDescription
             )
         }
+        // Not reachable in any test: `trashItem` either throws or reports a destination, and there is no
+        // filesystem this app can make where it does neither. Kept because reporting success without a
+        // destination would be a promise the journal cannot keep, and the check costs one branch.
         guard let landed = (resulting as URL?)?.path(percentEncoded: false) else {
             // The move succeeded but macOS did not say where it went. Without a destination the move
             // cannot be undone, and reporting success would be a promise the journal cannot keep.
@@ -196,6 +199,12 @@ public struct QuarantineDisposer: ItemDisposing {
 /// user whose duplicates live on a NAS should not be told the app cannot help them -- but they also should
 /// not be told the files went to the Trash when they did not, which is why the mechanism is recorded per
 /// file rather than per session.
+///
+/// **Measured, and narrower than it looks: only the network case is actually rescuable.** On a read-only
+/// volume the quarantine cannot help either, because a move off one has to delete the source; a test makes a
+/// real read-only APFS image and the fallback refuses with the file still on it, which is the honest answer.
+/// And the exFAT worry the plan carried is dead: measured on a FAT32 image, `trashItem` succeeds and creates
+/// `.Trashes/501` there just as it does on APFS.
 public struct FallbackDisposer: ItemDisposing {
     private let primary: any ItemDisposing
     private let secondary: any ItemDisposing
