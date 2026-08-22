@@ -125,6 +125,7 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Compuerta de dry-run | Aplicar exige una simulación **vigente**: editar una decisión invalida la aprobación, comparada por huella FNV-1a (no el `Hasher` de Swift, que está sembrado por proceso) |
 | Journal JSON Lines | Lotes de 32 durante el apply, no al final. Un `undone_at` se **agrega**, no reescribe |
 | Deshacer sesión | Ocupante byte-idéntico cuenta como ya restaurado; cualquier otro **bloquea**, nunca sobrescribe. Se re-chequea justo antes de mover |
+| Limpiar journals ya deshechos | Solo sesiones con **todos** sus archivos de vuelta, probado por sus propios `undone_at`, con los conteos antes de confirmar. Una sesión ilegible o vacía **no** es podable: borrarla no gana nada y destruye la única evidencia |
 | Colapso de pares anidados | `Pole ↔ Pole` y `Pole/videos ↔ Pole/videos` son pares separados en el corpus real; mover el padre se lleva al hijo |
 | Cancelar devuelve reporte | No lanza: lanzar se saltaba el flush y dejaba hasta 31 archivos movidos **sin entrada en el journal** |
 | Detener sigue vivo durante el apply | Cerrar la hoja mientras corre **detiene y no cierra** |
@@ -218,11 +219,13 @@ primero lo que puede perder algo o mentirle, al final lo que solo es incómodo o
    revela **los dos** archivos —Finder selecciona varios, y elegir uno en silencio sería elegir por el usuario.
 3. ~~Los fallos de un apply interpolan el enum.~~ **Hecho**: una función compartida por las tres hojas dice qué
    pasó y si el archivo sigue ahí, en los dos idiomas.
-4. **El journal crece para siempre en el directorio compartido.** Un archivo por sesión, sin compactación ni
-   poda. Podarlo destruye la capacidad de deshacer, así que la regla tiene que ser explícita —por ejemplo, podar
-   solo sesiones cuyas entradas ya están todas restauradas, o más viejas que N días *y* con la Papelera vacía— y
-   hoy no hay ninguna.
-5. **El montaje de red es el único caso que la cuarentena rescata de verdad, y es el camino menos probado del
+4. ~~El journal crece para siempre.~~ **Hecho**: **Sesiones > Limpiar sesiones ya deshechas…** borra solo los
+   journals de sesiones cuyos archivos **todos** volvieron —lo dice el propio journal con sus `undone_at`— con los
+   conteos en pantalla antes de confirmar. Las dos reglas más amplias quedaron rechazadas por escrito.
+5. **No existe la ventana de historial de sesiones** que el plan pedía. Hoy Sesiones tiene deshacer la última y
+   limpiar; no hay manera de *ver* qué sesiones hay, cuántos archivos movió cada una, ni de deshacer una que no
+   sea la última. Es el hueco que la poda dejó a la vista.
+6. **El montaje de red es el único caso que la cuarentena rescata de verdad, y es el camino menos probado del
    código destructivo.** No se puede fabricar aquí sin servidor; hace falta un NAS o un share de prueba.
 
 ### P2 — deuda de corrección que hoy no muerde

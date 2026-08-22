@@ -184,6 +184,14 @@
 "menu.group.simulate" = "Simulate Applying...";
 "menu.sessions" = "Sessions";
 "menu.sessions.undoLast" = "Undo the Last Session...";
+"menu.sessions.prune" = "Clean Up Undone Sessions…";
+"sessions.prune.title" = "Delete the record of sessions already put back?";
+"sessions.prune.body" = "%1$d sessions have had every file put back, so their journals have nothing left to offer. Deleting them frees %2$@. %3$d sessions still hold files that were never restored and are left alone.";
+"sessions.prune.confirm" = "Delete";
+"sessions.prune.nothing.title" = "Nothing to clean up";
+"sessions.prune.nothing.body" = "No session has had all of its files put back. %1$d sessions still hold files that could be restored, and their journals are the only record of where those files went.";
+"sessions.prune.done.title" = "Cleaned up";
+"sessions.prune.done.body" = "%1$d session journals were deleted.";
 "undo.noSessions.title" = "Nothing has been applied yet";
 "undo.noSessions.body" = "There is no session to undo. The app records every file it moves, and there are no records.";
 /* %@ is the session id. */

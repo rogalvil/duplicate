@@ -248,6 +248,15 @@ enum MainMenuBuilder {
             keyEquivalent: ""
         )
         undoLast.target = NSApp.delegate
+        menu.addItem(.separator())
+        // No key equivalent, same reason as the undo above: nothing that touches the record of what was moved
+        // should be one keystroke away.
+        let prune = menu.addItem(
+            withTitle: Strings.string("menu.sessions.prune"),
+            action: #selector(AppDelegate.pruneUndoneSessions(_:)),
+            keyEquivalent: ""
+        )
+        prune.target = NSApp.delegate
         return menu
     }
 

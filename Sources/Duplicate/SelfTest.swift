@@ -1583,7 +1583,53 @@ enum SelfTest {
             "the user's new file was overwritten"
         )
 
+        // **The journal is the only record of where a file went, so pruning has to be provable.** After a real
+        // undo every entry carries an `undone_at`, which is the journal saying its own work is done -- and that
+        // is the only condition offered. "Older than N days" and "its Trash items are gone" were both rejected:
+        // the second reads an unmounted external volume as an emptied Trash, and this user's corpus lives on one.
+        //
+        // Teeth: make `isFullyRestored` return true for a session with no entries and the second check fails,
+        // because the untouched session becomes prunable too.
+        // **Through `UndoCoordinator`, because the `undone_at` records are written there and not in the
+        // runner.** The section above drove `UndoPlanner` and `UndoRunner` directly, which is Core; the marker
+        // that says a session is done is appended by the app after the run, so a pruning assertion that skipped
+        // the coordinator would be asserting against a journal no real undo ever produced. Everything is already
+        // back on disk from that run, so this trashes and restores a second file of its own.
+        let extraPath = scratch + "/tree/second.txt"
+        try Data("a second file for the coordinator".utf8).write(to: URL(filePath: extraPath))
+        let extraDigest = try ContentHasher().fullDigest(atPath: extraPath)
+        let secondSession = "20260812-190000-000000"
+        let extraOutcome = try TrashDisposer().dispose(path: extraPath)
+        _ = try MoveJournal.append(
+            [
+                JournalEntry(
+                    originalPath: extraOutcome.originalPath,
+                    resultingPath: extraOutcome.resultingPath,
+                    mechanism: extraOutcome.mechanism, byteCount: extraOutcome.byteCount,
+                    digest: extraDigest.digest, groupKey: "0:second", scanID: "selftest",
+                    timestamp: "2026-08-12T19:00:00.000000Z")
+            ], sessionID: secondSession, in: state)
+        let coordinated = UndoCoordinator.undo(sessionID: secondSession, in: state)
+        try expect(
+            coordinated.restoredCount == 1, "the coordinator restored \(coordinated.restoredCount)")
+        try expect(manager.fileExists(atPath: extraPath), "the second file did not come back")
+
+        let prunePlan = JournalPruner.plan(in: state)
+        try expect(
+            prunePlan.prunable.map(\.sessionID) == [secondSession],
+            "prunable: \(prunePlan.prunable.map(\.sessionID)), wanted just the restored one")
+        try expect(prunePlan.reclaimableBytes > 0, "the prunable journal reports no size")
+        let pruned = JournalPruner.prune(prunePlan, in: state)
+        try expect(pruned.count == 1, "\(pruned.count) journals pruned, wanted 1")
+        try expect(
+            MoveJournal.sessions(in: state).contains(secondSession) == false,
+            "the journal of a fully restored session survived the prune")
+        try expect(
+            MoveJournal.sessions(in: state).contains(sessionID),
+            "the journal of a fully restored session survived the prune")
+
         print("  4 files trashed, journalled, restored byte-identical")
+        print("  and the journal of the restored session was prunable, and nothing else was")
         print("  a second undo over occupied work was refused, and the work survived")
     }
 
