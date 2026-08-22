@@ -354,3 +354,6 @@
 "apply.button.stop" = "Detener";
 "apply.stopped" = "Detenido tras %1$d archivos - %2$@";
 "apply.stopped.note" = "El resto no se tocó. Lo que sí se movió está en la Papelera y esta ventana lo puede devolver.";
+"apply.progress.verifying" = "Verificando %1$d de %2$d: %3$@";
+"apply.progress.verifying.files" = "Verificando %1$d de %2$d: %3$@ — %4$d archivos revisados";
+"apply.progress.moving" = "Moviendo %1$d de %2$d: %3$@";

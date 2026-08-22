@@ -403,10 +403,16 @@ struct SimilarApplyRunnerTests {
         let counter = ProgressBox()
         let report = try await SimilarApplyRunner(state: scratch.state).run(
             plan, sessionID: instant.identifier, instant: instant, disposer: RecordingDisposer(),
-            onProgress: { done, total in counter.record(done: done, total: total) }
+            onProgress: { report in
+                counter.record(done: report.itemsDone, total: report.itemCount)
+                counter.note(report.stage)
+            }
         )
         #expect(counter.lastDone == 2)
         #expect(counter.lastTotal == 2)
+        // Re-scoring a pair decodes both files -- 300 ms for two videos -- so the stage is reported before it
+        // starts rather than after it finishes.
+        #expect(counter.sawVerifying)
         // The checkerboard pair does not look alike at all, so it is refused rather than moved.
         #expect(report.moved.count + report.refused.count == 2)
     }
@@ -443,11 +449,25 @@ private final class ProgressBox: @unchecked Sendable {
     private var done = 0
     private var total = 0
 
+    private var verifying = false
+
     func record(done: Int, total: Int) {
         lock.lock()
         self.done = done
         self.total = total
         lock.unlock()
+    }
+
+    func note(_ stage: ApplyStage) {
+        lock.lock()
+        if case .verifying = stage { verifying = true }
+        lock.unlock()
+    }
+
+    var sawVerifying: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return verifying
     }
 
     var lastDone: Int {

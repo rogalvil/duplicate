@@ -29,6 +29,10 @@ final class FolderApplySheetController: NSWindowController {
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     private let listView = NSTextView()
     private let progressBar = NSProgressIndicator()
+    /// What the apply is doing, because a bar that sits still on a folder pair for minutes with nothing said
+    /// is indistinguishable from a hang -- and the user's remedy for a hang is force-quitting an app that is
+    /// halfway through moving their files.
+    private let progressLabel = NSTextField(labelWithString: "")
     private let applyButton = NSButton()
     private let cancelButton = NSButton()
     private let undoButton = NSButton()
@@ -83,6 +87,13 @@ final class FolderApplySheetController: NSWindowController {
         progressBar.minValue = 0
         progressBar.maxValue = Double(max(1, plan.items.count))
         progressBar.isHidden = true
+        progressLabel.isHidden = true
+        progressLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        progressLabel.textColor = .secondaryLabelColor
+        // A label whose intrinsic width is its text would put a floor under the sheet, and this text carries a
+        // path. Same cure as everywhere else in this app: let it compress.
+        progressLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        progressLabel.lineBreakMode = .byTruncatingMiddle
         progressBar.translatesAutoresizingMaskIntoConstraints = false
 
         applyButton.title = Strings.string("apply.button.apply")
@@ -110,7 +121,7 @@ final class FolderApplySheetController: NSWindowController {
         buttons.alignment = .centerY
 
         let content = NSStackView(views: [
-            headlineLabel, detailLabel, scroll, progressBar, buttons,
+            headlineLabel, detailLabel, scroll, progressBar, progressLabel, buttons,
         ])
         content.orientation = .vertical
         content.alignment = .leading
@@ -181,6 +192,7 @@ final class FolderApplySheetController: NSWindowController {
         // next item and the journal still describes everything already moved.
         cancelButton.title = Strings.string("apply.button.stop")
         progressBar.isHidden = false
+        progressLabel.isHidden = false
         progressBar.doubleValue = 0
         headlineLabel.stringValue = Strings.string("apply.running")
 
@@ -204,7 +216,7 @@ final class FolderApplySheetController: NSWindowController {
                             quarantineRoot: QuarantineDisposer.defaultRoot(),
                             sessionID: sessionID
                         ),
-                        onProgress: { done, _ in progress.set(done) }
+                        onProgress: { report in progress.set(report) }
                     )
                 )
             } catch {
@@ -221,6 +233,9 @@ final class FolderApplySheetController: NSWindowController {
         let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
             MainActor.assumeIsolated {
                 self.progressBar.doubleValue = Double(progress.value)
+                if let report = progress.progress, let text = applyProgressText(report) {
+                    self.progressLabel.stringValue = text
+                }
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -232,6 +247,7 @@ final class FolderApplySheetController: NSWindowController {
         progressTimer?.invalidate()
         progressTimer = nil
         progressBar.isHidden = true
+        progressLabel.isHidden = true
         cancelButton.isEnabled = true
         cancelButton.title = Strings.string("button.close")
 

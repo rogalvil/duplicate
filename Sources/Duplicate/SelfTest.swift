@@ -3367,6 +3367,44 @@ enum SelfTest {
         )
         defer { sheet.window?.close() }
         try expect(sheet.canApply, "the sheet will not let a real plan be applied")
+
+        // The progress line: hidden until an apply starts, and it has three distinct things to say. Asserted on
+        // the renderer rather than on the label after a two-file apply, because the label is written by a timer
+        // at 10 Hz and two files move in less than one tick -- an assertion on the text would be a race.
+        //
+        // Teeth: return the moving string for the verifying cases and the distinctness check fails; return a
+        // string for `.done` and the last one does.
+        try expect(
+            sheet.progressLineForSelftest.hidden, "the progress line shows before an apply starts")
+        let sample = "/Volumes/WD12TB/Fotos/2019/verano/copias"
+        let sentences = [
+            applyProgressText(
+                ApplyProgress(
+                    itemsDone: 0, itemCount: 8, path: sample, stage: .verifying(filesChecked: 0))),
+            applyProgressText(
+                ApplyProgress(
+                    itemsDone: 0, itemCount: 8, path: sample, stage: .verifying(filesChecked: 4210))
+            ),
+            applyProgressText(
+                ApplyProgress(itemsDone: 0, itemCount: 8, path: sample, stage: .moving)),
+        ].compactMap { $0 }
+        try expect(sentences.count == 3, "a stage rendered nothing to say")
+        try expect(Set(sentences).count == 3, "two stages read the same: \(sentences)")
+        for sentence in sentences {
+            try expect(
+                !sentence.hasPrefix("apply.progress"),
+                "a progress line came out as its own key: \(sentence)")
+            try expect(
+                sentence.contains("8"), "a progress line does not say how many items there are")
+        }
+        try expect(
+            sentences[1].contains("4210") || sentences[1].contains("4,210")
+                || sentences[1].contains("4 210"),
+            "the file count is missing from \(sentences[1])")
+        try expect(
+            applyProgressText(
+                ApplyProgress(itemsDone: 1, itemCount: 8, path: sample, stage: .done)) == nil,
+            "a finished item overwrites the line with a stale sentence")
         for path in [dupA, dupB] {
             try expect(sheet.listText.contains(path), "the sheet does not list \(path)")
         }
@@ -4314,9 +4352,45 @@ enum SelfTest {
 
         let instant = ScanIdentifier.Instant(
             year: 2026, month: 8, day: 18, hour: 12, minute: 0, second: 0, microsecond: 0)
+        // Every progress report, in order, so the stages can be asserted rather than assumed.
+        let stages = StageLog()
         let report = try await FolderApplyRunner(
             state: state, cacheURL: URL(filePath: root + "/hashes.v1")
-        ).run(plan, sessionID: instant.identifier, instant: instant, disposer: TrashDisposer())
+        ).run(
+            plan, sessionID: instant.identifier, instant: instant, disposer: TrashDisposer(),
+            onProgress: { stages.record($0) })
+
+        // **A bar that only counts items lies about a folder apply.** Verifying one pair digests every file in
+        // both folders before anything moves -- 10,506 files in one of this user's trees -- so an apply that
+        // says nothing but "moving 1 of 2" is frozen and mislabelled at once, and the remedy a user reaches for
+        // when an app looks hung is force-quitting it halfway through moving their files.
+        //
+        // Teeth: drop the `emit(0)` and the `onFile:` argument from `FolderApplyRunner` and the first two
+        // assertions fail -- the only stage ever reported is `.moving`.
+        let recorded = stages.all
+        try expect(!recorded.isEmpty, "the apply reported no progress at all")
+        let verifying = recorded.filter {
+            if case .verifying = $0.stage { return true } else { return false }
+        }
+        try expect(!verifying.isEmpty, "nothing was ever reported as verifying")
+        try expect(
+            verifying.contains {
+                if case .verifying(let files) = $0.stage { return files > 0 } else { return false }
+            },
+            "verification never reported a file count, so a folder pair shows a frozen bar")
+        // And it must say verifying *before* it says moving, or the label is just as wrong as before.
+        let firstMoving = recorded.firstIndex {
+            if case .moving = $0.stage { return true } else { return false }
+        }
+        let firstVerifying = recorded.firstIndex {
+            if case .verifying = $0.stage { return true } else { return false }
+        }
+        try expect(
+            firstVerifying != nil && (firstMoving == nil || firstVerifying! < firstMoving!),
+            "the apply claimed to be moving before it verified anything")
+        try expect(
+            recorded.allSatisfy { $0.itemCount == plan.items.count },
+            "a report carried the wrong item count")
 
         // One moved, one refused for the file it would have taken with it.
         // Teeth: drop the containment check and both folders move.
@@ -4347,9 +4421,16 @@ enum SelfTest {
         try expect(
             manager.fileExists(atPath: gonePath + "/sub/two.txt"), "the tree came back empty")
 
+        let peak =
+            verifying.compactMap { report -> Int? in
+                if case .verifying(let files) = report.stage { return files } else { return nil }
+            }.max() ?? 0
         print(
             "  moved 1 folder to the Trash and put the whole tree back; "
                 + "refused 1 that held a file the keeper lacked")
+        print(
+            "  \(recorded.count) progress reports, \(verifying.count) of them verifying, "
+                + "peak file count \(peak), and verifying came before moving")
     }
 
     // MARK: - video
@@ -5311,6 +5392,21 @@ private struct RefusingDisposer: ItemDisposing {
     func dispose(path: String) throws -> DisposalOutcome {
         throw DisposalError.trashUnavailable(path: path, reason: "forced by the selftest")
     }
+}
+
+/// Every progress report an apply made, in order.
+///
+/// A class with a `Mutex` because the runner's callback is `@Sendable`, the same reason `AppliedCounter` is a
+/// class. The whole log is kept rather than a summary: the assertion is about the *order* of the stages, and a
+/// counter cannot say which came first.
+private final class StageLog: Sendable {
+    private let stored = Mutex<[ApplyProgress]>([])
+
+    func record(_ progress: ApplyProgress) {
+        stored.withLock { $0.append(progress) }
+    }
+
+    var all: [ApplyProgress] { stored.withLock { $0 } }
 }
 
 private struct SelfTestFailure: Error, CustomStringConvertible {

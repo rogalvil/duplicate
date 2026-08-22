@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// One file the plan would remove, with what the scan vouched for.
 public struct ApplyItem: Hashable, Sendable {
@@ -150,12 +151,21 @@ public struct ApplyRunner: Sendable {
         sessionID: String,
         instant: ScanIdentifier.Instant,
         disposer: any ItemDisposing,
-        onProgress: (@Sendable (Int, Int) -> Void)? = nil
+        onProgress: (@Sendable (ApplyProgress) -> Void)? = nil
     ) throws -> DisposalReport {
+        // The path being worked on, read by the callback the disposer calls when the digest matched. A box
+        // because that callback is `@Sendable` and the loop variable is not visible to it.
+        let current = CurrentItem()
         let verifying = VerifyingDisposer(
             wrapping: disposer,
             hasher: hasher,
-            expected: plan.expectedDigests
+            expected: plan.expectedDigests,
+            onVerified: {
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: current.index, itemCount: plan.items.count, path: current.path,
+                        stage: .moving))
+            }
         )
 
         var moved: [DisposalOutcome] = []
@@ -179,6 +189,13 @@ public struct ApplyRunner: Sendable {
                 cancelled = true
                 break
             }
+            // Verifying is a full re-hash of the file, which for a 4 GB item is the slow half. Said before it
+            // starts; the disposer says when it flips to moving.
+            current.set(index: index, path: item.path)
+            onProgress?(
+                ApplyProgress(
+                    itemsDone: index, itemCount: plan.items.count, path: item.path,
+                    stage: .verifying(filesChecked: 0)))
             do {
                 let outcome = try verifying.dispose(path: item.path)
                 moved.append(outcome)
@@ -204,7 +221,10 @@ public struct ApplyRunner: Sendable {
                     break
                 }
             }
-            onProgress?(index + 1, plan.items.count)
+            onProgress?(
+                ApplyProgress(
+                    itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                    stage: .done))
         }
 
         // Flushed even when the run stopped early, or the files that did move would be unrecoverable.
@@ -228,4 +248,16 @@ public struct ApplyRunner: Sendable {
     public func sessionIdentifier(at date: Date) -> String {
         ScanIdentifier.identifier(from: date)
     }
+}
+
+/// The item an apply is on, readable from the `@Sendable` callback the verifying disposer calls.
+private final class CurrentItem: Sendable {
+    private let stored = Mutex<(index: Int, path: String)>((0, ""))
+
+    func set(index: Int, path: String) {
+        stored.withLock { $0 = (index, path) }
+    }
+
+    var index: Int { stored.withLock { $0.index } }
+    var path: String { stored.withLock { $0.path } }
 }

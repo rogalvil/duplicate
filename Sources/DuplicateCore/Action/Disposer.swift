@@ -237,18 +237,24 @@ public struct VerifyingDisposer: ItemDisposing {
     private let inner: any ItemDisposing
     private let hasher: any FileHashing
     private let expected: [String: Digest32]
+    private let onVerified: (@Sendable () -> Void)?
 
     /// - Parameter expected: the digest each path must still hash to. A path absent from this map is
     ///   refused rather than allowed: disposing something nobody vouched for is exactly the mistake this
     ///   type exists to prevent.
+    /// - Parameter onVerified: called once the digest matched and before the move starts. It exists so a
+    ///   caller can report which of the two it is doing: for a big file the re-hash is the slow half, and
+    ///   the caller cannot see the boundary from outside.
     public init(
         wrapping inner: any ItemDisposing,
         hasher: any FileHashing,
-        expected: [String: Digest32]
+        expected: [String: Digest32],
+        onVerified: (@Sendable () -> Void)? = nil
     ) {
         self.inner = inner
         self.hasher = hasher
         self.expected = expected
+        self.onVerified = onVerified
     }
 
     public func dispose(path: String) throws -> DisposalOutcome {
@@ -261,6 +267,7 @@ public struct VerifyingDisposer: ItemDisposing {
         guard fresh.digest == want else {
             throw DisposalError.contentChanged(path: path)
         }
+        onVerified?()
         return try inner.dispose(path: path)
     }
 }

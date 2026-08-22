@@ -355,3 +355,6 @@
 "apply.button.stop" = "Stop";
 "apply.stopped" = "Stopped after %1$d files - %2$@";
 "apply.stopped.note" = "The rest were not touched. What did move is in the Trash and this window can put it back.";
+"apply.progress.verifying" = "Verifying %1$d of %2$d: %3$@";
+"apply.progress.verifying.files" = "Verifying %1$d of %2$d: %3$@ — %4$d files checked";
+"apply.progress.moving" = "Moving %1$d of %2$d: %3$@";

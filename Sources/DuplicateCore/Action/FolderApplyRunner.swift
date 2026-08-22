@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Why a folder apply refused to move a folder.
 public enum FolderRefusal: Sendable, Equatable {
@@ -64,7 +65,7 @@ public struct FolderApplyRunner: Sendable {
         sessionID: String,
         instant: ScanIdentifier.Instant,
         disposer: any ItemDisposing,
-        onProgress: (@Sendable (Int, Int) -> Void)? = nil
+        onProgress: (@Sendable (ApplyProgress) -> Void)? = nil
     ) async throws -> FolderDisposalReport {
         let cache = HashCache(url: cacheURL ?? HashCache.defaultURL())
         await cache.loadAndRepair()
@@ -92,31 +93,61 @@ public struct FolderApplyRunner: Sendable {
                 cancelled = true
                 break
             }
+            // Said before the work starts, not after it: the two manifests below are where the minutes go.
+            let tally = FileTally()
+            let emit: @Sendable (Int) -> Void = { soFar in
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: index, itemCount: plan.items.count, path: item.path,
+                        stage: .verifying(filesChecked: tally.base + soFar)))
+            }
+            emit(0)
             let manager = FileManager.default
             var isDirectory: ObjCBool = false
             guard manager.fileExists(atPath: item.path, isDirectory: &isDirectory),
                 isDirectory.boolValue
             else {
                 refused.append((item.path, .missing(path: item.path)))
-                onProgress?(index + 1, plan.items.count)
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        stage: .done))
                 continue
             }
             guard manager.fileExists(atPath: item.keeper, isDirectory: &isDirectory),
                 isDirectory.boolValue
             else {
                 refused.append((item.path, .keeperMissing(path: item.keeper)))
-                onProgress?(index + 1, plan.items.count)
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        stage: .done))
                 continue
             }
 
+            // Two builds, one number: to the reader this is one pair being checked, so the keeper's count
+            // continues where the doomed folder's left off instead of restarting at zero.
             guard
                 let doomed = try? await FolderManifest.build(
-                    root: item.path, walker: walker, hasher: hasher, cache: cache),
-                let keeper = try? await FolderManifest.build(
-                    root: item.keeper, walker: walker, hasher: hasher, cache: cache)
+                    root: item.path, walker: walker, hasher: hasher, cache: cache, onFile: emit)
             else {
                 refused.append((item.path, .unreadable(path: item.path)))
-                onProgress?(index + 1, plan.items.count)
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        stage: .done))
+                continue
+            }
+            tally.base = doomed.entries.count
+            guard
+                let keeper = try? await FolderManifest.build(
+                    root: item.keeper, walker: walker, hasher: hasher, cache: cache, onFile: emit)
+            else {
+                refused.append((item.path, .unreadable(path: item.path)))
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        stage: .done))
                 continue
             }
 
@@ -127,10 +158,16 @@ public struct FolderApplyRunner: Sendable {
                         item.path,
                         .wouldLoseFiles(count: missing.count, examples: Array(missing.prefix(5)))
                     ))
-                onProgress?(index + 1, plan.items.count)
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        stage: .done))
                 continue
             }
 
+            onProgress?(
+                ApplyProgress(
+                    itemsDone: index, itemCount: plan.items.count, path: item.path, stage: .moving))
             do {
                 let outcome = try disposer.dispose(path: item.path)
                 moved.append(outcome)
@@ -156,7 +193,10 @@ public struct FolderApplyRunner: Sendable {
                     break
                 }
             }
-            onProgress?(index + 1, plan.items.count)
+            onProgress?(
+                ApplyProgress(
+                    itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                    stage: .done))
         }
 
         _ = try? await cache.persist()
@@ -176,5 +216,17 @@ public struct FolderApplyRunner: Sendable {
 
     public func sessionIdentifier(at date: Date) -> String {
         ScanIdentifier.identifier(from: date)
+    }
+}
+
+/// How many files the first of a pair's two manifests digested, so the second can continue the count.
+///
+/// A class holding an `Atomic` because the callback that reads it is `@Sendable`: the same reason
+/// `AppliedCounter` in the app is a class and not a local.
+private final class FileTally: Sendable {
+    private let stored = Atomic<Int>(0)
+    var base: Int {
+        get { stored.load(ordering: .relaxed) }
+        set { stored.store(newValue, ordering: .relaxed) }
     }
 }
