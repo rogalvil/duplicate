@@ -2,19 +2,59 @@ import AppKit
 import DuplicateCore
 import Synchronization
 
-/// How many files the apply has moved so far.
+/// What the apply has done so far, and what it is doing.
 ///
-/// A class holding an `Atomic` rather than a bare `Mutex` local: `Mutex` is noncopyable, so it cannot be
+/// A class holding an `Atomic` and a `Mutex` rather than bare locals: `Mutex` is noncopyable, so it cannot be
 /// captured by the escaping closures that write and read it. The class can.
+///
+/// **Written by the apply task and read by a timer at 10 Hz**, which is the same trade the scan path makes: the
+/// folder runner reports every 64 files digested, and nobody reads more than ten updates a second.
 final class AppliedCounter: Sendable {
     private let count = Atomic<Int>(0)
+    private let latest = Mutex<ApplyProgress?>(nil)
 
     func set(_ value: Int) {
         count.store(value, ordering: .relaxed)
     }
 
+    func set(_ progress: ApplyProgress) {
+        count.store(progress.itemsDone, ordering: .relaxed)
+        latest.withLock { $0 = progress }
+    }
+
     var value: Int {
         count.load(ordering: .relaxed)
+    }
+
+    var progress: ApplyProgress? {
+        latest.withLock { $0 }
+    }
+}
+
+/// The sentence for a progress report, or `nil` when there is nothing new to say.
+///
+/// Here rather than in Core, because Core never produces prose. The path keeps its first and last two
+/// components: a folder that differs from its twin at the end is exactly the case here, so a tail truncation
+/// would hide the part that identifies it.
+func applyProgressText(_ progress: ApplyProgress) -> String? {
+    let name = PathElision.elide(progress.path)
+    switch progress.stage {
+    case .verifying(let filesChecked) where filesChecked > 0:
+        return String(
+            format: Strings.string("apply.progress.verifying.files"),
+            progress.itemsDone + 1, progress.itemCount, name, filesChecked)
+    case .verifying:
+        return String(
+            format: Strings.string("apply.progress.verifying"),
+            progress.itemsDone + 1, progress.itemCount, name)
+    case .moving:
+        return String(
+            format: Strings.string("apply.progress.moving"),
+            min(progress.itemsDone + 1, progress.itemCount), progress.itemCount, name)
+    // The bar advances on this; the label keeps what it last said rather than flashing a line for an item that
+    // is already behind us.
+    case .done:
+        return nil
     }
 }
 
@@ -50,6 +90,10 @@ final class ApplySheetController: NSWindowController {
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     private let listView = NSTextView()
     private let progressBar = NSProgressIndicator()
+    /// What the apply is doing, because a bar that sits still on a folder pair for minutes with nothing said
+    /// is indistinguishable from a hang -- and the user's remedy for a hang is force-quitting an app that is
+    /// halfway through moving their files.
+    private let progressLabel = NSTextField(labelWithString: "")
     private let applyButton = NSButton()
     private let cancelButton = NSButton()
     private let undoButton = NSButton()
@@ -106,6 +150,13 @@ final class ApplySheetController: NSWindowController {
         progressBar.minValue = 0
         progressBar.maxValue = Double(max(1, plan.fileCount))
         progressBar.isHidden = true
+        progressLabel.isHidden = true
+        progressLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        progressLabel.textColor = .secondaryLabelColor
+        // A label whose intrinsic width is its text would put a floor under the sheet, and this text carries a
+        // path. Same cure as everywhere else in this app: let it compress.
+        progressLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        progressLabel.lineBreakMode = .byTruncatingMiddle
 
         applyButton.title = Strings.string("apply.button.apply")
         applyButton.bezelStyle = .rounded
@@ -130,7 +181,7 @@ final class ApplySheetController: NSWindowController {
         buttons.spacing = 10
 
         let content = NSStackView(views: [
-            headlineLabel, detailLabel, scroll, progressBar, buttons,
+            headlineLabel, detailLabel, scroll, progressBar, progressLabel, buttons,
         ])
         content.orientation = .vertical
         content.alignment = .leading
@@ -186,6 +237,7 @@ final class ApplySheetController: NSWindowController {
         // next item and the journal still describes everything already moved.
         cancelButton.title = Strings.string("apply.button.stop")
         progressBar.isHidden = false
+        progressLabel.isHidden = false
         progressBar.doubleValue = 0
         headlineLabel.stringValue = Strings.string("apply.running")
 
@@ -209,7 +261,7 @@ final class ApplySheetController: NSWindowController {
                             quarantineRoot: QuarantineDisposer.defaultRoot(),
                             sessionID: sessionID
                         ),
-                        onProgress: { done, _ in progress.set(done) }
+                        onProgress: { report in progress.set(report) }
                     )
                 )
             } catch {
@@ -233,6 +285,9 @@ final class ApplySheetController: NSWindowController {
         let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
             MainActor.assumeIsolated {
                 self.progressBar.doubleValue = Double(progress.value)
+                if let report = progress.progress, let text = applyProgressText(report) {
+                    self.progressLabel.stringValue = text
+                }
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -244,6 +299,7 @@ final class ApplySheetController: NSWindowController {
         progressTimer?.invalidate()
         progressTimer = nil
         progressBar.isHidden = true
+        progressLabel.isHidden = true
         cancelButton.isEnabled = true
         cancelButton.title = Strings.string("button.close")
         applyButton.isHidden = true
@@ -349,6 +405,11 @@ final class ApplySheetController: NSWindowController {
     var lastReport: DisposalReport? { report }
 
     func applyForSelftest() { applyNow(nil) }
+
+    /// Whether the progress line is showing, and what it says.
+    var progressLineForSelftest: (hidden: Bool, text: String) {
+        (progressLabel.isHidden, progressLabel.stringValue)
+    }
     func undoForSelftest() { undoNow(nil) }
 
     /// Waits for a running apply to finish.

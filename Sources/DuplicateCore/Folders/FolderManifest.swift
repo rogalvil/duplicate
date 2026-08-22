@@ -78,20 +78,27 @@ public struct FolderManifest: Sendable, Hashable {
     ///
     /// The digest cache is consulted, so a folder that was just scanned costs almost nothing to verify --
     /// measured elsewhere at 18x on a warm run.
+    /// - Parameter onFile: called with a running count of files digested, every
+    ///   ``ApplyProgress/fileReportInterval`` files and once at the end. This is the only progress a folder
+    ///   verification can report: it is the part that takes minutes.
     public static func build(
         root: String,
         walker: any DirectoryEnumerating = FileManagerWalker(),
         hasher: any FileHashing = ContentHasher(),
         policy: ScanPolicy = ScanPolicy(),
-        cache: HashCache? = nil
+        cache: HashCache? = nil,
+        onFile: (@Sendable (Int) -> Void)? = nil
     ) async throws -> FolderManifest {
         let canonical = DirectoryTree.canonical(root)
         let walk = try walker.walk(root: canonical, policy: policy, exclusions: ExclusionSet())
         var entries: [String: Digest32] = [:]
         entries.reserveCapacity(walk.entries.count)
+        var seen = 0
         for entry in walk.entries {
             try Task.checkCancellation()
             let relative = PathElision.relative(DirectoryTree.canonical(entry.path), to: canonical)
+            seen += 1
+            if seen % ApplyProgress.fileReportInterval == 0 { onFile?(seen) }
             if let cache, let known = await cache.digest(for: entry) {
                 entries[relative] = known
                 continue
@@ -100,6 +107,7 @@ public struct FolderManifest: Sendable, Hashable {
             if let cache { await cache.store(result.digest, for: entry) }
             entries[relative] = result.digest
         }
+        onFile?(seen)
         return FolderManifest(root: canonical, entries: entries)
     }
 }

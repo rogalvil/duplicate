@@ -74,7 +74,7 @@ public struct SimilarApplyRunner: Sendable {
         sessionID: String,
         instant: ScanIdentifier.Instant,
         disposer: any ItemDisposing,
-        onProgress: (@Sendable (Int, Int) -> Void)? = nil
+        onProgress: (@Sendable (ApplyProgress) -> Void)? = nil
     ) async throws -> SimilarDisposalReport {
         var moved: [DisposalOutcome] = []
         var failures: [ApplyFailure] = []
@@ -101,11 +101,20 @@ public struct SimilarApplyRunner: Sendable {
                 cancelled = true
                 break
             }
+            // Re-scoring a perceptual pair decodes both files: measured, about 7 ms for two images and 300 ms
+            // for two videos. Said before it starts.
+            onProgress?(
+                ApplyProgress(
+                    itemsDone: index, itemCount: plan.items.count, path: item.path,
+                    stage: .verifying(filesChecked: 0)))
             let verdict = await verifier.verify(
                 item, imageThreshold: plan.imageThreshold, videoThreshold: plan.videoThreshold)
             if let refusal = SimilarRefusal(verdict) {
                 refused.append((item.path, refusal))
-                onProgress?(index + 1, plan.items.count)
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        stage: .done))
                 continue
             }
 
@@ -116,9 +125,15 @@ public struct SimilarApplyRunner: Sendable {
             // "verify" a restored file against nothing, which is worse than refusing a deletion.
             guard let digest = try? hasher.fullDigest(atPath: item.path) else {
                 refused.append((item.path, .unreadable(path: item.path)))
-                onProgress?(index + 1, plan.items.count)
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        stage: .done))
                 continue
             }
+            onProgress?(
+                ApplyProgress(
+                    itemsDone: index, itemCount: plan.items.count, path: item.path, stage: .moving))
             do {
                 let outcome = try disposer.dispose(path: item.path)
                 moved.append(outcome)
@@ -144,7 +159,10 @@ public struct SimilarApplyRunner: Sendable {
                     break
                 }
             }
-            onProgress?(index + 1, plan.items.count)
+            onProgress?(
+                ApplyProgress(
+                    itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                    stage: .done))
         }
 
         // Flushed even when the run stopped early or was cancelled, or the files that did move would be

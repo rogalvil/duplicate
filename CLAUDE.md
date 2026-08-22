@@ -632,6 +632,21 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Y el botón de detener se queda vivo durante el apply.** Verificar y mover cientos de ítems toma minutos, y una
   barra de progreso sin salida no es una opción. Cerrar la hoja mientras corre **detiene y no cierra**, porque el
   reporte de lo que ya se movió es justo la razón para no cerrar.
+- **Una barra que solo cuenta ítems miente sobre el apply de carpetas.** Verificar un par digiere **cada archivo
+  de las dos carpetas** antes de mover nada —10,506 archivos en uno de los árboles medidos de este usuario— así que
+  la barra se queda en "1 de 8" durante minutos mientras lo único en pantalla dice que está moviendo. Una barra
+  quieta sin texto es indistinguible de un cuelgue, y lo que un usuario hace ante un cuelgue es forzar la salida de
+  una app que va a la mitad de mover sus fotos. Por eso el progreso lleva **etapa** además de conteo, y la etapa es
+  un valor (`ApplyStage`), no una frase: "verificando" y "verifying" son el mismo estado.
+- **La etapa necesita un tercer caso, `done`, o el reporte es ambiguo.** Con solo `verifying` y `moving`, un reporte
+  `.moving` con `itemsDone: 1` significa a la vez "el ítem 1 terminó" y "el ítem 2 empezó a moverse". Lo destapó un
+  test que esperaba `[1, 2, 3, 4, 5]` y recibió `[1, 1, 2, 2, 3, 3, 4, 4, 5]`. Con `.done`: la barra avanza y la
+  etiqueta conserva lo último que dijo, en vez de parpadear una línea de un ítem que ya pasó.
+- **Los dos manifiestos de un par cuentan en un solo número.** Para quien lee, es un par siendo revisado; que el
+  contador se reinicie a cero a la mitad se ve como que algo se reinició.
+- **Afirmar sobre la etiqueta después de un apply de dos archivos es una carrera.** La escribe un `Timer` a 10 Hz y
+  dos archivos se mueven en menos de un tick. Lo que sí se afirma es determinista: que la línea arranca oculta, y
+  que el renderizador da **tres frases distintas** para las tres etapas y **nada** para `done`.
 - **Veinte fallas seguidas detienen un apply; una sola no.** Un archivo bloqueado por otro proceso no
   puede abortar los otros 3,997, pero un problema global —permiso revocado, volumen que se fue— no debe
   producir cuatro mil filas idénticas que leer.

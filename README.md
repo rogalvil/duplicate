@@ -21,6 +21,7 @@ deshacer.
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
 | Decidir pares parecidos en el visor, con el consejo, **lote por filtro** y ⌘Z | **funciona** |
 | Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
+| Progreso con etapa durante el apply: verificar y mover se distinguen | **funciona** |
 
 O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,
 simular, aplicar a la Papelera, deshacer. Imágenes y video, los dos, con documentos que el CLI lee byte a byte.

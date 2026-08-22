@@ -322,23 +322,31 @@ struct ApplyRunnerTests {
         #expect(loaded.entries.map(\.originalPath) == paths)
     }
 
-    @Test("Progress is reported once per item")
+    @Test("Progress is reported once per item, and names the stage before each")
     func reportsProgress() throws {
         let scratch = try ApplyScratch()
         defer { scratch.remove() }
         let paths = try (0..<5).map { try scratch.write("f\($0).txt", "contents \($0)") }
 
-        let seen = Mutex<[Int]>([])
+        let seen = Mutex<[ApplyProgress]>([])
         let session = "20260812-120000-000000"
         _ = try ApplyRunner(state: scratch.state).run(
             try plan(paths), sessionID: session, instant: noon,
             disposer: scratch.disposer(sessionID: session),
-            onProgress: { done, total in
-                seen.withLock { $0.append(done) }
-                #expect(total == 5)
-            }
+            onProgress: { report in seen.withLock { $0.append(report) } }
         )
-        #expect(seen.withLock { $0 } == [1, 2, 3, 4, 5])
+        let reports = seen.withLock { $0 }
+        #expect(reports.allSatisfy { $0.itemCount == 5 })
+
+        // One item done per item, still.
+        let done = reports.filter { $0.stage == .done }.map(\.itemsDone)
+        #expect(done == [1, 2, 3, 4, 5])
+
+        // And each item says it is verifying before it says it is moving. The re-hash is the slow half for a
+        // large file, and the caller cannot see the boundary from outside the disposer.
+        let firstItem = reports.filter { $0.path == paths[0] }
+        #expect(firstItem.first?.stage == .verifying(filesChecked: 0))
+        #expect(firstItem.contains { $0.stage == .moving })
     }
 
     @Test("An empty plan does nothing and writes no journal")
