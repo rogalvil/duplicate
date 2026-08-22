@@ -202,6 +202,69 @@ test y comentario y por lo tanto **parece una capacidad**.
 - **La metadata en el visor de carpetas sigue pendiente.** Ahí el detalle es la lista de archivos del par, y
   el tamaño de una carpeta exige recorrerla — otra decisión, no la misma línea.
 
+## Qué falta, en orden
+
+Dieciséis cosas, en cuatro niveles. El criterio del orden es **qué tan cerca está de los datos del usuario**:
+primero lo que puede perder algo o mentirle, al final lo que solo es incómodo o no medido.
+
+### P1 — el usuario lo nota, o hay datos en juego
+
+1. **No hay Quick Look de tamaño completo en ninguna ventana.** Los tres visores muestran **miniaturas** (280 pt
+   como techo) y nada más. Para decidir entre dos fotos parecidas eso a veces no alcanza —es exactamente la
+   diferencia que el detector encontró— y la razón por la que esta app existe en vez del CLI es *mirar la cosa*.
+   `QLPreviewPanel` con la barra espaciadora es el gesto que un usuario de macOS ya tiene en los dedos.
+2. **"Mostrar en Finder" existe solo en la revisión exacta.** Los visores de pares parecidos y de carpetas no
+   tienen manera de abrir ni de revelar un archivo. Cuando la miniatura no basta, ese es el siguiente movimiento
+   obvio, y no está. `Reveal.swift` ya existe: es cablear, no escribir.
+3. **Los fallos de un apply se renderizan interpolando el enum.** El usuario lee
+   `contentChanged(path: "/Users/…")` en la única lista que *tiene* que leer después de una acción destructiva.
+   Localizar esas razones es el trabajo de una tarde y toca el camino más delicado.
+4. **El journal crece para siempre en el directorio compartido.** Un archivo por sesión, sin compactación ni
+   poda. Podarlo destruye la capacidad de deshacer, así que la regla tiene que ser explícita —por ejemplo, podar
+   solo sesiones cuyas entradas ya están todas restauradas, o más viejas que N días *y* con la Papelera vacía— y
+   hoy no hay ninguna.
+5. **El montaje de red es el único caso que la cuarentena rescata de verdad, y es el camino menos probado del
+   código destructivo.** No se puede fabricar aquí sin servidor; hace falta un NAS o un share de prueba.
+
+### P2 — deuda de corrección que hoy no muerde
+
+6. **`FolderManifest.buildSynchronously` no tiene checkpoint de cancelación y su gemela async sí.** Dos funciones
+   que se ven iguales y no lo son. Hoy su único llamador es el planificador de deshacer, donde un manifiesto
+   corto falla su comparación y bloquea —el lado seguro—, pero el próximo llamador no tiene por qué saberlo.
+7. **Las dos cachés no podan entradas de archivos borrados.** Crecen una fila por cada (archivo, versión) visto:
+   532 KB tras 119 escaneos, en un directorio que macOS puede purgar. Podar por existencia está **rechazado con
+   número** —el corpus vive en un disco externo, y desmontado *todas* sus entradas se verían muertas— así que lo
+   que falta es una regla que sí sea segura, no la poda ingenua.
+8. **La cancelación dentro de un archivo corta entre chunks de 1 MiB.** Es el límite, no un problema: bajarlo
+   solo tiene sentido si alguien mide un caso donde 1 MiB tarda.
+9. **Dos ramas del disposer no son alcanzables con un `FileManager` real** y están marcadas en el código: que
+   `trashItem` no lance y tampoco reporte destino, y el default de `Application Support` con `urls(for:in:)`
+   vacío.
+10. **`folder-decisions/` no tiene lector externo.** El CLI tiene el slot y nunca escribió uno, así que su
+    round-trip se prueba contra un documento sintetizado. Nada que arreglar; algo que recordar.
+
+### P3 — funcionalidad que se puede agregar
+
+11. **Metadata en el visor de carpetas.** Ahí el detalle es la lista de archivos del par; el tamaño de una
+    carpeta exige recorrerla, así que es otra decisión, no la misma línea.
+12. **El bitrate se lee y no se muestra.** Misma categoría que los cuatro reportadores ya resueltos, pero cinco
+    campos en un panel angosto ya es el límite: mostrarlo pide decidir qué sale.
+13. **`PerceptualHash(hex:)` y `hexString` solo existen para el diferencial y los tests.** Ningún hash
+    perceptual aparece en el JSON compartido. Deuda barata y deliberada —hace depurable un desacuerdo contra
+    Python— pero es superficie pública que producción no usa.
+
+### P4 — medición pendiente
+
+14. **Barrido de concurrencia en frío.** Necesita `sudo purge`, así que lo corre el usuario. El barrido caliente
+    no tiene codo hasta c=16, pero a 2,350 MB/s eso lo sirvió el page cache: mide SHA-256, no disco. **Por eso
+    la política enviada no se cambió**, y cambiarla sin el dato frío sería el error que este proyecto lleva
+    sesenta PRs registrando.
+15. **Los corpora sintéticos del plan nunca se construyeron.** C1 (200k archivos, 40 GB, power-law, con 500
+    pares de ≥1 GB del mismo tamaño para ejercitar la etapa de prefijo) y C3 (profundidad 8, 5,000 directorios).
+    Todo lo medido salió de árboles reales, que es mejor evidencia para *este* usuario y peor para reproducir.
+16. **Video contra `ffmpeg` como línea base.** Está medida la concurrencia de decodes (4 workers, 213→151 ms) y
+    no el "quitamos ffmpeg y además es más rápido", que el plan pedía como medición y no como eslogan.
+
 ## Deuda conocida
 
 - **Sin poda de entradas de archivos borrados** en las dos cachés. Crecen una fila por cada (archivo,
