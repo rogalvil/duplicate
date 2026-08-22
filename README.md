@@ -24,6 +24,7 @@ deshacer.
 | Progreso con etapa durante el apply: verificar y mover se distinguen | **funciona** |
 | Cancelar dentro del hasheo de un archivo grande, no solo entre archivos | **funciona** |
 | Metadata del archivo bajo la vista previa: tamaño, fecha, resolución, codec | **funciona** |
+| Vista rápida a tamaño completo (⌘Y) y Mostrar en Finder, en los tres visores | **funciona** |
 
 O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,
 simular, aplicar a la Papelera, deshacer. Imágenes y video, los dos, con documentos que el CLI lee byte a byte.

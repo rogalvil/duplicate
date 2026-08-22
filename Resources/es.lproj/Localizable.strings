@@ -62,6 +62,7 @@
 "menu.edit.selectAll" = "Seleccionar todo";
 "menu.view" = "Ver";
 "menu.view.metadata" = "Mostrar metadata del archivo";
+"menu.view.quickLook" = "Vista rápida";
 "menu.group" = "Grupo";
 "menu.group.confirm" = "Confirmar y siguiente";
 "menu.group.skip" = "Saltar este grupo";

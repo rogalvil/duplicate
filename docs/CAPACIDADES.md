@@ -139,7 +139,9 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Biblioteca de escaneos | Los cuatro tipos, con badge de origen (CLI o app), orden y filtro, y **watcher por directorio** de los cuatro |
 | Carga en segundo plano | `summaries()` decodifica 21,594 grupos en 0.34 s; va fuera del hilo principal con contador de generación |
 | Escaneo con progreso | Panel con fase, conteos de dígitos monoespaciados, raíces recientes y cancelación |
-| Quick Look | Con plazo de 2 s: `quicklookd` es XPC y puede colgarse; se cae al icono del archivo |
+| Miniaturas por Quick Look | Con plazo de 2 s: `quicklookd` es XPC y puede colgarse; se cae al icono del archivo |
+| Vista rápida de tamaño completo | ⌘Y abre `QLPreviewPanel` en los tres visores. En un par parecido entran **los dos** lados, así que las flechas del panel son la comparación a tamaño real |
+| Mostrar en Finder | En los tres visores. En un par revela los dos archivos a la vez |
 | Menús | Atajos sin colisiones (verificado por el modo `menu`), Sesiones de primer nivel, deshacer de apply **sin atajo de teclado** |
 | `RLIMIT_NOFILE` | Launch Services arranca con 256 blando; se sube a 4096 antes de abrir nada |
 | Directorios inaccesibles | Se cuentan y se reportan; nunca se lee "no encontré duplicados" cuando fue "no pude entrar" |
@@ -209,13 +211,10 @@ primero lo que puede perder algo o mentirle, al final lo que solo es incómodo o
 
 ### P1 — el usuario lo nota, o hay datos en juego
 
-1. **No hay Quick Look de tamaño completo en ninguna ventana.** Los tres visores muestran **miniaturas** (280 pt
-   como techo) y nada más. Para decidir entre dos fotos parecidas eso a veces no alcanza —es exactamente la
-   diferencia que el detector encontró— y la razón por la que esta app existe en vez del CLI es *mirar la cosa*.
-   `QLPreviewPanel` con la barra espaciadora es el gesto que un usuario de macOS ya tiene en los dedos.
-2. **"Mostrar en Finder" existe solo en la revisión exacta.** Los visores de pares parecidos y de carpetas no
-   tienen manera de abrir ni de revelar un archivo. Cuando la miniatura no basta, ese es el siguiente movimiento
-   obvio, y no está. `Reveal.swift` ya existe: es cablear, no escribir.
+1. ~~No hay Quick Look de tamaño completo.~~ **Hecho**: ⌘Y en los tres visores, con los dos lados de un par
+   parecido en el panel para que las flechas sean la comparación.
+2. ~~"Mostrar en Finder" solo en la revisión exacta.~~ **Hecho**: los tres visores lo tienen, y en un par
+   revela **los dos** archivos —Finder selecciona varios, y elegir uno en silencio sería elegir por el usuario.
 3. **Los fallos de un apply se renderizan interpolando el enum.** El usuario lee
    `contentChanged(path: "/Users/…")` en la única lista que *tiene* que leer después de una acción destructiva.
    Localizar esas razones es el trabajo de una tarde y toca el camino más delicado.
