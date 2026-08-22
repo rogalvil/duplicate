@@ -113,6 +113,18 @@ final class PreviewPane: NSView {
             detailLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
             stateLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
         ])
+
+        // **The same preference as the perceptual panes**, or "Show File Metadata" would govern one window kind
+        // and not the other, which makes the menu item a lie rather than a setting.
+        NotificationCenter.default.addObserver(
+            forName: MetadataPreference.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyMetadataPreference() }
+        }
+    }
+
+    private func applyMetadataPreference() {
+        detailLabel.isHidden = !MetadataPreference.isEnabled || detailLabel.stringValue.isEmpty
     }
 
     /// Shows nothing, for when no row is selected.
@@ -142,6 +154,7 @@ final class PreviewPane: NSView {
             details.append(dateFormatter.string(from: modified))
         }
         detailLabel.stringValue = details.joined(separator: "  \u{00B7}  ")
+        applyMetadataPreference()
 
         switch presence.state {
         case .present:
@@ -180,6 +193,7 @@ final class PreviewPane: NSView {
     var nameText: String { nameLabel.stringValue }
     var pathText: String { pathLabel.stringValue }
     var detailText: String { detailLabel.stringValue }
+    var isDetailHidden: Bool { detailLabel.isHidden }
     var stateText: String { stateLabel.stringValue }
     var isShowingPlaceholder: Bool { !placeholder.isHidden }
     var hasImage: Bool { imageView.image != nil }

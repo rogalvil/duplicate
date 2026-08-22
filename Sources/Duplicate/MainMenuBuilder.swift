@@ -18,7 +18,8 @@ enum MainMenuBuilder {
     static func build() -> NSMenu {
         let mainMenu = NSMenu()
         for submenu in [
-            applicationMenu(), fileMenu(), editMenu(), groupMenu(), sessionsMenu(), windowMenu(),
+            applicationMenu(), fileMenu(), editMenu(), viewMenu(), groupMenu(), sessionsMenu(),
+            windowMenu(),
         ] {
             let item = NSMenuItem()
             item.submenu = submenu
@@ -137,6 +138,22 @@ enum MainMenuBuilder {
     ///
     /// "Discard the whole group" has no key equivalent, deliberately: it is the one action here that
     /// proposes removing every copy, and it asks first.
+    /// One item, and it earns a menu of its own.
+    ///
+    /// **A pane in a two-up comparison is the narrow half of a split view**, so the metadata line is a real
+    /// cost for someone comparing pictures rather than numbers. It belongs where a macOS user looks for a
+    /// display switch, not in the Group menu, which is about deciding.
+    private static func viewMenu() -> NSMenu {
+        let menu = NSMenu(title: Strings.string("menu.view"))
+        let item = menu.addItem(
+            withTitle: Strings.string("menu.view.metadata"),
+            action: #selector(AppDelegate.toggleFileMetadata(_:)),
+            keyEquivalent: "i"
+        )
+        item.keyEquivalentModifierMask = [.command, .option]
+        return menu
+    }
+
     private static func groupMenu() -> NSMenu {
         let menu = NSMenu(title: Strings.string("menu.group"))
         let confirm = menu.addItem(

@@ -398,6 +398,12 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             guard self.selectedRow == row else { return }
             self.refreshAdvice(row: row, pair: pair)
             self.refreshDecisionButtons(row: row)
+            // The panes and the header both said something narrower before the probe answered: the panes had no
+            // resolution and a video header could not say how many frames its verdict rested on.
+            self.leftPane.show(facts: a)
+            self.rightPane.show(facts: b)
+            self.headerLabel.stringValue = similarHeaderText(
+                pair: pair, durationA: a?.duration, durationB: b?.duration)
         }
     }
 
@@ -648,6 +654,20 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     var pairRowCount: Int { table.numberOfRows }
     var headerText: String { headerLabel.stringValue }
+
+    var leftMetadataForSelftest: (text: String, hidden: Bool) { leftPane.metadataForSelftest }
+    var rightMetadataForSelftest: (text: String, hidden: Bool) { rightPane.metadataForSelftest }
+
+    /// Waits for the media probe of the selected pair, so an assertion is not a race against a decode.
+    ///
+    /// Waits for the **resolution**, not for any text: the size and the date come from a `stat` the pane does
+    /// itself, so a wait on "not empty" returns immediately and asserts nothing about the probe.
+    func awaitFactsForSelftest() async {
+        for _ in 0..<200 {
+            if leftPane.metadataForSelftest.text.contains("\u{00D7}") { return }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+    }
     var footerText: String { footerLabel.stringValue }
     var leftPaneText: String { leftPane.pathText }
     var leftStateForSelftest: String { leftPane.stateText }
@@ -775,7 +795,23 @@ final class SimilarSidePane: NSView {
     private let nameLabel = NSTextField(labelWithString: "")
     private let pathLabel = NSTextField(labelWithString: "")
     private let stateLabel = NSTextField(labelWithString: "")
+    /// Size, date, and -- once the probe answers -- the resolution, codec and duration.
+    ///
+    /// **The numbers that decide a perceptual pair, which the app was computing and not showing.** Two photos
+    /// that look alike differ in exactly the ways this line names: one is 4032x3024 and the other 1024x768, one
+    /// is 8 MB and the other 400 KB, one is from the camera and the other from a chat app. The advice already
+    /// read all of it to make a suggestion; the reader was being asked to trust the suggestion without seeing
+    /// what it rested on.
+    private let metadataLabel = NSTextField(labelWithString: "")
     private var currentPath: String?
+
+    /// Locale-aware, unlike the byte counts, which are pinned to the CLI's format because they are interop.
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -801,12 +837,19 @@ final class SimilarSidePane: NSView {
         stateLabel.font = .systemFont(ofSize: 11, weight: .medium)
         stateLabel.textColor = .systemOrange
         stateLabel.isHidden = true
-        for label in [nameLabel, pathLabel, stateLabel] {
+        // Monospaced digits: this line is mostly numbers and it is redrawn on every arrow key, so a
+        // proportional numeral makes the whole pane twitch sideways.
+        metadataLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        metadataLabel.textColor = .secondaryLabelColor
+        metadataLabel.maximumNumberOfLines = 2
+        for label in [nameLabel, pathLabel, stateLabel, metadataLabel] {
             label.lineBreakMode = .byTruncatingMiddle
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
 
-        let stack = NSStackView(views: [imageView, nameLabel, pathLabel, stateLabel])
+        let stack = NSStackView(views: [
+            imageView, nameLabel, pathLabel, metadataLabel, stateLabel,
+        ])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
@@ -820,6 +863,67 @@ final class SimilarSidePane: NSView {
             imageView.widthAnchor.constraint(equalTo: stack.widthAnchor),
             imageView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
         ])
+
+        // The preference reaches panes already on screen, because one that only applied to windows opened
+        // later reads as a bug rather than as a setting.
+        NotificationCenter.default.addObserver(
+            forName: MetadataPreference.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyMetadataPreference() }
+        }
+    }
+
+    var metadataForSelftest: (text: String, hidden: Bool) {
+        (metadataLabel.stringValue, metadataLabel.isHidden)
+    }
+
+    /// The metadata sentence: size, date, and the media facts when they have arrived.
+    ///
+    /// **Built here rather than in Core because it is prose**, and `DuplicateCore` never produces prose. The
+    /// byte count is the one part that is *not* localised: `512 B`, `1.0 KB`, `3.5 MB` with a dot in both
+    /// languages, because that format is pinned by the CLI's own tests and this app matches it on purpose.
+    /// Dates are locale-aware, because nothing reads a date across tools.
+    static func metadataText(attributes: [FileAttributeKey: Any]?, facts: MediaFacts?) -> String {
+        var parts: [String] = []
+        if let size = attributes?[.size] as? Int64 {
+            parts.append(ByteSize.format(size))
+        }
+        if let modified = attributes?[.modificationDate] as? Date {
+            parts.append(dateFormatter.string(from: modified))
+        }
+        if let facts, facts.pixelWidth > 0, facts.pixelHeight > 0 {
+            parts.append("\(facts.pixelWidth)\u{00D7}\(facts.pixelHeight)")
+        }
+        if let facts, !facts.codec.isEmpty {
+            // An unrecognised codec is marked rather than passed off as H.264, which is what the CLI's
+            // `.get(codec, 1.0)` does silently -- a guess capable of handing the decision to the wrong file.
+            parts.append(facts.isCodecKnown ? facts.codec : facts.codec + "?")
+        }
+        if let facts, facts.duration > 0 {
+            let total = Int(facts.duration.rounded())
+            parts.append(String(format: "%d:%02d", total / 60, total % 60))
+        }
+        return parts.joined(separator: "  \u{00B7}  ")
+    }
+
+    /// Adds the media facts to the line once the probe has answered.
+    ///
+    /// Separate from ``show(path:thumbnailer:)`` because probing decodes the file -- about 7 ms for an image and
+    /// 300 ms for a video -- and the size and date are known from the `stat` the pane already did. Making the
+    /// reader wait on a decode to learn how big a file is would be backwards.
+    func show(facts: MediaFacts?) {
+        guard let path = currentPath else { return }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+        metadataLabel.stringValue = Self.metadataText(attributes: attributes, facts: facts)
+        applyMetadataPreference()
+    }
+
+    /// Hides or shows the metadata line without losing what it says.
+    ///
+    /// The text is kept rather than cleared: turning the line back on has to be instant, and re-probing a
+    /// video to redraw a line the user just asked for would be absurd.
+    private func applyMetadataPreference() {
+        metadataLabel.isHidden = !MetadataPreference.isEnabled || metadataLabel.stringValue.isEmpty
     }
 
     func showEmpty() {
@@ -829,6 +933,8 @@ final class SimilarSidePane: NSView {
         pathLabel.stringValue = ""
         stateLabel.stringValue = ""
         stateLabel.isHidden = true
+        metadataLabel.stringValue = ""
+        metadataLabel.isHidden = true
     }
 
     func show(path: String, thumbnailer: QuickLookThumbnailer) {
@@ -841,9 +947,16 @@ final class SimilarSidePane: NSView {
         // in the real perceptual scans, one side of the very first one is already gone -- the CLI's May
         // history has expired. Without this line, "the file is missing" and "the thumbnail has not arrived
         // yet" look identical, and the user is left comparing one picture against a blank rectangle.
-        let exists = FileManager.default.fileExists(atPath: path)
+        // **One `attributesOfItem` instead of a `fileExists`**, which is the same class of call and answers
+        // three questions rather than one: whether it is there, how big it is, and when it changed. The size
+        // and the date are what a perceptual pair is actually decided on, so paying a second stat for them
+        // would be paying twice for one answer.
+        let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+        let exists = attributes != nil
         stateLabel.stringValue = exists ? "" : Strings.string("similar.state.missing")
         stateLabel.isHidden = exists
+        metadataLabel.stringValue = Self.metadataText(attributes: attributes, facts: nil)
+        applyMetadataPreference()
         guard exists else {
             imageView.image = nil
             return

@@ -61,6 +61,8 @@
 "menu.edit.copy" = "Copy";
 "menu.edit.paste" = "Paste";
 "menu.edit.selectAll" = "Select All";
+"menu.view" = "View";
+"menu.view.metadata" = "Show File Metadata";
 "menu.group" = "Group";
 "menu.group.confirm" = "Confirm and Next";
 "menu.group.skip" = "Skip This Group";
