@@ -363,3 +363,9 @@
 "apply.progress.verifying" = "Verificando %1$d de %2$d: %3$@";
 "apply.progress.verifying.files" = "Verificando %1$d de %2$d: %3$@ — %4$d archivos revisados";
 "apply.progress.moving" = "Moviendo %1$d de %2$d: %3$@";
+"apply.failure.missing" = "%@ ya no está, así que no se movió nada";
+"apply.failure.contentChanged" = "%@ cambió desde el escaneo, así que se dejó en paz";
+"apply.failure.trashUnavailable" = "la Papelera rechazó este archivo y la cuarentena tampoco pudo recibirlo: %@";
+"apply.failure.quarantineFailed" = "la cuarentena no pudo recibir este archivo: %@";
+"apply.failure.noFreeName" = "todos los nombres de la carpeta de cuarentena estaban tomados, así que el archivo se quedó donde está";
+"apply.failure.cancelled" = "se detuvo antes de revisar este archivo, así que se quedó donde está";

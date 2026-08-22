@@ -341,6 +341,11 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **La clave de una decisión de parecidos es `a||b` sin escapes**, formato del CLI, con el hueco que implica: una
   ruta que contenga `||` da una clave que no se puede volver a partir. Medido: **ninguna ruta del corpus lo
   contiene**, y `SimilarPairKey.isAmbiguous` lo reporta en vez de esconderlo.
+- **La lista de fallos de un apply estaba imprimiendo Swift.** `contentChanged(path: "/Users/…")` nombra un caso
+  de enum en la única lista que el usuario **tiene** que leer después de borrar algo, y lo que necesita de ahí son
+  dos cosas: qué pasó y si su archivo sigue en su lugar. Las rehúsas sí estaban localizadas desde el principio, lo
+  que hacía el contraste peor. Una sola función para las tres hojas, porque un fallo significa lo mismo venga del
+  detector que venga y tres copias son tres formas de describir el mismo estado.
 - **Una rehúsa no es una falla, y mezclarlas entrena a ignorar las fallas.** El aplicar exacto mueve o falla; el
   perceptual además puede declinar porque el par ya no se parece — eso es el chequeo funcionando, y va primero en
   el reporte porque es lo que el lector tiene que atender: esos archivos siguen ahí.
