@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR de poda de la caché perceptual. 41 modos de selftest, 776 tests, 94.72% de
-cobertura sobre `DuplicateCore`.
+Última actualización: PR de la línea base de video. 42 modos de selftest, 776 tests, 94.72% de cobertura
+sobre `DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -91,7 +91,7 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Capacidad | Detalle | Dónde |
 |---|---|---|
 | Ocho cuadros por video | `interval = max(dur/(n+1), 0.1)`, cuadros en `interval·(i+1)` — **aritmética preservada exacta** porque el umbral 0.70 se calibró contra ella | `Media/VideoFrameSampler.swift` |
-| Sin `ffmpeg` | `AVAssetImageGenerator` con `requestedTimeTolerance`, que **es** la rama de fast-seek del CLI, y `.forceSDR` para que un HDR no hashee distinto | `Media/VideoHasher.swift` |
+| Sin `ffmpeg` | `AVAssetImageGenerator` con `requestedTimeTolerance`, que **es** la rama de fast-seek del CLI, y `.forceSDR` para que un HDR no hashee distinto. Medido contra los dos comandos del CLI: costo **plano en ~0.62 s** de 10 MB a 1 GB, contra 1.49 s (rama rápida, dominada por ocho procesos) y 33.6 s (rama lenta, que escala con la duración) | `Media/VideoHasher.swift` |
 | Marcas pasadas del final filtradas | Medido: con tolerancia de 1 s un clip de 0.4 s devolvía **ocho** hashes con el último cuadro repetido cuatro veces | `Media/VideoFrameSampler.swift` |
 | Similitud asimétrica y codiciosa preservada | Con la orientación fijada por bytes, o el mismo par cae de los dos lados del umbral entre corridas | `Media/VideoSimilarity.swift` |
 | Cuatro decodes a la vez | Medido, no elegido: 60 videos reales dieron 213 ms en serie, 151 ms con cuatro, **151 ms con ocho** | `Media/SimilarScanSession.swift` |
@@ -224,7 +224,7 @@ gh issue list --label bloqueado       # y por qué está bloqueado
 | `priority:p1` | El usuario lo nota, o hay datos en juego | fallback en montaje de red (#73, bloqueado) |
 | `priority:p2` | Deuda de corrección que hoy no muerde | lo que solo una pantalla puede verificar (#81, bloqueado) |
 | `priority:p3` | Funcionalidad agregable | metadata en el visor de carpetas (#76), bitrate (#77) |
-| `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`), corpora C1/C3 (#79), video contra ffmpeg (#80) |
+| `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`), corpora C1/C3 (#79) |
 | `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |
 
 **Lo que ya se cerró desde que existe esta sección**: el historial de sesiones (#72), Quick Look de tamaño

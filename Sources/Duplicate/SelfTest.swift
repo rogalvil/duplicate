@@ -44,7 +44,7 @@ enum SelfTest {
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
             "similar-window", "video", "similar-apply", "folder-apply", "cancel", "keeper",
             "format", "progress", "volumes", "realroot", "phash-differential", "history",
-            "cache-liveness",
+            "cache-liveness", "video-timing",
         ]
 
         let modes: [String]
@@ -102,6 +102,7 @@ enum SelfTest {
                 case "phash-differential": try checkPerceptualDifferential(arguments: arguments)
                 case "history": try await checkSessionHistory()
                 case "cache-liveness": try checkCacheLiveness(arguments: arguments)
+                case "video-timing": try await checkVideoTiming(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -5217,6 +5218,87 @@ enum SelfTest {
                 + " -- pruning would reclaim "
                 + ByteSize.format(
                     Int64((report.deadRows + report.supersededRows) * HashCacheFormat.recordSize)))
+    }
+
+    // MARK: - video-timing
+
+    /// Times this app's video sampling on a real file, at both seek tolerances.
+    ///
+    /// **The measurement the plan asked for and never took.** The CLI splits at 200 MB: below it `ffmpeg -ss`
+    /// goes after `-i` and decodes forward from the previous sync sample, above it `-ss` goes before `-i` and
+    /// jumps to the nearest one. That split *is* `requestedTimeTolerance`, and this app collapsed it into a
+    /// tolerance of one second -- which the plan claimed was both simpler and faster. Simpler is visible in the
+    /// diff. Faster was a slogan.
+    ///
+    /// Read-only: opens the file, samples eight frames, hashes them, prints times. Nothing is written and no
+    /// state directory is touched. `scripts/video-baseline.sh` runs the `ffmpeg` half and puts the two side by
+    /// side.
+    private static func checkVideoTiming(arguments: [String]) async throws {
+        guard let path = value(for: "--file", in: arguments) else {
+            print("  SKIPPED: pass --file <video> to time it")
+            print("  the ffmpeg comparison is scripts/video-baseline.sh")
+            return
+        }
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw SelfTestFailure("no file at \(path)")
+        }
+        let size =
+            (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int64) ?? 0
+        let clock = ContinuousClock()
+
+        func seconds(_ duration: Duration) -> Double {
+            Double(duration.components.seconds)
+                + Double(duration.components.attoseconds) / 1e18
+        }
+
+        // **A warm-up first, and the best of three after.** The first run of the process pays AVFoundation's
+        // one-time setup, and whichever tolerance went first wore that cost: measured, it made exact seeking look
+        // 23% *faster* than the shipped tolerance on the same file, which is the opposite of what a second run
+        // says. Best-of-three rather than a mean, because the noise here is other processes taking the disk, and
+        // the fastest run is the one least polluted by them.
+        _ = try? await VideoHasher().hashes(fileURL: URL(filePath: path))
+
+        var results: [(label: String, elapsed: Double, frames: Int, duration: Double)] = []
+        for tolerance in [1.0, 0.0] {
+            let hasher = VideoHasher(configuration: .init(toleranceSeconds: tolerance))
+            var best = Double.infinity
+            var frames = 0
+            var duration = 0.0
+            for _ in 0..<3 {
+                let started = clock.now
+                let outcome = try await hasher.hashes(fileURL: URL(filePath: path))
+                best = min(best, seconds(clock.now - started))
+                frames = outcome.hashes.count
+                duration = outcome.duration
+            }
+            results.append(
+                (
+                    label: tolerance > 0 ? "tolerance ±1s (shipped)" : "tolerance .zero",
+                    elapsed: best, frames: frames, duration: duration
+                ))
+        }
+
+        // Both tolerances must find frames, or the timing is of a failure.
+        for result in results {
+            try expect(
+                result.frames > 0, "\(result.label) produced no frames, so its time means nothing")
+        }
+        // And they must agree on how long the file is: a tolerance changes which frame comes back, never the
+        // container's own duration.
+        try expect(
+            abs(results[0].duration - results[1].duration) < 0.001,
+            "the two runs disagree about the duration: \(results[0].duration) and \(results[1].duration)"
+        )
+
+        print("  \(ByteSize.format(size)), \(String(format: "%.1f", results[0].duration))s")
+        for result in results {
+            print(
+                "  \(result.label): \(String(format: "%.3f", result.elapsed))s "
+                    + "for \(result.frames) frames")
+        }
+        let ratio = results[1].elapsed / max(results[0].elapsed, 1e-9)
+        print(
+            "  exact seek costs \(String(format: "%.2f", ratio))x the shipped tolerance")
     }
 
     // MARK: - cancel
