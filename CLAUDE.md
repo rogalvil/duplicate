@@ -9,6 +9,10 @@ El detalle de arquitectura y las alternativas descartadas están en
 [`docs/CAPACIDADES.md`](docs/CAPACIDADES.md), y se actualiza en el mismo PR que cambia la funcionalidad** —
 incluida su sección de solapamientos, que es donde se anota el código que calcula algo que nadie muestra.
 
+**Los pendientes viven en los issues del repo**, con etiquetas `priority:p1`…`p4` y `bloqueado`, no en un
+markdown: dos listas de lo mismo garantizan que una quede vieja. `gh issue list --label bloqueado` dice además
+*por qué* algo no se ha podido hacer, que es lo que cuesta reconstruir.
+
 ## Comandos
 
 ```bash
