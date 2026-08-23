@@ -635,3 +635,222 @@ struct CachedScanTests {
         #expect(outcome.scan.groups.count == 1)
     }
 }
+
+@Suite("Pruning rows whose file is gone")
+struct HashCachePruningTests {
+
+    private func scratchTree() throws -> String {
+        let root = NSTemporaryDirectory() + "duplicate-prunecache-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    /// Builds a real `FileEntry` for a real file, so its key carries the real inode and volume.
+    private func entry(for path: String) throws -> FileEntry {
+        let url = URL(filePath: path)
+        let values = try url.resourceValues(forKeys: [
+            .fileSizeKey, .volumeIdentifierKey, .fileIdentifierKey, .contentModificationDateKey,
+            .generationIdentifierKey,
+        ])
+        return FileEntry(
+            path: path,
+            size: Int64(values.fileSize ?? 0),
+            identity: FileIdentity(
+                volume: OpaqueIdentifier.fold(values.volumeIdentifier) ?? 0,
+                // `values.fileIdentifier`, the same typed property the walker reads. Going through
+                // `allValues` returns nil here, and a zero inode makes every key collide -- which is how the
+                // first version of this test "passed" a prune that had dropped nothing.
+                inode: values.fileIdentifier ?? 0
+            ),
+            generation: OpaqueIdentifier.fold(values.generationIdentifier),
+            modifiedNanoseconds: values.contentModificationDate.map {
+                Int64($0.timeIntervalSince1970 * 1_000_000_000)
+            }
+        )
+    }
+
+    @Test("A row for a deleted file is dropped and a row for a live one is kept")
+    func dropsDeadRowsOnly() async throws {
+        // **Measured on the real cache before writing any of this: 7,741 rows, 1,609 of which still described a
+        // file that exists.** 79.2% waste. That number is why pruning exists rather than being reasoned about.
+        let tree = try scratchTree()
+        defer { try? FileManager.default.removeItem(atPath: tree) }
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+
+        let survivor = tree + "/survivor.bin"
+        let doomed = tree + "/doomed.bin"
+        try Data("i am staying".utf8).write(to: URL(filePath: survivor))
+        try Data("i am going".utf8).write(to: URL(filePath: doomed))
+        let survivorEntry = try entry(for: survivor)
+        let doomedEntry = try entry(for: doomed)
+
+        do {
+            let cache = HashCache(url: scratch.url)
+            await cache.load()
+            await cache.store(digest("1"), for: survivorEntry)
+            await cache.store(digest("2"), for: doomedEntry)
+            _ = try await cache.persist()
+        }
+        try FileManager.default.removeItem(atPath: doomed)
+
+        let cache = HashCache(url: scratch.url)
+        await cache.load()
+        #expect(try await cache.prune() == 1, "pruning dropped the wrong number of rows")
+        #expect(await cache.digest(for: survivorEntry) == digest("1"), "the live row was dropped")
+        #expect(await cache.digest(for: doomedEntry) == nil, "the dead row survived")
+
+        let reader = HashCache(url: scratch.url)
+        await reader.load()
+        #expect(await reader.report.recordsRead == 1, "the rewritten file holds the wrong count")
+        #expect(await reader.digest(for: survivorEntry) == digest("1"))
+    }
+
+    @Test("A row for an older version of a file that still exists is dropped")
+    func dropsSupersededRows() async throws {
+        // The generation counter never goes backwards, so this exact key can never match again.
+        let tree = try scratchTree()
+        defer { try? FileManager.default.removeItem(atPath: tree) }
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+
+        let path = tree + "/edited.bin"
+        try Data("first version".utf8).write(to: URL(filePath: path))
+        let before = try entry(for: path)
+        do {
+            let cache = HashCache(url: scratch.url)
+            await cache.load()
+            await cache.store(digest("3"), for: before)
+            _ = try await cache.persist()
+        }
+        // Rewritten with a different length, so size and mtime both move.
+        try Data("a much longer second version".utf8).write(to: URL(filePath: path))
+
+        let cache = HashCache(url: scratch.url)
+        await cache.load()
+        #expect(try await cache.prune() == 1)
+        #expect(await cache.digest(for: before) == nil, "the superseded row survived")
+    }
+
+    @Test("A row on a volume that is not mounted is never dropped")
+    func keepsUnmountedRows() async throws {
+        // **The hazard that makes the naive rule wrong.** This user's corpus lives on an external disk, and a
+        // pruner that read "cannot resolve" as "delete" would wipe the cache that took 177 seconds to build the
+        // moment it is unplugged. A volume identifier no mounted volume folds to stands in for that here.
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+        let ghost = FileEntry(
+            path: "/Volumes/NotMounted/photo.jpg",
+            size: 1234,
+            identity: FileIdentity(volume: 0xDEAD_BEEF_DEAD_BEEF, inode: 999_999),
+            generation: 7,
+            modifiedNanoseconds: 1_700_000_000_000_000_000
+        )
+        do {
+            let cache = HashCache(url: scratch.url)
+            await cache.load()
+            await cache.store(digest("4"), for: ghost)
+            _ = try await cache.persist()
+        }
+
+        let cache = HashCache(url: scratch.url)
+        await cache.load()
+        #expect(try await cache.prune() == 0, "a row on an unmounted volume was dropped")
+        #expect(await cache.digest(for: ghost) == digest("4"))
+    }
+
+    @Test("The prune marker keeps a clean cache from paying for the lookups again")
+    func remembersTheLastPrune() async throws {
+        let tree = try scratchTree()
+        defer { try? FileManager.default.removeItem(atPath: tree) }
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+
+        // Under the floor, so a small cache is left alone entirely.
+        do {
+            let cache = HashCache(url: scratch.url)
+            await cache.load()
+            for index in 0..<10 {
+                let path = tree + "/f\(index).bin"
+                try Data("file \(index)".utf8).write(to: URL(filePath: path))
+                await cache.store(digest("5"), for: try entry(for: path))
+            }
+            _ = try await cache.persist()
+            #expect(!(await cache.needsPruning), "a ten-row cache asked to be pruned")
+        }
+
+        // And the marker survives a rewrite, which is what stops every load from paying the lookups.
+        let cache = HashCache(url: scratch.url)
+        await cache.load()
+        _ = try await cache.prune()
+        let bytes = try scratch.bytes()
+        #expect(HashCacheFormat.rowsAtLastPrune(bytes) == 10, "the marker was not written")
+        let reader = HashCache(url: scratch.url)
+        await reader.load()
+        #expect(!(await reader.needsPruning), "the marker did not survive the reload")
+    }
+}
+
+@Suite("CacheLiveness")
+struct CacheLivenessTests {
+
+    /// **A folded volume identifier can mean more than one device, and that is not a corner case.**
+    /// macOS firmlinks the boot volume: `/` and `/private/tmp` report the same volume identifier from
+    /// different `st_dev`. A map that kept one device per identifier looked a Data-volume inode up under the
+    /// system volume, found nothing, and called the row dead -- which as a pruning rule deletes live rows.
+    @Test("The volume map covers the boot volume and resolves a real inode")
+    func mapsTheBootVolume() throws {
+        let volumes = CacheLiveness.mountedVolumes()
+        #expect(!volumes.isEmpty, "no mounted volume could be folded")
+
+        // A real file on the volume that /tmp lives on, resolved through the map the pruner uses.
+        let path = NSTemporaryDirectory() + "liveness-\(UUID().uuidString).bin"
+        try Data("resolve me".utf8).write(to: URL(filePath: path))
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let url = URL(filePath: path)
+        let values = try url.resourceValues(forKeys: [.volumeIdentifierKey, .fileIdentifierKey])
+        let folded = try #require(OpaqueIdentifier.fold(values.volumeIdentifier))
+        let inode = try #require(values.fileIdentifier)
+        let devices = try #require(
+            volumes[folded], "the volume of the temporary directory is not in the map")
+
+        var status = stat()
+        let resolved = devices.contains { stat("/.vol/\($0)/\(inode)", &status) == 0 }
+        #expect(resolved, "a file that exists did not resolve under any of \(devices)")
+    }
+
+    /// The measurement over a cache file that holds one live row and one dead one.
+    @Test("A cache of one live and one dead row measures as such")
+    func measuresOneOfEach() async throws {
+        let tree = NSTemporaryDirectory() + "liveness-tree-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: tree) }
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+
+        for name in ["alive.bin", "doomed.bin"] {
+            try Data(name.utf8).write(to: URL(filePath: tree + "/" + name))
+        }
+        let walk = try FileManagerWalker().walk(
+            root: tree, policy: ScanPolicy(), exclusions: ExclusionSet())
+        do {
+            let cache = HashCache(url: scratch.url)
+            await cache.load()
+            for entry in walk.entries {
+                await cache.store(
+                    try ContentHasher().fullDigest(atPath: entry.path).digest, for: entry)
+            }
+            _ = try await cache.persist()
+        }
+        try FileManager.default.removeItem(atPath: tree + "/doomed.bin")
+
+        let report = CacheLiveness.measure(hashCacheAt: scratch.url)
+        #expect(report.totalRows == 2)
+        #expect(report.liveRows == 1, "live rows: \(report.liveRows)")
+        #expect(report.deadRows == 1, "dead rows: \(report.deadRows)")
+        #expect(report.unresolvableRows == 0)
+        #expect(report.unmountedRows == 0)
+        #expect(report.wasteFraction == 0.5)
+    }
+}

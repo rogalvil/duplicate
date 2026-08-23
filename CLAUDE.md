@@ -918,6 +918,27 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   `run()` y la suelta al volver, pero un test que deja la primera en scope hace que la segunda salga read-only y
   —correctamente— se niegue a escribir. Los tests van con `do { }` por instancia y el modo `cache` usa su propio
   archivo para el chequeo de reparación.
+- **El `mtime` de la clave y el de `stat` no son la misma cantidad, y compararlos habría borrado la caché
+  entera.** `modifiedNanoseconds` sale de `contentModificationDate`, que es un `Date` —un `Double` cuya
+  granularidad cerca de 1.79e18 nanosegundos son cientos de nanosegundos—, mientras `stat` da un `st_mtimespec`
+  exacto. La primera versión de la poda comparaba los dos y clasificaba **cada fila viva como superseded**: el
+  diente lo imprime como `0 rows survived the prune, wanted the 4 live ones`. El **tamaño** sí es entero en los
+  dos lados y es lo único que se compara.
+
+  Y de paso: esa misma comparación infló la primera medición de 55.8% a 79.2% de desperdicio. Las 1,812 filas
+  "superseded" eran **enteramente** el artefacto.
+- **Un identificador de volumen plegado puede significar varios `st_dev`.** macOS hace firmlink del volumen de
+  arranque: `/` y `/private/tmp` reportan el **mismo** identificador de volumen desde dispositivos distintos. Un
+  mapa con un dispositivo por identificador busca un inodo del volumen de datos bajo el del sistema, no encuentra
+  nada, y llama muerta a la fila. El mapa se construye con `getmntinfo` y guarda una **lista**.
+- **Solo `ENOENT` prueba que un archivo se fue.** Cualquier otro errno es este proceso sin poder mirar: revocar el
+  acceso al Escritorio hace que cada fila de un archivo de ahí deje de resolver, y esos archivos nunca se
+  movieron. Medido hoy: 0 filas irresolubles, y la distinción está puesta antes de que haga falta.
+- **La caché de digests real tenía 55.8% de desperdicio**: 7,741 filas, 3,421 describiendo un archivo que existe,
+  4,320 con el archivo borrado. El issue #75 preguntaba si valía la pena podar; ese número dijo que sí. La poda
+  cuesta un lookup de inodo por fila —3.4 µs medidos, 26 ms sobre 7,741, ~340 ms sobre cien mil— así que no se
+  paga en cada carga: el header recuerda cuántas filas había en la última limpieza, en sus 8 bytes de padding, y
+  un build viejo lo ignora.
 - **La clave de la caché incluye `generation`, no solo mtime.** Verificado en APFS: avanza con un
   append, con una reescritura del mismo largo, y con contenido distinto y mtime forzado atrás con
   `utimes` — el caso `rsync -t` que una caché por mtime sirve rancio. `URL` cachea resource values,

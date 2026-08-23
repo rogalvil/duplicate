@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR del preflight de deshacer. 40 modos de selftest, 768 tests, 94.83% de cobertura
-sobre `DuplicateCore`.
+Última actualización: PR de poda de cachés. 41 modos de selftest, 774 tests, 94.86% de cobertura sobre
+`DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -41,7 +41,7 @@ confirmar identidad byte a byte. El documento resultante es el mismo que escribe
 | Clases de almacenamiento | Hardlinks y clones APFS se cuentan como **ya deduplicado**, no como duplicado ni se ocultan. El conjunto de acción nunca es `files[1:]` | `Model/StoragePartition.swift` |
 | Progreso a 10 Hz por *pull* | Contadores atómicos leídos por un `Timer`, no 800k pushes | `Runtime/ProgressCounters.swift` |
 | Cancelación | Por lote del recorrido, por archivo, **y entre chunks dentro de un archivo** | `Scan/DuplicateFinder.swift`, `Hash/ContentHasher.swift` |
-| Caché de digests | Clave `(volumen, inodo, tamaño, mtime, generation)`, filas de 80 bytes con CRC-32C, `flock`, reparación de cola truncada | `Hash/HashCache.swift` |
+| Caché de digests | Clave `(volumen, inodo, tamaño, mtime, generation)`, filas de 80 bytes con CRC-32C, `flock`, reparación de cola truncada, y **poda de filas cuyo archivo se borró** — medido: 55.8% de la caché real era eso | `Hash/HashCache.swift` |
 
 **Cómo se verifica.** Modos `scan`, `cache`, `storage`, `digest`, `walk-permissions`, `trash-exclusion`,
 `realroot`, `cancel`, `fdlimit`, `volumes`. El modo `digest` compara contra `shasum -a 256` en el tamaño de
@@ -222,7 +222,7 @@ gh issue list --label bloqueado       # y por qué está bloqueado
 | Nivel | Qué significa | Abiertos |
 |---|---|---|
 | `priority:p1` | El usuario lo nota, o hay datos en juego | fallback en montaje de red (#73, bloqueado) |
-| `priority:p2` | Deuda de corrección que hoy no muerde | poda de cachés (#75), lo que solo una pantalla puede verificar (#81, bloqueado) |
+| `priority:p2` | Deuda de corrección que hoy no muerde | lo que solo una pantalla puede verificar (#81, bloqueado) |
 | `priority:p3` | Funcionalidad agregable | metadata en el visor de carpetas (#76), bitrate (#77) |
 | `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`), corpora C1/C3 (#79), video contra ffmpeg (#80) |
 | `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |
