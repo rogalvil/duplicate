@@ -28,6 +28,9 @@ final class SimilarApplySheetController: NSWindowController {
     private var report: SimilarDisposalReport?
     private var progressTimer: Timer?
     private var applyTask: Task<Void, Never>?
+    /// Kept so a selftest can await an undo: the work moved into a `Task` when folder manifests started
+    /// being built against the cache instead of on the calling thread.
+    private var undoTask: Task<Void, Never>?
 
     private let headlineLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
@@ -312,11 +315,17 @@ final class SimilarApplySheetController: NSWindowController {
 
     @objc private func undoNow(_ sender: Any?) {
         guard let report, !report.moved.isEmpty else { return }
-        let outcome = UndoCoordinator.undo(sessionID: report.sessionID, in: stateDirectory)
-        headlineLabel.stringValue = outcome.summary
-        listView.string = outcome.detail
-        undoButton.isHidden = true
-        onUndone?()
+        undoButton.isEnabled = false
+        // A folder undo now awaits its manifests, built against the cache instead of on this thread.
+        undoTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let outcome = await UndoCoordinator.undo(
+                sessionID: report.sessionID, in: stateDirectory)
+            headlineLabel.stringValue = outcome.summary
+            listView.string = outcome.detail
+            undoButton.isHidden = true
+            onUndone?()
+        }
     }
 
     private func presentGateRefusal(_ error: any Error) {
@@ -366,5 +375,8 @@ final class SimilarApplySheetController: NSWindowController {
 
     func applyForSelftest() { applyNow(nil) }
     func undoForSelftest() { undoNow(nil) }
+
+    /// Waits for an undo started by ``undoForSelftest()``.
+    func awaitUndoForSelftest() async { await undoTask?.value }
     var reportForSelftest: SimilarDisposalReport? { report }
 }

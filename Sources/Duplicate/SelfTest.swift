@@ -75,7 +75,7 @@ enum SelfTest {
                 case "cache": try await checkHashCache(arguments: arguments)
                 case "storage": try await checkStorageClasses(arguments: arguments)
                 case "trash": try checkTrashRoundTrip()
-                case "undo": try checkUndoCycle()
+                case "undo": try await checkUndoCycle()
                 case "review": try await checkReviewTriState()
                 case "decisions": try checkRealDecisions(arguments: arguments)
                 case "gate": try checkApplyGate()
@@ -1460,7 +1460,7 @@ enum SelfTest {
     ///
     /// Proof of teeth: remove the `fileExists` guard from `UndoRunner.run` and the second half fails with
     /// the user's new file gone.
-    private static func checkUndoCycle() throws {
+    private static func checkUndoCycle() async throws {
         let manager = FileManager.default
         let hasher = ContentHasher()
         let sessionID = "20260511-070000-000001"
@@ -1610,7 +1610,9 @@ enum SelfTest {
                     digest: extraDigest.digest, groupKey: "0:second", scanID: "selftest",
                     timestamp: "2026-08-12T19:00:00.000000Z")
             ], sessionID: secondSession, in: state)
-        let coordinated = UndoCoordinator.undo(sessionID: secondSession, in: state)
+        let coordinated = await UndoCoordinator.undo(
+            sessionID: secondSession, in: state,
+            cacheURL: URL(filePath: scratch + "/hashes.v1"))
         try expect(
             coordinated.restoredCount == 1, "the coordinator restored \(coordinated.restoredCount)")
         try expect(manager.fileExists(atPath: extraPath), "the second file did not come back")
@@ -3551,6 +3553,7 @@ enum SelfTest {
 
         try expect(sheet.canUndo, "the sheet offers no undo after moving a file")
         sheet.undoForSelftest()
+        await sheet.awaitUndoForSelftest()
         try expect(FileManager.default.fileExists(atPath: dupA), "the file was not put back")
         try expect(
             try hasher.fullDigest(atPath: dupA).digest == digestA,
@@ -3584,7 +3587,7 @@ enum SelfTest {
 
         // And a second undo of the same session is a no-op rather than an error, because the `undone_at`
         // records say the work is done.
-        let again = UndoCoordinator.undo(sessionID: report.sessionID, in: state)
+        let again = await UndoCoordinator.undo(sessionID: report.sessionID, in: state)
         try expect(again.restoredCount == 0, "a second undo moved \(again.restoredCount) files")
 
         print("  simulated, applied 1 of 2, refused the file that changed since the scan")
@@ -4587,10 +4590,26 @@ enum SelfTest {
             "the refused folder was moved anyway")
 
         // And the undo puts the tree back, with its manifest digest re-checked.
+        //
+        // **The manifests come from the preflight, which is where the cache can be awaited.** Building them
+        // inside the planner's environment meant hashing the whole folder synchronously with no cache --
+        // measured at 979 MB/s, which is 33.8 seconds of frozen window for a 10,506-file photo folder.
+        //
+        // Teeth: drop the `directoryDigests` argument and this restores 0 folders, because a directory whose
+        // digest could not be computed blocks rather than acts. That is the safe direction, and it is also
+        // exactly what a caller who forgets the preflight now gets.
         let journal = try MoveJournal.load(sessionID: instant.identifier, in: state)
+        let undoCache = HashCache(url: URL(filePath: root + "/hashes.v1"))
+        await undoCache.loadAndRepair()
+        let directoryDigests = await UndoPreflight.directoryDigests(
+            for: journal.entries, cache: undoCache)
+        try expect(
+            !directoryDigests.isEmpty,
+            "the preflight computed no manifest for a session that moved a folder")
         let undoPlan = UndoPlanner.plan(
             sessionID: instant.identifier, entries: journal.entries,
-            restoredPaths: journal.restoredPaths, environment: .live(hasher: ContentHasher()))
+            restoredPaths: journal.restoredPaths,
+            environment: .live(hasher: ContentHasher(), directoryDigests: directoryDigests))
         let undone = UndoRunner().run(undoPlan)
         try expect(undone.restored.count == 1, "\(undone.restored.count) folders restored")
         try expect(
@@ -5016,7 +5035,9 @@ enum SelfTest {
         try expect(history.canUndoSelectionForSelftest, "the older session cannot be undone")
         try expect(!history.canPruneForSelftest, "clean-up is offered with nothing restored")
 
-        let outcome = try expectSome(history.undoForSelftest(1), "the undo returned nothing")
+        let outcome = try expectSome(
+            await history.undoForSelftest(1, cacheURL: URL(filePath: scratch + "/hashes.v1")),
+            "the undo returned nothing")
         try expect(outcome.restoredCount == 1, "restored \(outcome.restoredCount), wanted 1")
         try expect(
             manager.fileExists(atPath: scratch + "/tree/older.txt"),

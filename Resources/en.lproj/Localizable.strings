@@ -229,6 +229,12 @@
 "undo.allRestored" = "Everything was already back. Nothing to do.";
 "undo.nothingToDo" = "Nothing in this session can be put back. The Trash may have been emptied.";
 "undo.noJournal" = "This session has no record, so nothing can be put back.";
+"undo.obstacle.movedFileMissing" = "it is no longer in the Trash — emptied, or moved by something else";
+"undo.obstacle.originalPathOccupied" = "a different file is where this one would go, and it was not overwritten";
+"undo.obstacle.parentMissing" = "the folder it came from no longer exists";
+"undo.obstacle.originalPathIsDirectory" = "a folder now stands where this file used to be";
+"undo.obstacle.contentChanged" = "what is in the Trash is no longer what was put there";
+"undo.obstacle.unverifiable" = "its contents could not be read, so nothing could be checked";
 "button.close" = "Close";
 
 /* Review footer */

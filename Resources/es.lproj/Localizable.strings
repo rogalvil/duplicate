@@ -228,6 +228,12 @@
 "undo.allRestored" = "Todo ya estaba de vuelta. Nada que hacer.";
 "undo.nothingToDo" = "Nada de esta sesión se puede devolver. La Papelera pudo haberse vaciado.";
 "undo.noJournal" = "Esta sesión no tiene registro, así que no se puede devolver nada.";
+"undo.obstacle.movedFileMissing" = "ya no está en la Papelera — se vació, o algo más lo movió";
+"undo.obstacle.originalPathOccupied" = "otro archivo ocupa el lugar al que volvería, y no se sobrescribió";
+"undo.obstacle.parentMissing" = "la carpeta de donde salió ya no existe";
+"undo.obstacle.originalPathIsDirectory" = "ahora hay una carpeta donde estaba este archivo";
+"undo.obstacle.contentChanged" = "lo que está en la Papelera ya no es lo que se puso ahí";
+"undo.obstacle.unverifiable" = "no se pudo leer su contenido, así que no se pudo comprobar nada";
 "button.close" = "Cerrar";
 
 /* Pie de la revisión */

@@ -116,6 +116,9 @@ final class ApplySheetController: NSWindowController {
     private var progressTimer: Timer?
     /// Held so the stop button can reach the run.
     private var applyTask: Task<Void, Never>?
+    /// Kept so a selftest can await an undo: the work moved into a `Task` when folder manifests started
+    /// being built against the cache instead of on the calling thread.
+    private var undoTask: Task<Void, Never>?
 
     private let headlineLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
@@ -388,14 +391,19 @@ final class ApplySheetController: NSWindowController {
     @objc private func undoNow(_ sender: Any?) {
         guard let report else { return }
         undoButton.isEnabled = false
-        let outcome = UndoCoordinator.undo(sessionID: report.sessionID, in: stateDirectory)
-        onUndone?()
-        headlineLabel.stringValue = String(
-            format: Strings.string("undo.done.headline"),
-            outcome.restoredCount, ByteSize.format(outcome.restoredBytes)
-        )
-        detailLabel.stringValue = outcome.summary
-        listView.string = outcome.detail
+        // A folder undo now awaits its manifests, built against the cache instead of on this thread.
+        undoTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let outcome = await UndoCoordinator.undo(
+                sessionID: report.sessionID, in: stateDirectory)
+            onUndone?()
+            headlineLabel.stringValue = String(
+                format: Strings.string("undo.done.headline"),
+                outcome.restoredCount, ByteSize.format(outcome.restoredBytes)
+            )
+            detailLabel.stringValue = outcome.summary
+            listView.string = outcome.detail
+        }
     }
 
     private func presentGateRefusal(_ error: any Error) {
@@ -444,6 +452,9 @@ final class ApplySheetController: NSWindowController {
         (progressLabel.isHidden, progressLabel.stringValue)
     }
     func undoForSelftest() { undoNow(nil) }
+
+    /// Waits for an undo started by ``undoForSelftest()``.
+    func awaitUndoForSelftest() async { await undoTask?.value }
 
     /// Waits for a running apply to finish.
     func awaitApplyForSelftest() async {

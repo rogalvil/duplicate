@@ -22,6 +22,14 @@ public enum UndoObstacle: String, Hashable, Sendable {
     case originalPathIsDirectory
     /// The moved file no longer hashes to what the journal recorded.
     case contentChanged
+    /// Its digest could not be computed, so the claim could not be checked either way.
+    ///
+    /// **Its own case because `contentChanged` accuses the file.** For a directory the digest is its manifest,
+    /// computed ahead of time by ``UndoPreflight``; when that could not read the folder there is nothing to
+    /// compare, and saying "this changed" would be telling the user something about their data that nobody
+    /// established. Blocks exactly the same -- this planner never acts on what it could not verify -- and says
+    /// the true reason.
+    case unverifiable
 }
 
 /// A plan for undoing one session.
@@ -98,7 +106,20 @@ public enum UndoPlanner {
         /// `any FileHashing` rather than `some`: the closure below has to be `@Sendable`, and an opaque
         /// generic parameter is not known to be `Sendable` at the point it is captured even when every
         /// conformer is. The existential carries the constraint.
-        public static func live(hasher: any FileHashing) -> Environment {
+        ///
+        /// - Parameter directoryDigests: manifest digests computed ahead of time, by path. **A directory has no
+        ///   content digest of its own**, so an undo needs its manifest -- and building one inline here meant
+        ///   walking and hashing the whole folder synchronously, on the main thread, with no cache. Measured at
+        ///   979 MB/s on this machine: **33.8 seconds of frozen window** for a 10,506-file photo folder, while
+        ///   the comment at this very call site claimed the digests came from the cache. They could not: the
+        ///   cache is an actor and this closure is synchronous.
+        ///
+        ///   So they are computed before planning, by ``UndoPreflight``, which can await the cache the apply
+        ///   just filled. The planner stays a pure synchronous function over an environment, which is the
+        ///   property that lets the decision be reviewed apart from the mutation.
+        public static func live(
+            hasher: any FileHashing, directoryDigests: [String: Digest32] = [:]
+        ) -> Environment {
             let hash: @Sendable (String) -> Digest32? = { path in
                 {
                     // **A folder entry's digest is its manifest**, because a directory has no content digest of
@@ -108,10 +129,10 @@ public enum UndoPlanner {
                     guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
                     else { return nil }
                     if isDirectory.boolValue {
-                        // Synchronous on purpose: this closure is the environment the planner calls, and the
-                        // planner is a pure function over it. A folder that was just trashed is small enough --
-                        // and its digests are in the cache -- for this to be paid once per entry.
-                        return FolderManifest.buildSynchronously(root: path, hasher: hasher)?.digest
+                        // Looked up, never built here. A missing entry means the preflight could not read the
+                        // folder, and `nil` makes the planner block the restore -- which is the safe direction
+                        // and the honest one: it could not verify, so it does not act.
+                        return directoryDigests[DirectoryTree.canonical(path)]
                     }
                     return try? hasher.fullDigest(atPath: path).digest
                 }()
@@ -182,7 +203,10 @@ public enum UndoPlanner {
         }
         // What is in the Trash must still be what was put there. A user who edited a file inside the Trash
         // and then undid the session would otherwise get those edits written over their original path.
-        guard environment.digest(entry.resultingPath) == entry.digest else {
+        guard let fresh = environment.digest(entry.resultingPath) else {
+            return .blocked(entry, .unverifiable)
+        }
+        guard fresh == entry.digest else {
             return .blocked(entry, .contentChanged)
         }
         return .restore(entry)
