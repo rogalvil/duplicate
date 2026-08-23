@@ -95,15 +95,24 @@ jobs:
           fi
           printf '%s\n' "$changed" | sed 's/^/  /'
 
-      # **A cache of `.build`, and it is the only way under the one-minute floor.** Every run compiled
-      # the package twice from scratch -- once in debug for the selftests and once with coverage
-      # instrumentation -- which is where the 1.74-minute average went. The key moves with the manifest
-      # and the toolchain; the restore keys let an unrelated source change still start from the last
-      # build instead of from nothing.
+      # **A cache of `.build`.** Every run compiled the package twice from scratch -- once in debug for the
+      # selftests and once with coverage instrumentation -- which is where the 1.74-minute average went.
+      # The key moves with the manifest; the restore keys let an unrelated source change still start from
+      # the last build instead of from nothing.
       #
-      # Correctness rests on Swift's own incremental build, which is the same mechanism a developer
-      # trusts locally a hundred times a day. A stale artifact would have to survive a changed source
-      # hash, and the build system keys on content.
+      # Correctness rests on Swift's own incremental build, which is the same mechanism a developer trusts
+      # locally a hundred times a day. A stale artifact would have to survive a changed source hash, and
+      # the build system keys on content.
+      #
+      # **And it helps less than it looks, which is worth writing down rather than discovering.** GitHub
+      # scopes a cache to the branch that created it plus the default branch, and this workflow never runs
+      # on a push to `main` -- only on pull requests. So no run ever populates a cache that other branches
+      # can see, and a pull request's *first* run always compiles from nothing. It pays off from the second
+      # push onwards, which is the common case for anything that needs a fix.
+      #
+      # Warming it would mean a `push: [main]` trigger, one extra run per merge. That was worth arguing
+      # about while the private-repo quota was the constraint; the repository is public now and Actions is
+      # free, so it is left out rather than traded for double the runs.
       - name: Restore the build directory
         if: steps.scope.outputs.code == 'true'
         uses: actions/cache@v4
