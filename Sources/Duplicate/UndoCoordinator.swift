@@ -36,18 +36,31 @@ enum UndoCoordinator {
     ///
     /// **The plan is re-checked immediately before each move**, inside `UndoRunner`, because it may have
     /// been shown to a user minutes ago and something could have appeared at the original path since.
-    static func undo(sessionID: String, in state: StateDirectory) -> Outcome {
+    /// **`async` because of the folder case.** A directory has no digest of its own, so verifying one means
+    /// rebuilding its manifest -- and doing that from the planner's synchronous environment meant hashing the
+    /// whole folder on the main thread with no cache: measured, 33.8 seconds of frozen window for a 10,506-file
+    /// photo folder, right after the apply that put those very digests in the cache. The manifests are built
+    /// first, by ``UndoPreflight``, which can await it.
+    static func undo(
+        sessionID: String, in state: StateDirectory, cacheURL: URL? = nil
+    ) async -> Outcome {
         guard let loaded = try? MoveJournal.load(sessionID: sessionID, in: state) else {
             return Outcome(
                 restoredCount: 0, restoredBytes: 0,
                 summary: Strings.string("undo.noJournal"), detail: ""
             )
         }
+        let hasher = ContentHasher()
+        let cache = HashCache(url: cacheURL ?? HashCache.defaultURL())
+        await cache.loadAndRepair()
+        let directoryDigests = await UndoPreflight.directoryDigests(
+            for: loaded.entries, hasher: hasher, cache: cache)
+        _ = try? await cache.persist()
         let plan = UndoPlanner.plan(
             sessionID: sessionID,
             entries: loaded.entries,
             restoredPaths: loaded.restoredPaths,
-            environment: .live(hasher: ContentHasher())
+            environment: .live(hasher: hasher, directoryDigests: directoryDigests)
         )
 
         // **Never show a Restore button that will do nothing.** An emptied Trash makes every entry
@@ -88,7 +101,9 @@ enum UndoCoordinator {
         if !plan.blocked.isEmpty {
             detail +=
                 "\n"
-                + plan.blocked.map { "\($0.entry.originalPath)  \u{2014}  \($0.obstacle.rawValue)" }
+                + plan.blocked.map {
+                    "\($0.entry.originalPath)  \u{2014}  \(obstacleText($0.obstacle))"
+                }
                 .joined(separator: "\n")
         }
 
@@ -98,6 +113,24 @@ enum UndoCoordinator {
             summary: notes.isEmpty ? Strings.string("undo.clean") : notes.joined(separator: " "),
             detail: detail
         )
+    }
+
+    /// Why one file cannot be put back, in the user's language.
+    ///
+    /// **This list was printing Swift.** An obstacle came out as `originalPathOccupied`, which names a case of
+    /// an enum rather than telling someone that their own newer file is sitting where the old one would go --
+    /// and that distinction is the difference between "the app is broken" and "the app declined to overwrite my
+    /// work".
+    static func obstacleText(_ obstacle: UndoObstacle) -> String {
+        switch obstacle {
+        case .movedFileMissing: return Strings.string("undo.obstacle.movedFileMissing")
+        case .originalPathOccupied: return Strings.string("undo.obstacle.originalPathOccupied")
+        case .parentMissing: return Strings.string("undo.obstacle.parentMissing")
+        case .originalPathIsDirectory:
+            return Strings.string("undo.obstacle.originalPathIsDirectory")
+        case .contentChanged: return Strings.string("undo.obstacle.contentChanged")
+        case .unverifiable: return Strings.string("undo.obstacle.unverifiable")
+        }
     }
 
     private static func obstacleSummary(_ plan: UndoPlan) -> String {
@@ -111,7 +144,7 @@ enum UndoCoordinator {
     }
 
     private static func obstacleDetail(_ plan: UndoPlan) -> String {
-        plan.blocked.map { "\($0.entry.originalPath)  \u{2014}  \($0.obstacle.rawValue)" }
+        plan.blocked.map { "\($0.entry.originalPath)  \u{2014}  \(obstacleText($0.obstacle))" }
             .joined(separator: "\n")
     }
 }

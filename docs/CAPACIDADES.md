@@ -8,7 +8,7 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR del historial de sesiones. 40 modos de selftest, 766 tests, 94.59% de cobertura
+Última actualización: PR del preflight de deshacer. 40 modos de selftest, 768 tests, 94.83% de cobertura
 sobre `DuplicateCore`.
 
 ## Resumen en una tabla
@@ -124,7 +124,8 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Verificar antes de actuar | Exactos: se re-hashea contra el digest del escaneo. Perceptual: se **re-puntúa el par** (un escaneo perceptual no guarda digests). Carpetas: **contención**, no similitud — cada archivo necesita gemelo byte-idéntico en la misma ruta relativa |
 | Compuerta de dry-run | Aplicar exige una simulación **vigente**: editar una decisión invalida la aprobación, comparada por huella FNV-1a (no el `Hasher` de Swift, que está sembrado por proceso) |
 | Journal JSON Lines | Lotes de 32 durante el apply, no al final. Un `undone_at` se **agrega**, no reescribe |
-| Deshacer sesión | Ocupante byte-idéntico cuenta como ya restaurado; cualquier otro **bloquea**, nunca sobrescribe. Se re-chequea justo antes de mover |
+| Deshacer sesión | Ocupante byte-idéntico cuenta como ya restaurado; cualquier otro **bloquea**, nunca sobrescribe. Se re-chequea justo antes de mover. Los manifiestos de carpeta se precalculan contra la caché, no en el hilo que llama: la diferencia medida es **33.8 s de ventana congelada** en una carpeta de 10,506 fotos |
+| Las razones de un bloqueo se leen | "otro archivo ocupa el lugar al que volvería, y no se sobrescribió", no `originalPathOccupied`. Y un digest que no se pudo calcular dice **eso**, no que el contenido cambió |
 | Historial de sesiones | Lista cada apply con su fecha, cuántos archivos movió, cuántos volvieron y de qué escaneo salieron, y **deshace cualquiera, no solo la última** |
 | Limpiar journals ya deshechos | Solo sesiones con **todos** sus archivos de vuelta, probado por sus propios `undone_at`, con los conteos antes de confirmar. Una sesión ilegible o vacía **no** es podable: borrarla no gana nada y destruye la única evidencia |
 | Colapso de pares anidados | `Pole ↔ Pole` y `Pole/videos ↔ Pole/videos` son pares separados en el corpus real; mover el padre se lleva al hijo |
@@ -221,7 +222,7 @@ gh issue list --label bloqueado       # y por qué está bloqueado
 | Nivel | Qué significa | Abiertos |
 |---|---|---|
 | `priority:p1` | El usuario lo nota, o hay datos en juego | fallback en montaje de red (#73, bloqueado) |
-| `priority:p2` | Deuda de corrección que hoy no muerde | asimetría de cancelación en `buildSynchronously` (#74), poda de cachés (#75), lo que solo una pantalla puede verificar (#81, bloqueado) |
+| `priority:p2` | Deuda de corrección que hoy no muerde | poda de cachés (#75), lo que solo una pantalla puede verificar (#81, bloqueado) |
 | `priority:p3` | Funcionalidad agregable | metadata en el visor de carpetas (#76), bitrate (#77) |
 | `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`), corpora C1/C3 (#79), video contra ffmpeg (#80) |
 | `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |

@@ -162,18 +162,23 @@ final class SessionHistoryWindowController: NSWindowController, NSTableViewDataS
         confirm.addButton(withTitle: Strings.string("button.cancel"))
         guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
-        let outcome = UndoCoordinator.undo(sessionID: row.sessionID, in: stateDirectory)
-        let done = NSAlert()
-        done.alertStyle = .informational
-        done.messageText = outcome.summary
-        done.informativeText = outcome.detail
-        done.addButton(withTitle: Strings.string("button.close"))
-        done.runModal()
-        reload()
-        // **A review window open at the same time keeps its last disk check.** Refreshing it from here would
-        // mean starting a check that stats every file in the scan -- work the user did not ask for, behind their
-        // back, because they undid something in another window. A stale label they can refresh with one button
-        // is the smaller wrong.
+        undoButton.isEnabled = false
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let outcome = await UndoCoordinator.undo(
+                sessionID: row.sessionID, in: stateDirectory)
+            let done = NSAlert()
+            done.alertStyle = .informational
+            done.messageText = outcome.summary
+            done.informativeText = outcome.detail
+            done.addButton(withTitle: Strings.string("button.close"))
+            done.runModal()
+            reload()
+            // **A review window open at the same time keeps its last disk check.** Refreshing it from here
+            // would mean starting a check that stats every file in the scan -- work the user did not ask for,
+            // behind their back, because they undid something in another window. A stale label they can
+            // refresh with one button is the smaller wrong.
+        }
     }
 
     @objc func pruneFromHistory(_ sender: Any?) {
@@ -258,9 +263,10 @@ final class SessionHistoryWindowController: NSWindowController, NSTableViewDataS
     }
 
     /// Runs the undo without the confirmation sheet, which is what a harness can drive.
-    func undoForSelftest(_ index: Int) -> UndoCoordinator.Outcome? {
+    func undoForSelftest(_ index: Int, cacheURL: URL? = nil) async -> UndoCoordinator.Outcome? {
         guard rows.indices.contains(index), rows[index].hasWorkLeft else { return nil }
-        let outcome = UndoCoordinator.undo(sessionID: rows[index].sessionID, in: stateDirectory)
+        let outcome = await UndoCoordinator.undo(
+            sessionID: rows[index].sessionID, in: stateDirectory, cacheURL: cacheURL)
         reload()
         return outcome
     }

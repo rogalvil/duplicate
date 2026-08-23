@@ -250,6 +250,25 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Un `undone_at` se agrega, no reescribe la línea original.** Así el journal sigue siendo un log
   veraz de lo que pasó en orden, en vez de un resumen mutable del estado actual — y un rewrite que
   falle a la mitad perdería todo.
+- **El digest de un directorio es su manifiesto, y construirlo dentro del entorno del planificador costaba 33.8
+  segundos de ventana congelada.** El entorno es síncrono —eso es su diseño, para que la decisión se revise aparte
+  de la mutación—, así que no podía consultar la caché, que es un actor. Medido: 979 MB/s sobre 200 archivos de 3 MB,
+  o sea 33.8 s extrapolados a una carpeta de 10,506 fotos, **justo después del apply que puso esos mismos digests en
+  la caché**. Y el comentario en el call site decía que venían de la caché: era falso, `buildSynchronously` no
+  recibía ninguna. Ahora los precalcula `UndoPreflight` (async, cacheado, cancelable) y el planificador sigue siendo
+  puro.
+- **Con eso `FolderManifest.buildSynchronously` desaparece, y con ella dos implementaciones del mismo manifiesto.**
+  Un manifiesto es lo que decide si una carpeta se borra; dos versiones que podían discrepar sobre qué archivos
+  cuentan era el riesgo de fondo, más grande que la asimetría de cancelación que lo destapó.
+- **Un digest ausente NO es `contentChanged`.** Bloquea igual —este planificador nunca actúa sobre lo que no pudo
+  verificar— pero la razón verdadera es `unverifiable`. Decir "esto cambió" cuando el digest nunca se calculó le
+  afirma al usuario algo sobre sus datos que nadie estableció. Tercera vez que aparece este patrón en el proyecto.
+- **Los obstáculos del deshacer se pintaban con `rawValue`**, o sea `originalPathOccupied` en pantalla. Esa
+  distinción es la diferencia entre "la app está rota" y "la app se negó a sobrescribir mi trabajo".
+- **Volver `async` el undo convierte los hooks del arnés en carreras.** El `undoNow` de las hojas lanza un `Task` y
+  regresa; el arnés afirmaba de inmediato y salía `the file was not put back`. Cada hoja guarda su `undoTask` y
+  expone un `awaitUndoForSelftest()`. **Ojo**: `undoForSelftest()` existe con ese nombre también en las revisiones,
+  donde significa ⌘Z —otra cosa—, y un `sed` sobre el nombre se los llevó a los dos.
 - **Una ruta original ocupada nunca se sobrescribe.** Contenido byte-idéntico cuenta como *ya
   restaurado* (pudo haberlo devuelto el propio Finder, que la app no puede ver); cualquier otra cosa
   se bloquea. El runner **vuelve a chequear** justo antes de mover, porque el plan pudo mostrarse al

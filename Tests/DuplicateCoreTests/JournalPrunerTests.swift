@@ -122,3 +122,79 @@ struct JournalPrunerTests {
         #expect(scratch.state.path(for: .journal).hasPrefix(NSTemporaryDirectory()))
     }
 }
+
+@Suite("UndoPreflight")
+struct UndoPreflightTests {
+
+    /// **A directory's digest is its manifest, and it has to come from somewhere that can await the cache.**
+    /// Building it inside the planner's synchronous environment meant hashing the whole folder on the calling
+    /// thread with no cache: measured at 979 MB/s over 200 three-megabyte files, which is 33.8 seconds for a
+    /// 10,506-file photo folder -- right after the apply that put those digests in the cache.
+    @Test("The preflight digests the directories a journal moved, and skips the files")
+    func digestsDirectoriesOnly() async throws {
+        let scratch = try PrunerScratch()
+        defer { scratch.remove() }
+        let manager = FileManager.default
+
+        let folder = scratch.root + "/moved-folder"
+        try manager.createDirectory(atPath: folder + "/sub", withIntermediateDirectories: true)
+        try Data("one".utf8).write(to: URL(filePath: folder + "/one.txt"))
+        try Data("two".utf8).write(to: URL(filePath: folder + "/sub/two.txt"))
+        let loose = scratch.root + "/loose.txt"
+        try Data("loose".utf8).write(to: URL(filePath: loose))
+
+        let entries = [
+            JournalEntry(
+                originalPath: folder, resultingPath: folder, mechanism: .trash, byteCount: 6,
+                digest: Digest32(hexString: String(repeating: "b", count: 64))!,
+                groupKey: "folder", scanID: "s", timestamp: "2026-08-12T12:00:00.000000Z"),
+            JournalEntry(
+                originalPath: loose, resultingPath: loose, mechanism: .trash, byteCount: 5,
+                digest: Digest32(hexString: String(repeating: "c", count: 64))!,
+                groupKey: "file", scanID: "s", timestamp: "2026-08-12T12:00:00.000000Z"),
+        ]
+
+        let digests = await UndoPreflight.directoryDigests(for: entries)
+        #expect(
+            digests.count == 1,
+            "the preflight digested \(digests.count) paths, wanted the folder only")
+        let manifest = try await FolderManifest.build(root: folder)
+        #expect(digests[DirectoryTree.canonical(folder)] == manifest.digest)
+        #expect(digests[DirectoryTree.canonical(loose)] == nil, "a file was treated as a directory")
+    }
+
+    /// Without the preflight, a folder restore blocks rather than acting.
+    ///
+    /// **The safe direction, and the one a forgotten preflight gets.** An absent digest means "could not
+    /// verify", and this planner never acts on something it could not verify -- the alternative is restoring a
+    /// folder whose contents changed while it sat in the Trash.
+    @Test("A directory with no precomputed digest is blocked, not restored")
+    func blocksWithoutTheirDigests() async throws {
+        let scratch = try PrunerScratch()
+        defer { scratch.remove() }
+        let folder = scratch.root + "/trashed"
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        try Data("inside".utf8).write(to: URL(filePath: folder + "/a.txt"))
+
+        let entry = JournalEntry(
+            originalPath: scratch.root + "/gone", resultingPath: folder, mechanism: .trash,
+            byteCount: 6, digest: try await FolderManifest.build(root: folder).digest,
+            groupKey: "folder", scanID: "s", timestamp: "2026-08-12T12:00:00.000000Z")
+
+        let without = UndoPlanner.plan(
+            sessionID: "20260812-120000-000000", entries: [entry], restoredPaths: [],
+            environment: .live(hasher: ContentHasher()))
+        #expect(
+            without.restorable.isEmpty,
+            "a folder was planned for restore with no digest to verify it")
+        // **Blocked as unverifiable, not as changed.** `contentChanged` would tell the user something about
+        // their data that nobody established: the digest was never computed.
+        #expect(without.blocked.map(\.obstacle) == [.unverifiable])
+
+        let digests = await UndoPreflight.directoryDigests(for: [entry])
+        let with = UndoPlanner.plan(
+            sessionID: "20260812-120000-000000", entries: [entry], restoredPaths: [],
+            environment: .live(hasher: ContentHasher(), directoryDigests: digests))
+        #expect(with.restorable.count == 1, "the folder was not planned even with its digest")
+    }
+}

@@ -51,31 +51,6 @@ public struct FolderManifest: Sendable, Hashable {
         return PathOrder.sorted(missing)
     }
 
-    /// The same, without concurrency, for callers that are pure functions over an environment.
-    ///
-    /// Used by the undo planner, which is deliberately synchronous so the decision and the mutation can be
-    /// reviewed apart. Returns `nil` when the walk fails.
-    public static func buildSynchronously(
-        root: String,
-        walker: any DirectoryEnumerating = FileManagerWalker(),
-        hasher: any FileHashing = ContentHasher(),
-        policy: ScanPolicy = ScanPolicy()
-    ) -> FolderManifest? {
-        let canonical = DirectoryTree.canonical(root)
-        guard
-            let walk = try? walker.walk(root: canonical, policy: policy, exclusions: ExclusionSet())
-        else { return nil }
-        var entries: [String: Digest32] = [:]
-        for entry in walk.entries {
-            let relative = PathElision.relative(DirectoryTree.canonical(entry.path), to: canonical)
-            // The synchronous build is only reached from the undo planner, where a short manifest fails its
-            // digest comparison and blocks the restore -- the safe direction. Left as it is on purpose.
-            guard let result = try? hasher.fullDigest(atPath: entry.path) else { continue }
-            entries[relative] = result.digest
-        }
-        return FolderManifest(root: canonical, entries: entries)
-    }
-
     /// Builds a manifest by walking and hashing.
     ///
     /// The digest cache is consulted, so a folder that was just scanned costs almost nothing to verify --
