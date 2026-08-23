@@ -44,7 +44,7 @@ enum SelfTest {
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
             "similar-window", "video", "similar-apply", "folder-apply", "cancel", "keeper",
             "format", "progress", "volumes", "realroot", "phash-differential", "history",
-            "cache-liveness", "video-timing",
+            "cache-liveness", "video-timing", "corpus",
         ]
 
         let modes: [String]
@@ -103,6 +103,7 @@ enum SelfTest {
                 case "history": try await checkSessionHistory()
                 case "cache-liveness": try checkCacheLiveness(arguments: arguments)
                 case "video-timing": try await checkVideoTiming(arguments: arguments)
+                case "corpus": try await checkCorpus(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -5299,6 +5300,112 @@ enum SelfTest {
         let ratio = results[1].elapsed / max(results[0].elapsed, 1e-9)
         print(
             "  exact seek costs \(String(format: "%.2f", ratio))x the shipped tolerance")
+    }
+
+    // MARK: - corpus
+
+    /// Runs a real scan over a synthetic corpus and prints the benchmark row the plan asked for.
+    ///
+    /// **The plan wanted three corpora and only the real one had ever been used**, which makes every number
+    /// measured so far true for this user and impossible for anyone else to reproduce.
+    /// `scripts/make-corpus.py` builds the other two from a fixed seed and this measures them.
+    ///
+    /// **`--prefix-threshold` is the point.** The prefix stage was recalibrated to 8 MiB on evidence that it
+    /// bought nothing on a photo library -- it probes 2 files of 3,421 there -- which means it is currently
+    /// justified by the case the real corpus does *not* contain: two same-size files that differ only in the
+    /// tail. This runs the same corpus with the probe on and off and prints the bytes.
+    ///
+    /// Read-only over the corpus. The scan document goes to a temporary state directory.
+    private static func checkCorpus(arguments: [String]) async throws {
+        guard let root = value(for: "--dir", in: arguments) else {
+            print("  SKIPPED: pass --dir <corpus> to measure it")
+            print("  build one with: python3 scripts/make-corpus.py c1-prefix <dir>")
+            return
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: root, isDirectory: &isDirectory),
+            isDirectory.boolValue
+        else { throw SelfTestFailure("\(root) is not a directory") }
+
+        let threshold = value(for: "--prefix-threshold", in: arguments).flatMap { Int64($0) }
+        let scratch = NSTemporaryDirectory() + "duplicate-corpus-\(getpid())"
+        defer { try? FileManager.default.removeItem(atPath: scratch) }
+        try FileManager.default.createDirectory(
+            atPath: scratch, withIntermediateDirectories: true)
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": scratch], homePath: scratch)
+
+        // The folder detector instead, which is what C3 exists to measure: a deep tree with whole subtrees
+        // duplicated, where the redesign's only quadratic case lives.
+        if arguments.contains("--folders") {
+            let clock = ContinuousClock()
+            let started = clock.now
+            let result = try await FolderScanSession(
+                store: ScanStore(state: state),
+                cacheURL: URL(filePath: scratch + "/hashes.v1")
+            ).run(
+                FolderScanSession.Request(root: root),
+                instant: ScanIdentifier.Instant(
+                    year: 2026, month: 8, day: 23, hour: 0, minute: 0, second: 0, microsecond: 0))
+            let elapsed = clock.now - started
+            let seconds =
+                Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+            var usage = rusage()
+            getrusage(RUSAGE_SELF, &usage)
+            try expect(result.folderCount > 0, "the folder scan saw no folders")
+            print(
+                "  folders: \(result.folderCount) directories, \(result.scan.pairs.count) pairs, "
+                    + "\(result.truncated.count) truncated classes")
+            print(
+                "  \(String(format: "%.2f", seconds))s wall, peak RSS "
+                    + ByteSize.format(Int64(usage.ru_maxrss)))
+            for truncated in result.truncated.prefix(3) {
+                print("  truncated: \(truncated.basename) with \(truncated.fileCount) files")
+            }
+            return
+        }
+
+        var configuration = ContentHasher.Configuration()
+        if let threshold { configuration.prefixThreshold = threshold }
+        let progress = ProgressCounters()
+        let clock = ContinuousClock()
+        let started = clock.now
+        let outcome = try await DuplicateFinder(hasher: ContentHasher(configuration: configuration))
+            .find(
+                root: root,
+                instant: ScanIdentifier.Instant(
+                    year: 2026, month: 8, day: 23, hour: 0, minute: 0, second: 0, microsecond: 0),
+                configuration: .init(),
+                progress: progress
+            )
+        let elapsed = clock.now - started
+        _ = state
+
+        let snapshot = progress.snapshot()
+        let seconds =
+            Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+        var usage = rusage()
+        getrusage(RUSAGE_SELF, &usage)
+        // `ru_maxrss` is bytes on Darwin and kilobytes on Linux. This app is macOS only.
+        let peak = Int64(usage.ru_maxrss)
+
+        let files = snapshot.filesSeen
+        try expect(files > 0, "the corpus walked to zero files")
+        try expect(
+            outcome.scan.groups.allSatisfy { $0.files.count >= 2 },
+            "a group with fewer than two files was emitted")
+
+        print(
+            "  \(root)"
+                + (threshold.map { " (prefix threshold \(ByteSize.format($0)))" }
+                    ?? " (shipped threshold)"))
+        print(
+            "  \(files) files, \(outcome.scan.groups.count) groups, "
+                + "\(ByteSize.format(snapshot.bytesRead)) read, \(snapshot.filesProbed) probed")
+        print(
+            "  \(String(format: "%.2f", seconds))s wall, "
+                + "\(String(format: "%.0f", Double(files) / max(seconds, 1e-9))) files/s, "
+                + "\(String(format: "%.0f", Double(snapshot.bytesRead) / 1e6 / max(seconds, 1e-9))) MB/s, "
+                + "peak RSS \(ByteSize.format(peak))")
     }
 
     // MARK: - cancel

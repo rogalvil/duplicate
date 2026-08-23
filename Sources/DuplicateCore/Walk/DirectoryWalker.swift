@@ -155,65 +155,83 @@ public struct FileManagerWalker: DirectoryEnumerating, Sendable {
             throw WalkError.rootNotEnumerable(root)
         }
 
-        while let url = enumerator.nextObject() as? URL {
-            visited += 1
-            let path = Self.restoringRequestedPrefix(
-                url.path(percentEncoded: false),
-                resolvedRoot: resolvedRoot,
-                requestedRoot: requestedRoot
-            )
-            // Cheap and correct: these come from the prefetched batch on this specific URL instance.
-            // Never reuse a URL across reads -- URL caches resource values, so a second read of the
-            // same instance returns what the first one saw.
-            guard let values = try? url.resourceValues(forKeys: Set(Self.entryKeys)) else {
-                inaccessible.append(path)
-                continue
-            }
-
-            let volume = OpaqueIdentifier.fold(values.volumeIdentifier)
-            let identity = zip1(volume, values.fileIdentifier).map(FileIdentity.init)
-            let candidate = WalkCandidate(
-                name: values.name ?? url.lastPathComponent,
-                isDirectory: values.isDirectory ?? false,
-                isSymbolicLink: values.isSymbolicLink ?? false,
-                isRegularFile: values.isRegularFile ?? false,
-                isPackage: values.isPackage ?? false,
-                isHidden: false,
-                size: values.fileSize.map(Int64.init),
-                identity: identity,
-                isOnForeignVolume: rootVolume != nil && volume != nil && rootVolume != volume
-            )
-
-            if candidate.isDirectory, !candidate.isSymbolicLink {
-                if let identity, !seenDirectories.insert(identity).inserted {
-                    enumerator.skipDescendants()
-                    continue
-                }
-                if let reason = filter.reasonToPrune(candidate) {
-                    skipped[reason, default: 0] += 1
-                    enumerator.skipDescendants()
-                }
-                continue
-            }
-
-            if let reason = filter.reasonToSkip(candidate) {
-                skipped[reason, default: 0] += 1
-                continue
-            }
-
-            entries.append(
-                FileEntry(
-                    path: path,
-                    size: candidate.size ?? 0,
-                    identity: identity,
-                    contentIdentifier: values.fileContentIdentifier,
-                    linkCount: values.linkCount,
-                    generation: OpaqueIdentifier.fold(values.generationIdentifier),
-                    modifiedNanoseconds: values.contentModificationDate.map {
-                        Int64(($0.timeIntervalSince1970 * 1_000_000_000).rounded())
+        // **Drained in batches, and nothing drained before.** `nextObject()` and `resourceValues` both hand
+        // back autoreleased Objective-C objects, and a synchronous loop that never returns to a run loop never
+        // releases them: measured over a synthetic corpus of 200,000 files, peak RSS was **298 MB**, about 1.4 KB
+        // per file, against the plan's estimate of ~146 bytes. The real corpus is 71,580 files, which is why
+        // this was never visible -- it stayed under the 400 MB target by being small enough.
+        //
+        // A batch rather than one pool per entry: a pool has a cost of its own, and 512 keeps the high-water
+        // mark to half a megabyte of autoreleased objects while paying for 390 pools over 200,000 files.
+        var finished = false
+        while !finished {
+            autoreleasepool {
+                for _ in 0..<Self.autoreleaseBatch {
+                    guard let url = enumerator.nextObject() as? URL else {
+                        finished = true
+                        return
                     }
-                )
-            )
+                    visited += 1
+                    let path = Self.restoringRequestedPrefix(
+                        url.path(percentEncoded: false),
+                        resolvedRoot: resolvedRoot,
+                        requestedRoot: requestedRoot
+                    )
+                    // Cheap and correct: these come from the prefetched batch on this specific URL instance.
+                    // Never reuse a URL across reads -- URL caches resource values, so a second read of the
+                    // same instance returns what the first one saw.
+                    guard let values = try? url.resourceValues(forKeys: Set(Self.entryKeys)) else {
+                        inaccessible.append(path)
+                        continue
+                    }
+
+                    let volume = OpaqueIdentifier.fold(values.volumeIdentifier)
+                    let identity = zip1(volume, values.fileIdentifier).map(FileIdentity.init)
+                    let candidate = WalkCandidate(
+                        name: values.name ?? url.lastPathComponent,
+                        isDirectory: values.isDirectory ?? false,
+                        isSymbolicLink: values.isSymbolicLink ?? false,
+                        isRegularFile: values.isRegularFile ?? false,
+                        isPackage: values.isPackage ?? false,
+                        isHidden: false,
+                        size: values.fileSize.map(Int64.init),
+                        identity: identity,
+                        isOnForeignVolume: rootVolume != nil && volume != nil
+                            && rootVolume != volume
+                    )
+
+                    if candidate.isDirectory, !candidate.isSymbolicLink {
+                        if let identity, !seenDirectories.insert(identity).inserted {
+                            enumerator.skipDescendants()
+                            continue
+                        }
+                        if let reason = filter.reasonToPrune(candidate) {
+                            skipped[reason, default: 0] += 1
+                            enumerator.skipDescendants()
+                        }
+                        continue
+                    }
+
+                    if let reason = filter.reasonToSkip(candidate) {
+                        skipped[reason, default: 0] += 1
+                        continue
+                    }
+
+                    entries.append(
+                        FileEntry(
+                            path: path,
+                            size: candidate.size ?? 0,
+                            identity: identity,
+                            contentIdentifier: values.fileContentIdentifier,
+                            linkCount: values.linkCount,
+                            generation: OpaqueIdentifier.fold(values.generationIdentifier),
+                            modifiedNanoseconds: values.contentModificationDate.map {
+                                Int64(($0.timeIntervalSince1970 * 1_000_000_000).rounded())
+                            }
+                        )
+                    )
+                }
+            }
         }
 
         return WalkResult(
@@ -234,6 +252,9 @@ public struct FileManagerWalker: DirectoryEnumerating, Sendable {
     ///
     /// A path that does not start with the resolved prefix is returned untouched. That should not
     /// happen, and silently mangling it would be worse than reporting it as it came.
+    /// How many entries to take before draining the autorelease pool.
+    static let autoreleaseBatch = 512
+
     static func restoringRequestedPrefix(
         _ path: String,
         resolvedRoot: String,

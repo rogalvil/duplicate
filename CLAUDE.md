@@ -505,6 +505,30 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   barrido en frío necesita `sudo purge`. **Por eso la política no se cambió**: cambiar un default enviado sobre una
   medición con esa salvedad sería el error que este archivo lleva cincuenta PRs registrando.
 - **RSS pico entre 21.7 y 54.8 MB**, contra el objetivo de < 400 MB. Sobra un orden de magnitud.
+- **No había un solo `autoreleasepool` en el proyecto, y el walk lo necesitaba.** `nextObject()` y
+  `resourceValues` devuelven objetos autoreleased, y un loop síncrono que nunca vuelve a un run loop no libera
+  ninguno. Medido sobre 200,000 archivos sintéticos: **298 MB de RSS pico, ~1.4 KB por archivo**, contra los ~146
+  bytes que estimaba el plan. Drenando por lotes de 512: **172 MB**, 42% menos. El corpus real son 71,580
+  archivos, y por eso nunca se vio — se quedaba debajo del objetivo por ser chico.
+- **Y con eso el objetivo del plan sigue sin cumplirse.** 172 MB a 200,000 archivos extrapolan a ~570 MB a
+  800,000, contra el objetivo de < 400 MB. Lo que queda es la `FileTable` y el documento del escaneo, no basura
+  autoreleased.
+- **La etapa de prefijo, por fin medida sobre el caso que existe para atender.** 80 archivos de 64 MiB del mismo
+  tamaño con colas distintas: con la sonda **0 B leídos y 0.03 s**; sin ella **5.0 GB y 1.75 s**. **58×.** Y el
+  contador no cuenta los 16 KiB por archivo que la sonda sí lee (1.25 MB en total), así que ese "0 B" es del
+  hasher completo, no del disco.
+- **Los defaults de la app desactivan el peor caso del detector de carpetas.** La clase patológica del plan es
+  10,000 `__init__.py` idénticos; medido, un `__init__.py` **vacío** cae bajo el mínimo de 1 byte y un `.DS_Store`
+  está en la lista de ruido, así que ninguno de los dos llega al detector. Hace falta un archivo **no vacío, no
+  oculto y fuera de la lista** —un `conftest.py`— para alcanzar la ruta cuadrática.
+- **Y alcanzada, la mitigación funciona y se nombra.** 7,866 `conftest.py` idénticos son **30.9 millones de
+  pares**: el detector trunca la clase, la reporta como `conftest.py with 7866 files`, y el escaneo termina en
+  43.6 s en vez de moler los 30.9 millones.
+- **Dos fixtures míos no probaban nada, y las dos fallas son instructivas.** En c1-prefix escribí las 40
+  izquierdas idénticas entre sí, así que la sonda partía en dos clases y cada archivo seguía necesitando hash
+  completo: 5 GB con sonda y sin ella. Cada archivo necesita **cola única**. Y en c1-scale usé
+  `bytes([index & 0xFF]) * size`, que repite contenido cada 256 archivos: salieron 31,705 grupos en vez del 12%
+  pedido, lo que además infló la medición de memoria.
 - **La caché perceptual es la diferencia entre 177 s y 0.5 s**, medido sobre el árbol real de 2,779 imágenes y
   617 videos: **354×**, con el mismo resultado (4,771 pares las dos veces). No es optimización — un video son
   ocho decodes, así que sin caché un segundo escaneo del mismo árbol paga todo otra vez.
