@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR de poda de sesiones. 39 modos de selftest, 766 tests, 94.63% de cobertura sobre
-`DuplicateCore`.
+Última actualización: PR del historial de sesiones. 40 modos de selftest, 766 tests, 94.59% de cobertura
+sobre `DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -125,6 +125,7 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Compuerta de dry-run | Aplicar exige una simulación **vigente**: editar una decisión invalida la aprobación, comparada por huella FNV-1a (no el `Hasher` de Swift, que está sembrado por proceso) |
 | Journal JSON Lines | Lotes de 32 durante el apply, no al final. Un `undone_at` se **agrega**, no reescribe |
 | Deshacer sesión | Ocupante byte-idéntico cuenta como ya restaurado; cualquier otro **bloquea**, nunca sobrescribe. Se re-chequea justo antes de mover |
+| Historial de sesiones | Lista cada apply con su fecha, cuántos archivos movió, cuántos volvieron y de qué escaneo salieron, y **deshace cualquiera, no solo la última** |
 | Limpiar journals ya deshechos | Solo sesiones con **todos** sus archivos de vuelta, probado por sus propios `undone_at`, con los conteos antes de confirmar. Una sesión ilegible o vacía **no** es podable: borrarla no gana nada y destruye la única evidencia |
 | Colapso de pares anidados | `Pole ↔ Pole` y `Pole/videos ↔ Pole/videos` son pares separados en el corpus real; mover el padre se lleva al hijo |
 | Cancelar devuelve reporte | No lanza: lanzar se saltaba el flush y dejaba hasta 31 archivos movidos **sin entrada en el journal** |
@@ -219,16 +220,16 @@ gh issue list --label bloqueado       # y por qué está bloqueado
 
 | Nivel | Qué significa | Abiertos |
 |---|---|---|
-| `priority:p1` | El usuario lo nota, o hay datos en juego | historial de sesiones (#72), fallback en montaje de red (#73, bloqueado) |
+| `priority:p1` | El usuario lo nota, o hay datos en juego | fallback en montaje de red (#73, bloqueado) |
 | `priority:p2` | Deuda de corrección que hoy no muerde | asimetría de cancelación en `buildSynchronously` (#74), poda de cachés (#75), lo que solo una pantalla puede verificar (#81, bloqueado) |
 | `priority:p3` | Funcionalidad agregable | metadata en el visor de carpetas (#76), bitrate (#77) |
 | `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`), corpora C1/C3 (#79), video contra ffmpeg (#80) |
 | `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |
 
-**Lo que ya se cerró desde que existe esta sección**: Quick Look de tamaño completo y Mostrar en Finder en los tres
-visores, los fallos de apply localizados, la poda de journals de sesiones deshechas, la metadata bajo la vista
-previa, la cancelación dentro de un archivo grande, y los cuatro reportadores silenciosos que este documento
-encontró en su primera pasada.
+**Lo que ya se cerró desde que existe esta sección**: el historial de sesiones (#72), Quick Look de tamaño
+completo y Mostrar en Finder en los tres visores, los fallos de apply localizados, la poda de journals de sesiones
+deshechas, la metadata bajo la vista previa, la cancelación dentro de un archivo grande, y los cuatro reportadores
+silenciosos que este documento encontró en su primera pasada.
 
 ## Deuda conocida
 

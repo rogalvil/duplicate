@@ -248,6 +248,12 @@ enum MainMenuBuilder {
             keyEquivalent: ""
         )
         undoLast.target = NSApp.delegate
+        let history = menu.addItem(
+            withTitle: Strings.string("menu.sessions.history"),
+            action: #selector(AppDelegate.showSessionHistory(_:)),
+            keyEquivalent: ""
+        )
+        history.target = NSApp.delegate
         menu.addItem(.separator())
         // No key equivalent, same reason as the undo above: nothing that touches the record of what was moved
         // should be one keystroke away.
