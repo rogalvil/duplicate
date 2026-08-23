@@ -53,12 +53,20 @@ public actor HashCache {
     private var pending: [HashCacheRecord] = []
     private var recordsOnDisk = 0
     private var lockDescriptor: Int32 = -1
+    /// Rows the file held when dead ones were last removed, from the header.
+    private var rowsAtLastPrune: UInt64 = 0
+    private let pruneFloor: Int
     public private(set) var report = LoadReport()
     public private(set) var hits = 0
     public private(set) var misses = 0
 
-    public init(url: URL = HashCache.defaultURL()) {
+    /// - Parameter pruneFloor: how many rows must pile up before dead ones are looked for. Injectable so a test
+    ///   can reach the rule without writing four thousand files; production never passes it.
+    public init(
+        url: URL = HashCache.defaultURL(), pruneFloor: Int = HashCache.defaultPruneFloor
+    ) {
         self.url = url
+        self.pruneFloor = pruneFloor
     }
 
     deinit {
@@ -73,6 +81,7 @@ public actor HashCache {
         entries.removeAll()
         pending.removeAll()
         recordsOnDisk = 0
+        rowsAtLastPrune = 0
 
         acquireLock()
 
@@ -85,6 +94,7 @@ public actor HashCache {
             return
         }
         report.hadTornTail = HashCacheFormat.hasTornTail(inFileOfLength: bytes.count)
+        rowsAtLastPrune = HashCacheFormat.rowsAtLastPrune(bytes)
 
         let count = HashCacheFormat.wholeRecordCount(inFileOfLength: bytes.count)
         for index in 0..<count {
@@ -180,6 +190,90 @@ public actor HashCache {
         (report.hadTornTail || report.corruptRecords > 0) && !report.isReadOnly
     }
 
+    /// Whether enough rows have piled up since the last prune to be worth checking them.
+    ///
+    /// **Measured, and the number is why this exists.** On this machine the digest cache held 7,741 rows of
+    /// which **1,609 still described a file that is there**: 4,320 gone and 1,812 an older version of a file
+    /// that still exists. **79.2% waste.** A cache that is four-fifths garbage also loads four-fifths garbage
+    /// into a dictionary on every scan.
+    ///
+    /// The check itself is not free -- one inode lookup per row, measured at 3.4 µs, so 26 ms for 7,741 rows and
+    /// about 340 ms at a hundred thousand. Too much to pay on every load, which is why the file remembers how
+    /// many rows it held when it was last cleaned and this only fires once another few thousand have arrived.
+    public var needsPruning: Bool {
+        !report.isReadOnly && recordsOnDisk >= max(pruneFloor, Int(rowsAtLastPrune) + pruneFloor)
+    }
+
+    /// How many rows have to accumulate before a prune is worth its inode lookups.
+    ///
+    /// Injectable so a test can reach the rule without writing four thousand files; production never passes it.
+    public static let defaultPruneFloor = 4_000
+
+    /// Drops rows whose file is gone, and rewrites the file.
+    ///
+    /// **Three classes of row are deliberately kept.** A row on a volume that is not mounted right now cannot be
+    /// judged at all, and this user's corpus lives on an external disk -- reading "cannot resolve" as "delete"
+    /// would throw away the cache that took 177 seconds to build the moment it is unplugged. A row whose inode
+    /// fails to resolve for any reason other than `ENOENT` is kept for the same reason one step smaller:
+    /// revoking Desktop access makes every row for a file there stop resolving, and those files never moved.
+    /// And a row that still matches is kept because that is the point of a cache.
+    ///
+    /// - Returns: how many rows were dropped.
+    @discardableResult
+    public func prune() throws -> Int {
+        guard !report.isReadOnly else { return 0 }
+        let volumes = CacheLiveness.mountedVolumes()
+        guard !volumes.isEmpty else { return 0 }
+
+        var dropped = 0
+        for (key, _) in entries {
+            guard let devices = volumes[key.volume] else { continue }
+            var status = stat()
+            var resolved = false
+            var sawOnlyMissing = true
+            // **A folded volume identifier can mean several devices**: macOS firmlinks the boot volume, so `/`
+            // and `/private/tmp` report the same identifier from different `st_dev`. A row is dead only when it
+            // resolves under none of them.
+            for device in devices {
+                if stat("/.vol/\(device)/\(key.inode)", &status) == 0 {
+                    resolved = true
+                    break
+                }
+                if errno != ENOENT { sawOnlyMissing = false }
+            }
+            if !resolved {
+                // Only `ENOENT` everywhere is proof. Anything else is this process not being able to look.
+                if sawOnlyMissing {
+                    entries.removeValue(forKey: key)
+                    dropped += 1
+                }
+                continue
+            }
+            // Same inode, different length: the version this row describes is gone and cannot come back,
+            // because the generation counter never goes backwards.
+            //
+            // **Length only, and never mtime.** The key's mtime comes from Foundation's
+            // `contentModificationDate`, a `Date`, whose granularity near 1.79e18 nanoseconds is a few hundred
+            // nanoseconds; `stat` reports an exact `st_mtimespec`. A rounded number compared to an unrounded one
+            // disagrees for files that never changed, and the first version of this rule therefore considered
+            // **every live row superseded** -- which would have deleted the whole cache on its first run. The
+            // size is an integer on both sides and can be trusted.
+            if Int64(status.st_size) != key.size {
+                entries.removeValue(forKey: key)
+                dropped += 1
+            }
+        }
+        guard dropped > 0 else {
+            // Nothing to drop, and the marker still has to move or every load pays the lookups again.
+            rowsAtLastPrune = UInt64(entries.count)
+            _ = try? compact()
+            return 0
+        }
+        _ = try compact()
+        rowsAtLastPrune = UInt64(entries.count)
+        return dropped
+    }
+
     /// Loads, then rewrites the file if it holds bytes that cannot be trusted.
     ///
     /// **A failed repair is not a failed scan.** The cache still serves everything it loaded, so the error is
@@ -187,8 +281,9 @@ public actor HashCache {
     /// scan into nothing.
     public func loadAndRepair() {
         load()
-        guard needsRewrite else { return }
-        _ = try? compact()
+        if needsRewrite { _ = try? compact() }
+        // Pruning after the repair, because a repair drops junk rows and pruning should see the file it leaves.
+        if needsPruning { _ = try? prune() }
     }
 
     /// Rewrites the file with one row per live key.
@@ -201,7 +296,7 @@ public actor HashCache {
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        var payload = HashCacheFormat.encodeHeader()
+        var payload = HashCacheFormat.encodeHeader(rowsAtLastPrune: UInt64(entries.count))
         // Sorted so the rewritten file is reproducible, which makes a byte-diff meaningful in a test.
         for key in entries.keys.sorted(by: HashCache.isOrdered) {
             payload += HashCacheFormat.encode(

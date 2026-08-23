@@ -92,13 +92,32 @@ public enum HashCacheFormat {
 
     // MARK: - Encoding
 
-    public static func encodeHeader() -> [UInt8] {
+    /// - Parameter rowsAtLastPrune: how many rows the file held the last time dead ones were removed.
+    ///
+    /// **It goes in the header's padding, which is backward compatible in both directions.** The reader
+    /// validates the magic, the version, the record size and the salt, and ignores the rest; an older build
+    /// sees a file it can still use, and this build reading an older file sees zero, which means "never
+    /// pruned" and is exactly right.
+    public static func encodeHeader(rowsAtLastPrune: UInt64 = 0) -> [UInt8] {
         var bytes = magic
         bytes += littleEndian(version)
         bytes += littleEndian(UInt32(recordSize))
         bytes += littleEndian(semanticSalt)
+        bytes += littleEndian(rowsAtLastPrune)
         bytes += [UInt8](repeating: 0, count: headerSize - bytes.count)
         return bytes
+    }
+
+    /// The marker written by ``encodeHeader(rowsAtLastPrune:)``, or zero.
+    public static func rowsAtLastPrune(_ bytes: some Collection<UInt8>) -> UInt64 {
+        let all = Array(bytes)
+        let offset = magic.count + 4 + 4 + 8
+        guard all.count >= offset + 8 else { return 0 }
+        var value: UInt64 = 0
+        for index in (0..<8).reversed() {
+            value = value << 8 | UInt64(all[offset + index])
+        }
+        return value
     }
 
     public static func encode(_ record: HashCacheRecord) -> [UInt8] {

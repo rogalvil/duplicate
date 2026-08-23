@@ -44,6 +44,7 @@ enum SelfTest {
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
             "similar-window", "video", "similar-apply", "folder-apply", "cancel", "keeper",
             "format", "progress", "volumes", "realroot", "phash-differential", "history",
+            "cache-liveness",
         ]
 
         let modes: [String]
@@ -100,6 +101,7 @@ enum SelfTest {
                 case "realroot": try await checkRealRoot(arguments: arguments)
                 case "phash-differential": try checkPerceptualDifferential(arguments: arguments)
                 case "history": try await checkSessionHistory()
+                case "cache-liveness": try checkCacheLiveness(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -1156,10 +1158,84 @@ enum SelfTest {
 
         // Its own cache file, not this one: `warm` is still in scope and holds the write lock, so a session
         // opening the same file would degrade to read-only and correctly decline to rewrite anything.
+        try await checkDeadRowsArePrunedOnLoad(
+            cacheURL: URL(filePath: cacheDirectory).appending(
+                path: "prune.v1", directoryHint: .notDirectory))
+
         try await checkTornTailIsRepairedByAScan(
             cacheURL: URL(filePath: cacheDirectory).appending(
                 path: "repair.v1", directoryHint: .notDirectory),
             root: root, instant: instant)
+    }
+
+    /// Proves a load drops rows whose file is gone.
+    ///
+    /// **Measured on the real cache before any of this was written: 7,741 rows, 3,421 of which still described a
+    /// file that exists.** 4,320 gone, 55.8% waste. The first version of that measurement also compared mtimes
+    /// and reported 79.2%, because the key's mtime comes from a `Date` -- a `Double` whose granularity near
+    /// 1.79e18 nanoseconds is hundreds of nanoseconds -- while `stat` reports an exact `st_mtimespec`. As a
+    /// pruning rule that comparison would have called **every live row superseded and deleted the whole cache**.
+    /// The length is an integer on both sides, and that is all this trusts.
+    ///
+    /// The floor is injected here. Production waits for four thousand rows, because the check costs one inode
+    /// lookup per row -- measured at 3.4 µs, so 26 ms for 7,741 rows and about 340 ms at a hundred thousand,
+    /// which is too much to pay on every load.
+    ///
+    /// Teeth: return `[:]` from `CacheLiveness.mountedVolumes` and nothing is pruned; drop the `ENOENT` check so
+    /// any failure counts as dead and the *live* rows go too, which the second assertion catches.
+    private static func checkDeadRowsArePrunedOnLoad(cacheURL: URL) async throws {
+        let manager = FileManager.default
+        let tree = NSTemporaryDirectory() + "duplicate-prunerows-\(getpid())"
+        defer { try? manager.removeItem(atPath: tree) }
+        try manager.createDirectory(atPath: tree, withIntermediateDirectories: true)
+
+        // Twelve files, hashed through the real walk-and-hash path, then eight of them deleted.
+        for index in 0..<12 {
+            try Data("row \(index)".utf8).write(to: URL(filePath: tree + "/r\(index).bin"))
+        }
+        let walk = try FileManagerWalker().walk(
+            root: tree, policy: ScanPolicy(), exclusions: ExclusionSet())
+        let hasher = ContentHasher()
+        do {
+            let cache = HashCache(url: cacheURL, pruneFloor: 4)
+            await cache.load()
+            for entry in walk.entries {
+                guard let result = try? hasher.fullDigest(atPath: entry.path) else { continue }
+                await cache.store(result.digest, for: entry)
+            }
+            _ = try await cache.persist()
+        }
+        for index in 0..<8 {
+            try manager.removeItem(atPath: tree + "/r\(index).bin")
+        }
+
+        do {
+            let cache = HashCache(url: cacheURL, pruneFloor: 4)
+            await cache.load()
+            try expect(
+                await cache.needsPruning, "a cache of 12 rows over a floor of 4 declined to prune")
+        }
+
+        // The production entry point, the one the sessions call.
+        let pruned = HashCache(url: cacheURL, pruneFloor: 4)
+        await pruned.loadAndRepair()
+        let reader = HashCache(url: cacheURL, pruneFloor: 4)
+        await reader.load()
+        try expect(
+            await reader.report.recordsRead == 4,
+            "\(await reader.report.recordsRead) rows survived the prune, wanted the 4 live ones")
+        for index in 8..<12 {
+            let entry = try expectSome(
+                walk.entries.first { $0.path.hasSuffix("/r\(index).bin") }, "fixture lost a file")
+            try expect(
+                await reader.digest(for: entry) != nil,
+                "a live row was pruned: r\(index).bin")
+        }
+        // And a second load does not pay for the lookups again, because the file remembers.
+        try expect(
+            !(await reader.needsPruning), "the prune marker did not survive the rewrite")
+        print(
+            "  a load dropped 8 rows whose files were deleted and kept the 4 that are still there")
     }
 
     /// Proves a scan repairs a cache file that ends in a partial row.
@@ -5068,6 +5144,64 @@ enum SelfTest {
         print(
             "  2 sessions listed; the older one was undone from the window and the newer one kept its "
                 + "file and its undo")
+    }
+
+    // MARK: - cache-liveness
+
+    /// Measures how much of the real digest cache is still true.
+    ///
+    /// **Read-only, and it exists to answer a question rather than to guard a behaviour.** The two caches grow a
+    /// row per `(file, version)` ever seen and nothing removes one; before writing a pruner, the number worth
+    /// having is what fraction of the rows on this machine are already waste.
+    ///
+    /// **A row on an unmounted volume is unknowable, never dead.** This user's corpus lives on an external disk,
+    /// so a pruner that read "cannot resolve" as "delete" would throw away the cache that took 177 seconds to
+    /// build the moment WD12TB is unplugged. Those rows are counted apart and never judged, and this mode
+    /// asserts that separation rather than trusting it.
+    private static func checkCacheLiveness(arguments: [String]) throws {
+        let url =
+            value(for: "--cache", in: arguments).map { URL(filePath: $0) }
+            ?? HashCache.defaultURL()
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+            print("  SKIPPED: no cache at \(url.path(percentEncoded: false))")
+            return
+        }
+
+        let volumes = CacheLiveness.mountedVolumes()
+        try expect(!volumes.isEmpty, "no mounted volume could be folded and stat'ed")
+
+        let clock = ContinuousClock()
+        let started = clock.now
+        let report = CacheLiveness.measure(hashCacheAt: url)
+        let elapsed = clock.now - started
+        try expect(report.totalRows > 0, "the cache has no rows to measure")
+        try expect(
+            report.checkableRows + report.unmountedRows <= report.totalRows,
+            "the row classes add up to more than the file holds")
+        try expect(
+            report.liveRows + report.deadRows + report.supersededRows + report.unresolvableRows
+                == report.checkableRows,
+            "\(report.checkableRows) checkable rows split into "
+                + "\(report.liveRows)/\(report.deadRows)/\(report.supersededRows)/"
+                + "\(report.unresolvableRows)")
+        // The point of the separation: an unmounted volume's rows are never counted as waste.
+        try expect(
+            report.wasteFraction <= 1.0,
+            "the waste fraction is \(report.wasteFraction), which is not a fraction")
+
+        print(
+            "  \(volumes.count) volumes mounted; \(report.totalRows) rows: "
+                + "\(report.liveRows) live, \(report.deadRows) dead, "
+                + "\(report.supersededRows) superseded, \(report.unresolvableRows) unresolvable, "
+                + "\(report.unmountedRows) unmounted")
+        print(
+            "  \(report.checkableRows) inode lookups in \(elapsed)")
+        print(
+            "  waste among checkable rows: "
+                + String(format: "%.1f%%", report.wasteFraction * 100)
+                + " -- pruning would reclaim "
+                + ByteSize.format(
+                    Int64((report.deadRows + report.supersededRows) * HashCacheFormat.recordSize)))
     }
 
     // MARK: - cancel
