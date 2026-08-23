@@ -4,6 +4,7 @@ import DuplicateCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var libraryWindow: LibraryWindowController?
+    private var historyWindow: SessionHistoryWindowController?
     private let stateDirectory: StateDirectory
 
     init(stateDirectory: StateDirectory = .current()) {
@@ -162,6 +163,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// app, not about one scan, so it must work with the library focused, with a review focused, or with a
     /// perceptual pair focused. `NSApplication` forwards an unhandled action to its delegate, which is exactly
     /// the reach a global preference needs.
+    /// Opens the list of applies, from which any session can be undone.
+    ///
+    /// **One window, kept alive.** Reopening it from the menu should bring the same window forward rather than
+    /// stack a second copy of a list -- and it re-reads the journals on the way, because an apply may have
+    /// happened while it was closed.
+    @objc func showSessionHistory(_ sender: Any?) {
+        if historyWindow == nil {
+            historyWindow = SessionHistoryWindowController(
+                stateDirectory: StateDirectory.current())
+        }
+        historyWindow?.reload()
+        historyWindow?.showWindow(nil)
+        historyWindow?.window?.makeKeyAndOrderFront(nil)
+    }
+
     /// Deletes the journals of sessions whose files have all been put back.
     ///
     /// **The rule is narrow because a journal is the only record of where a file went.** Only a session every

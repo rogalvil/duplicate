@@ -805,6 +805,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   afirmar: que algo quedó registrado, que deshacer cambia el estado, y que **el archivo deja de tener la decisión que
   la ventana ya no muestra** — porque estas revisiones guardan al decidir, así que un undo que solo toque memoria
   dejaría al CLI leyendo lo contrario.
+- **Deshacer cualquier sesión ya era posible y nada lo nombraba.** `UndoCoordinator.undo(sessionID:in:)` toma un
+  identificador arbitrario desde que se escribió, pero la única entrada era "deshacer la última": aplicar dos veces
+  y querer la primera de vuelta no tenía camino. La ventana de historial no agregó capacidad, agregó una fila por
+  sesión.
+- **Un solo lector de journals para el historial y para la poda.** Dos parseos son dos oportunidades de discrepar
+  sobre si una sesión está terminada, y una de esas respuestas **borra un archivo**. `JournalPruner` clasifica
+  sobre `SessionHistory.rows(in:)`.
+- **El historial no refresca la presencia de otras ventanas, y es a propósito.** Hacerlo significa arrancar un
+  chequeo de disco que hace `stat` por archivo del escaneo —trabajo que nadie pidió, a espaldas del usuario, porque
+  deshizo algo en otra ventana—. Una etiqueta vieja que se refresca con un botón es el error más chico.
+- **`toggleDiskCheck` alterna: llamarlo mientras corre lo cancela.** Un observador de notificación que lo invocara
+  a ciegas cancelaría el chequeo en curso.
 - **`NSUndoManager` no llega al usuario sin un ítem de menú que mande `undo:`.** Registra
   perfectamente y es invisible: una revisión sin deshacer se vería como una decisión de diseño. Por eso
   existe el menú Edición, y por eso el modo `menu` afirma que alguien manda `undo:` y `redo:`.

@@ -70,36 +70,18 @@ public enum JournalPruner {
     }
 
     /// Reads every journal and classifies it. Never writes.
+    ///
+    /// **Built on ``SessionHistory/rows(in:)`` rather than on its own parse.** The history window and this
+    /// answer the same question about the same files; two readers is two chances to disagree about whether a
+    /// session is done, and one of those answers deletes a file.
     public static func plan(in state: StateDirectory) -> Plan {
-        let manager = FileManager.default
-        var sessions: [Session] = []
-        for sessionID in MoveJournal.sessions(in: state) {
-            let path = try? MoveJournal.url(sessionID: sessionID, in: state)
-                .path(percentEncoded: false)
-            let size =
-                (path.flatMap { try? manager.attributesOfItem(atPath: $0) }?[.size]
-                    as? Int64) ?? 0
-            guard let loaded = try? MoveJournal.load(sessionID: sessionID, in: state) else {
-                sessions.append(
-                    Session(
-                        sessionID: sessionID, movedCount: 0, restoredCount: 0, byteCount: size,
-                        isUnreadable: true))
-                continue
-            }
-            // Counted against the entries rather than against the restoration records, because a restoration
-            // record for a path this journal never moved says the journal is not what it claims to be.
-            let originals = Set(loaded.entries.map(\.originalPath))
-            let restored = loaded.restoredPaths.intersection(originals)
-            sessions.append(
+        Plan(
+            sessions: SessionHistory.rows(in: state).map {
                 Session(
-                    sessionID: sessionID,
-                    movedCount: loaded.entries.count,
-                    restoredCount: restored.count,
-                    byteCount: size,
-                    isUnreadable: !loaded.isClean && loaded.entries.isEmpty
-                ))
-        }
-        return Plan(sessions: sessions)
+                    sessionID: $0.sessionID, movedCount: $0.movedCount,
+                    restoredCount: $0.restoredCount, byteCount: $0.journalBytes,
+                    isUnreadable: $0.isUnreadable)
+            })
     }
 
     /// Deletes the journals of fully restored sessions.

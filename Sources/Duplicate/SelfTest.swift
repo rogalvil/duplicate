@@ -43,7 +43,7 @@ enum SelfTest {
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
             "similar-window", "video", "similar-apply", "folder-apply", "cancel", "keeper",
-            "format", "progress", "volumes", "realroot", "phash-differential",
+            "format", "progress", "volumes", "realroot", "phash-differential", "history",
         ]
 
         let modes: [String]
@@ -99,6 +99,7 @@ enum SelfTest {
                 case "volumes": try checkVolumeTraits()
                 case "realroot": try await checkRealRoot(arguments: arguments)
                 case "phash-differential": try checkPerceptualDifferential(arguments: arguments)
+                case "history": try await checkSessionHistory()
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -4949,6 +4950,103 @@ enum SelfTest {
     /// A rate as a percentage with one decimal, for the report lines.
     private static func percentage(_ value: Double) -> String {
         String(format: "%.1f%%", value * 100)
+    }
+
+    // MARK: - history
+
+    /// Proves any session can be undone, not just the last one.
+    ///
+    /// **The capability existed and nothing named it.** `UndoCoordinator.undo(sessionID:in:)` has always taken
+    /// an arbitrary session, but the only way in was "undo the last one" -- so applying twice and wanting the
+    /// first one back had no path through the app. This drives the window over two real sessions with real files
+    /// in the real Trash, undoes the **older** one, and checks that the newer one is untouched and still
+    /// undoable.
+    ///
+    /// Teeth: have `undoForSelftest` use `rows.first` instead of the index and the wrong session comes back --
+    /// the assertion on which file exists fails, which is the difference between an undo and a mistake.
+    private static func checkSessionHistory() async throws {
+        let manager = FileManager.default
+        let scratch = NSTemporaryDirectory() + "duplicate-history-\(getpid())"
+        defer { try? manager.removeItem(atPath: scratch) }
+        try manager.createDirectory(atPath: scratch + "/tree", withIntermediateDirectories: true)
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": scratch], homePath: scratch)
+
+        // Two sessions, each moving its own file to the real Trash and journalling it the way an apply does.
+        var trashed: [String: DisposalOutcome] = [:]
+        for (session, name) in [
+            ("20260812-100000-000000", "older"), ("20260812-110000-000000", "newer"),
+        ] {
+            let path = scratch + "/tree/\(name).txt"
+            try Data("contents of \(name)".utf8).write(to: URL(filePath: path))
+            let digest = try ContentHasher().fullDigest(atPath: path)
+            let outcome = try TrashDisposer().dispose(path: path)
+            trashed[name] = outcome
+            _ = try MoveJournal.append(
+                [
+                    JournalEntry(
+                        originalPath: outcome.originalPath, resultingPath: outcome.resultingPath,
+                        mechanism: outcome.mechanism, byteCount: outcome.byteCount,
+                        digest: digest.digest, groupKey: "0:\(name)", scanID: "scan-\(name)",
+                        timestamp: "2026-08-12T10:00:00.000000Z")
+                ], sessionID: session, in: state)
+        }
+        defer {
+            for outcome in trashed.values {
+                try? manager.removeItem(atPath: outcome.resultingPath)
+            }
+        }
+
+        let history = SessionHistoryWindowController(stateDirectory: state)
+        defer { history.window?.close() }
+        try expect(
+            history.rowCountForSelftest == 2,
+            "the history lists \(history.rowCountForSelftest) of 2")
+        try expect(
+            !history.footerForSelftest.contains("history.footer"),
+            "the footer shows a key literal")
+        try expect(
+            history.footerForSelftest.contains("2"), "the footer does not count the sessions")
+
+        // Newest first, so row 1 is the older session. Undoing *that* one is the whole point.
+        try expect(
+            history.cellForSelftest(row: 0, column: "state")
+                == Strings.string("history.state.moved"),
+            "row 0 reads \(history.cellForSelftest(row: 0, column: "state"))")
+        history.selectForSelftest(1)
+        try expect(history.canUndoSelectionForSelftest, "the older session cannot be undone")
+        try expect(!history.canPruneForSelftest, "clean-up is offered with nothing restored")
+
+        let outcome = try expectSome(history.undoForSelftest(1), "the undo returned nothing")
+        try expect(outcome.restoredCount == 1, "restored \(outcome.restoredCount), wanted 1")
+        try expect(
+            manager.fileExists(atPath: scratch + "/tree/older.txt"),
+            "the older session's file did not come back")
+        try expect(
+            !manager.fileExists(atPath: scratch + "/tree/newer.txt"),
+            "undoing the older session brought back the newer one's file too")
+
+        // The rows now disagree, which is what a history is for.
+        try expect(
+            history.cellForSelftest(row: 1, column: "state")
+                == Strings.string("history.state.restored"),
+            "the undone session reads \(history.cellForSelftest(row: 1, column: "state"))")
+        try expect(history.canPruneForSelftest, "clean-up is not offered after a full restore")
+        history.selectForSelftest(1)
+        try expect(
+            !history.canUndoSelectionForSelftest,
+            "a fully restored session is still offered an undo")
+        history.selectForSelftest(0)
+        try expect(history.canUndoSelectionForSelftest, "the newer session lost its undo")
+
+        // And the pruner agrees with the window, because both read the same rows.
+        let prunable = JournalPruner.plan(in: state).prunable.map(\.sessionID)
+        try expect(
+            prunable == ["20260812-100000-000000"],
+            "prunable: \(prunable), wanted just the restored session")
+
+        print(
+            "  2 sessions listed; the older one was undone from the window and the newer one kept its "
+                + "file and its undo")
     }
 
     // MARK: - cancel
