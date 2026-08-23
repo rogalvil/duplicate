@@ -535,6 +535,29 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   es lo que mantiene las muestras lejos de los dos extremos, que es donde un video suele estar negro. Y en un
   clip corto **algunas marcas caen pasado el final** —a medio segundo, cuatro de ocho— y eso también se
   preserva: el CLI hashea las que sí y compara sobre menos cuadros.
+- **Y ahora está medido, porque "además es más rápido" era un eslogan.** Contra los dos comandos exactos del CLI,
+  sobre el mismo archivo concatenado a tres tamaños:
+
+  | archivo | duración | ffmpeg rápida (N llamadas, `-ss` antes de `-i`) | ffmpeg lenta (una llamada, filtro `fps`) | esta app |
+  |---|---|---|---|---|
+  | 10.7 MB | 29 s | 1.451 s | **0.446 s** | 0.617 s |
+  | 211.7 MB | 581 s | 1.497 s | 6.575 s | **0.621 s** |
+  | 1,058.7 MB | 2,904 s | 1.488 s | 33.584 s | **0.611 s** |
+
+  **El costo de esta app es plano**: ~0.62 s a 10 MB, a 212 MB y a 1 GB, porque la tolerancia lo vuelve ocho
+  saltos a keyframe sin importar el largo. La rama rápida de ffmpeg también es plana y **2.4× más lenta**, y lo
+  que la domina son los ocho `fork`+`exec`. La rama lenta escala con la duración: a 1 GB es **55× más lenta**.
+- **Pero para un archivo chico y corto, la llamada única de ffmpeg nos gana 1.4×** (0.446 s contra 0.617 s). El
+  eslogan no es universal y ahora la excepción tiene número.
+- **El umbral de 200 MB del CLI está sobre la cantidad equivocada.** Lo que hace caro a la rama lenta es la
+  **duración**, no los bytes: un archivo de 190 MB y diez minutos se queda debajo del umbral y paga ~6 s. Bien
+  comprimido y largo es justo el caso que peor le sale.
+- **La tolerancia le importa mucho menos a AVFoundation que la posición de `-ss` a ffmpeg.** Seek exacto contra
+  ±1 s: **1.14×–1.18×** en los tres tamaños, contra el 3×–55× que separa las dos ramas de ffmpeg.
+- **Sin calentamiento, la primera medición mintió al revés.** La primera corrida del proceso paga el setup de
+  AVFoundation, y la tolerancia que iba primero cargaba con él: seek exacto salía **23% más rápido** que la
+  tolerancia enviada, lo opuesto a lo que dice una segunda corrida. El modo hace una pasada de calentamiento y
+  toma el mejor de tres.
 - **Toda la rama de fast-seek del CLI colapsa en `requestedTimeTolerance`.** El split por 200 MB existe porque
   `ffmpeg -ss` antes de `-i` busca barato al sync sample y después de `-i` decodifica hacia adelante; esa
   propiedad **es** la tolerancia. Y la tolerancia laxa es además la respuesta *mejor*: dos copias del mismo
