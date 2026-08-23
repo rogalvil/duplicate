@@ -4,13 +4,32 @@ name: CI
 # minutes at 10x, so the Free plan's 2,000 minutes are really ~200 minutes of wall clock.
 # That leaves room for pull requests, nowhere near enough for every push to every branch.
 #
-# Stacked bases are included on purpose. With `branches: [main]` alone, a pull request based
-# on another feature branch reports no checks at all, and retargeting it to main afterwards
-# fires an `edited` event that is not among the default trigger types. The combination let a
-# stacked branch reach main having never been tested on the previous project.
+# **And the quota ran out**, which is what this file now takes seriously. Measured over the first
+# eleven days: 91 runs, 158 minutes of wall clock, ~1,800 billable minutes of the 2,000 once each
+# job is rounded up to the minute and multiplied by ten.
+#
+# That rounding is the thing worth understanding. A job that takes fifteen seconds still bills one
+# minute, and one minute on a macOS runner is ten. **So the floor is ten billable minutes per run,
+# whatever it does**, and the number of runs matters as much as their length. Everything below is
+# aimed at both: fewer runs, and shorter ones.
+#
+# Stacked bases are included on purpose. With `branches: [main]` alone, a pull request based on
+# another feature branch reports no checks at all, which once let a stacked branch reach main having
+# never been tested.
+#
+# **`edited` used to be in this list and is now gone, because the ruleset already covers what it was
+# for.** It was there so that retargeting a stacked pull request to `main` -- which fires `edited` and
+# nothing else -- would re-test the code against its new base. But the ruleset sets
+# `strict_required_status_checks_policy`, so a branch has to be **up to date with `main`** before it can
+# merge: after retargeting, the branch must be updated, that update is a push, and a push is a
+# `synchronize`. The protection stands and rewording a pull request body no longer costs ten minutes.
+#
+# **Not filtered with a job-level `if` either**, which was the first attempt. A job skipped that way
+# reports its check as skipped, and whether a skipped check satisfies a *required* check is exactly the
+# kind of thing that would leave a pull request unmergeable with no way to retry but an empty commit.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
     branches:
       - main
       - "feat/**"
@@ -35,14 +54,74 @@ jobs:
     runs-on: macos-15
 
     steps:
+      # `fetch-depth: 0` so the step below can diff against the base. One extra fetch of a repository
+      # this size costs a second or two; a run that recompiles everything to check a typo in a table
+      # costs ten billable minutes.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # **Documentation-only pull requests still report a check, and still skip the compiling.** The
+      # ruleset requires this job by name, so it cannot be skipped by a path filter without leaving
+      # every documentation change unmergeable. It can be made cheap instead.
+      #
+      # The classification is deliberately conservative in two directions. Anything that is not markdown
+      # counts as code, so a change to the Makefile, this workflow, a string table or a resource is
+      # tested. **And an empty or unreadable diff counts as code too**, which is the direction that
+      # matters: a base ref that cannot be resolved would otherwise look exactly like "no source
+      # changed" and turn the whole gate off silently. Found while testing this against a merged branch
+      # whose diff came back empty.
+      - name: Classify the change
+        id: scope
+        run: |
+          base="origin/${{ github.base_ref }}"
+          git fetch --no-tags origin "${{ github.base_ref }}" >/dev/null 2>&1 || true
+          if ! changed=$(git diff --name-only "$base"...HEAD); then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "Could not diff against $base. Running everything."
+            exit 0
+          fi
+          if [ -z "$changed" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "The diff against $base is empty, which should not happen. Running everything."
+            exit 0
+          fi
+          if printf '%s\n' "$changed" | grep -qvE '(\.md$|^docs/)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "This change touches something other than markdown, so everything runs."
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Markdown only. Compiling, tests and selftests are skipped; the check still reports."
+          fi
+          printf '%s\n' "$changed" | sed 's/^/  /'
+
+      # **A cache of `.build`, and it is the only way under the one-minute floor.** Every run compiled
+      # the package twice from scratch -- once in debug for the selftests and once with coverage
+      # instrumentation -- which is where the 1.74-minute average went. The key moves with the manifest
+      # and the toolchain; the restore keys let an unrelated source change still start from the last
+      # build instead of from nothing.
+      #
+      # Correctness rests on Swift's own incremental build, which is the same mechanism a developer
+      # trusts locally a hundred times a day. A stale artifact would have to survive a changed source
+      # hash, and the build system keys on content.
+      - name: Restore the build directory
+        if: steps.scope.outputs.code == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: build-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            build-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
+            build-${{ runner.os }}-
 
       - name: Show toolchain
+        if: steps.scope.outputs.code == 'true'
         run: |
           swift --version
           xcrun swift-format --version
 
       - name: Check formatting
+        if: steps.scope.outputs.code == 'true'
         run: make lint
 
       # Debug rather than release: swift test builds debug anyway, so this reuses the
@@ -50,6 +129,7 @@ jobs:
       # needed because `swift test` does not build the executable target, so a broken
       # AppDelegate would pass unnoticed.
       - name: Build all targets
+        if: steps.scope.outputs.code == 'true'
         run: make build CONFIG=debug
 
       # Before the coverage step on purpose: `swift test --enable-code-coverage` compiles the debug
@@ -58,17 +138,18 @@ jobs:
       #
       # CONFIG=debug is the other half of why this is affordable. `make selftest` normally depends on
       # `make all`, which compiles in release -- a second full build. Measured locally: 14.5 s for the
-      # build, 10.6 s for all 21 modes.
+      # build, 26 s for all 43 modes.
       #
-      # Without this step the 21 modes only ever ran on a developer's machine, so a break in the bundle
+      # Without this step the 43 modes only ever ran on a developer's machine, so a break in the bundle
       # assembly, the string tables, the menu shortcuts or what a window actually displays reached main
       # unnoticed. Those are exactly the things `swift test` cannot see.
       #
-      # Verified on the runner: all 21 pass here, including the ones that touch the real Trash, the
-      # window server and APFS cloning. The four that need the shared state directory find none and skip
+      # Verified on the runner: all 43 pass here, including the ones that touch the real Trash, the
+      # window server and APFS cloning. The modes that need the shared state directory find none and skip
       # printing why -- a mode that passed silently without having done anything would be worse than no
       # mode at all.
       - name: Selftests
+        if: steps.scope.outputs.code == 'true'
         run: make selftest-all CONFIG=debug
 
       # The interop guarantee is the one thing the runner cannot check above: there is no state
@@ -76,15 +157,17 @@ jobs:
       # the same six document shapes, and this runs them through the shipping code path rather than
       # through the unit tests' own copy of it.
       - name: Interop against the committed fixtures
+        if: steps.scope.outputs.code == 'true'
         run: |
           make selftest CONFIG=debug MODE=json-roundtrip \
             ARGS="--dir Tests/DuplicateCoreTests/Fixtures"
 
       - name: Test with coverage gate
+        if: steps.scope.outputs.code == 'true'
         run: make coverage
 
       - name: Upload coverage summary
-        if: always()
+        if: always() && steps.scope.outputs.code == 'true' 
         uses: actions/upload-artifact@v4
         with:
           name: coverage-summary
