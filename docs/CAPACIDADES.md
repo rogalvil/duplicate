@@ -8,7 +8,7 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR de la línea base de video. 42 modos de selftest, 776 tests, 94.72% de cobertura
+Última actualización: PR de los corpora sintéticos. 43 modos de selftest, 776 tests, 94.76% de cobertura
 sobre `DuplicateCore`.
 
 ## Resumen en una tabla
@@ -35,7 +35,7 @@ confirmar identidad byte a byte. El documento resultante es el mismo que escribe
 | Recorrido con reglas de skip | Oculto/paquete/cruce de volumen configurables; **no cruza puntos de montaje por default**, divergencia deliberada de `os.walk` | `Walk/DirectoryWalker.swift`, `Scan/ScanPolicy.swift` |
 | Exclusión de Papelera **por identidad** | Cubre `~/.Trash` y las tres cuarentenas del CLI de una sola vez, incluso alcanzadas por symlink. Arregla un bug vivo del CLI | `Support/ExclusionSet.swift` |
 | Agrupación por tamaño y luego digest | Ordenar-y-detectar-runs en vez de `defaultdict(list)`: cero allocation por bucket | `Scan/DuplicateFinder.swift` |
-| Etapa de prefijo | Sonda cabeza+cola+tamaño antes del hash completo, **solo arriba de 8 MiB** (recalibrado midiendo: a 256 KiB cobraba 54% del tiempo y ahorraba 1 MB de 1.5 GB) | `Hash/ContentHasher.swift` |
+| Etapa de prefijo | Sonda cabeza+cola+tamaño antes del hash completo, **solo arriba de 8 MiB** (recalibrado midiendo: a 256 KiB cobraba 54% del tiempo y ahorraba 1 MB de 1.5 GB). Sobre el caso que existe para atender —80 archivos de 64 MiB del mismo tamaño con colas distintas— **58×: 0.03 s contra 1.75 s, y 5.0 GB de lecturas que no ocurren** | `Hash/ContentHasher.swift` |
 | `F_NOCACHE` arriba de 1 MiB | Medido: 4× menos page cache (+0.10 GB contra +0.40 GB) al mismo tiempo de reloj | `Hash/ChunkedReader.swift` |
 | Concurrencia acotada por volumen | NVMe interno `min(max(cpus-2,2),8)`; externo/rotacional 2; red 2. Ventana deslizante, no 800k tareas | `Runtime/IOConcurrencyPolicy.swift` |
 | Clases de almacenamiento | Hardlinks y clones APFS se cuentan como **ya deduplicado**, no como duplicado ni se ocultan. El conjunto de acción nunca es `files[1:]` | `Model/StoragePartition.swift` |
@@ -224,7 +224,7 @@ gh issue list --label bloqueado       # y por qué está bloqueado
 | `priority:p1` | El usuario lo nota, o hay datos en juego | fallback en montaje de red (#73, bloqueado) |
 | `priority:p2` | Deuda de corrección que hoy no muerde | lo que solo una pantalla puede verificar (#81, bloqueado) |
 | `priority:p3` | Funcionalidad agregable | metadata en el visor de carpetas (#76), bitrate (#77) |
-| `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`), corpora C1/C3 (#79) |
+| `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`) |
 | `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |
 
 **Lo que ya se cerró desde que existe esta sección**: el historial de sesiones (#72), Quick Look de tamaño
