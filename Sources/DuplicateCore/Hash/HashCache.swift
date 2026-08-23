@@ -228,39 +228,13 @@ public actor HashCache {
         var dropped = 0
         for (key, _) in entries {
             guard let devices = volumes[key.volume] else { continue }
-            var status = stat()
-            var resolved = false
-            var sawOnlyMissing = true
-            // **A folded volume identifier can mean several devices**: macOS firmlinks the boot volume, so `/`
-            // and `/private/tmp` report the same identifier from different `st_dev`. A row is dead only when it
-            // resolves under none of them.
-            for device in devices {
-                if stat("/.vol/\(device)/\(key.inode)", &status) == 0 {
-                    resolved = true
-                    break
-                }
-                if errno != ENOENT { sawOnlyMissing = false }
-            }
-            if !resolved {
-                // Only `ENOENT` everywhere is proof. Anything else is this process not being able to look.
-                if sawOnlyMissing {
-                    entries.removeValue(forKey: key)
-                    dropped += 1
-                }
-                continue
-            }
-            // Same inode, different length: the version this row describes is gone and cannot come back,
-            // because the generation counter never goes backwards.
-            //
-            // **Length only, and never mtime.** The key's mtime comes from Foundation's
-            // `contentModificationDate`, a `Date`, whose granularity near 1.79e18 nanoseconds is a few hundred
-            // nanoseconds; `stat` reports an exact `st_mtimespec`. A rounded number compared to an unrounded one
-            // disagrees for files that never changed, and the first version of this rule therefore considered
-            // **every live row superseded** -- which would have deleted the whole cache on its first run. The
-            // size is an integer on both sides and can be trusted.
-            if Int64(status.st_size) != key.size {
+            // `.cannotTell` and an unmounted volume are both kept: see the note on ``prune()``.
+            switch CacheLiveness.resolve(key: key, devices: devices) {
+            case .gone, .lengthChanged:
                 entries.removeValue(forKey: key)
                 dropped += 1
+            case .live, .cannotTell:
+                continue
             }
         }
         guard dropped > 0 else {

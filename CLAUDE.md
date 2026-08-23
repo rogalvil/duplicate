@@ -934,6 +934,17 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Solo `ENOENT` prueba que un archivo se fue.** Cualquier otro errno es este proceso sin poder mirar: revocar el
   acceso al Escritorio hace que cada fila de un archivo de ahí deje de resolver, y esos archivos nunca se
   movieron. Medido hoy: 0 filas irresolubles, y la distinción está puesta antes de que haga falta.
+- **La caché perceptual real tiene 0% de desperdicio, y aun así se poda.** Sus 3,396 filas describen archivos que
+  existen: una biblioteca de fotos rota mucho más despacio que los árboles temporales que habían dejado la caché de
+  digests con 55.8% de peso muerto. Lo que sigue siendo cierto es que crece una fila por (archivo, versión) y no
+  recupera ninguna, así que la poda se construye por **el límite, no por el reclamo** — y el mecanismo es el mismo,
+  o sea que no agrega riesgo.
+- **Y la poda de digests ya se vio funcionar sobre datos reales**: la caché del usuario pasó de 7,741 filas con
+  55.8% de desperdicio a 3,481 con 1.7%, sola, en cuanto un modo abrió la caché default. Eso es la única evidencia
+  de producción que este proyecto va a tener de esa regla, así que queda escrita.
+- **La clasificación de liveness es una sola función para las dos cachés.** Dos copias serían dos oportunidades de
+  discrepar sobre si una fila está muerta, y una de esas respuestas la borra — el mismo argumento que colapsó los
+  dos constructores de manifiesto en uno.
 - **La caché de digests real tenía 55.8% de desperdicio**: 7,741 filas, 3,421 describiendo un archivo que existe,
   4,320 con el archivo borrado. El issue #75 preguntaba si valía la pena podar; ese número dijo que sí. La poda
   cuesta un lookup de inodo por fila —3.4 µs medidos, 26 ms sobre 7,741, ~340 ms sobre cien mil— así que no se

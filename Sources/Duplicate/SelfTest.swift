@@ -5173,6 +5173,10 @@ enum SelfTest {
         let clock = ContinuousClock()
         let started = clock.now
         let report = CacheLiveness.measure(hashCacheAt: url)
+        let perceptualURL =
+            value(for: "--perceptual-cache", in: arguments).map { URL(filePath: $0) }
+            ?? PerceptualCache.defaultURL()
+        let perceptual = CacheLiveness.measure(perceptualCacheAt: perceptualURL)
         let elapsed = clock.now - started
         try expect(report.totalRows > 0, "the cache has no rows to measure")
         try expect(
@@ -5196,6 +5200,17 @@ enum SelfTest {
                 + "\(report.unmountedRows) unmounted")
         print(
             "  \(report.checkableRows) inode lookups in \(elapsed)")
+        if perceptual.totalRows > 0 {
+            print(
+                "  perceptual: \(perceptual.totalRows) rows: \(perceptual.liveRows) live, "
+                    + "\(perceptual.deadRows) dead, \(perceptual.supersededRows) superseded, "
+                    + "\(perceptual.unresolvableRows) unresolvable, \(perceptual.unmountedRows) unmounted "
+                    + "-- " + String(format: "%.1f%%", perceptual.wasteFraction * 100) + " waste")
+            try expect(
+                perceptual.liveRows + perceptual.deadRows + perceptual.supersededRows
+                    + perceptual.unresolvableRows == perceptual.checkableRows,
+                "the perceptual row classes do not add up")
+        }
         print(
             "  waste among checkable rows: "
                 + String(format: "%.1f%%", report.wasteFraction * 100)
