@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR de metadata bajo la vista previa. 39 modos de selftest, 762 tests, 94.68% de
-cobertura sobre `DuplicateCore`.
+Última actualización: PR de poda de sesiones. 39 modos de selftest, 766 tests, 94.63% de cobertura sobre
+`DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -206,66 +206,29 @@ test y comentario y por lo tanto **parece una capacidad**.
 - **La metadata en el visor de carpetas sigue pendiente.** Ahí el detalle es la lista de archivos del par, y
   el tamaño de una carpeta exige recorrerla — otra decisión, no la misma línea.
 
-## Qué falta, en orden
+## Qué falta
 
-Dieciséis cosas, en cuatro niveles. El criterio del orden es **qué tan cerca está de los datos del usuario**:
-primero lo que puede perder algo o mentirle, al final lo que solo es incómodo o no medido.
+**Los pendientes viven en los issues del repo, no aquí.** Este documento describe lo que la app *hace*; mantener
+además una lista de lo que no hace garantiza que una de las dos quede vieja. Cada issue carga su propio *por qué*,
+que es la parte que cuesta reconstruir.
 
-### P1 — el usuario lo nota, o hay datos en juego
+```bash
+gh issue list --label priority:p1     # cerca de los datos del usuario
+gh issue list --label bloqueado       # y por qué está bloqueado
+```
 
-1. ~~No hay Quick Look de tamaño completo.~~ **Hecho**: ⌘Y en los tres visores, con los dos lados de un par
-   parecido en el panel para que las flechas sean la comparación.
-2. ~~"Mostrar en Finder" solo en la revisión exacta.~~ **Hecho**: los tres visores lo tienen, y en un par
-   revela **los dos** archivos —Finder selecciona varios, y elegir uno en silencio sería elegir por el usuario.
-3. ~~Los fallos de un apply interpolan el enum.~~ **Hecho**: una función compartida por las tres hojas dice qué
-   pasó y si el archivo sigue ahí, en los dos idiomas.
-4. ~~El journal crece para siempre.~~ **Hecho**: **Sesiones > Limpiar sesiones ya deshechas…** borra solo los
-   journals de sesiones cuyos archivos **todos** volvieron —lo dice el propio journal con sus `undone_at`— con los
-   conteos en pantalla antes de confirmar. Las dos reglas más amplias quedaron rechazadas por escrito.
-5. **No existe la ventana de historial de sesiones** que el plan pedía. Hoy Sesiones tiene deshacer la última y
-   limpiar; no hay manera de *ver* qué sesiones hay, cuántos archivos movió cada una, ni de deshacer una que no
-   sea la última. Es el hueco que la poda dejó a la vista.
-6. **El montaje de red es el único caso que la cuarentena rescata de verdad, y es el camino menos probado del
-   código destructivo.** No se puede fabricar aquí sin servidor; hace falta un NAS o un share de prueba.
+| Nivel | Qué significa | Abiertos |
+|---|---|---|
+| `priority:p1` | El usuario lo nota, o hay datos en juego | historial de sesiones (#72), fallback en montaje de red (#73, bloqueado) |
+| `priority:p2` | Deuda de corrección que hoy no muerde | asimetría de cancelación en `buildSynchronously` (#74), poda de cachés (#75), lo que solo una pantalla puede verificar (#81, bloqueado) |
+| `priority:p3` | Funcionalidad agregable | metadata en el visor de carpetas (#76), bitrate (#77) |
+| `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`), corpora C1/C3 (#79), video contra ffmpeg (#80) |
+| `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |
 
-### P2 — deuda de corrección que hoy no muerde
-
-6. **`FolderManifest.buildSynchronously` no tiene checkpoint de cancelación y su gemela async sí.** Dos funciones
-   que se ven iguales y no lo son. Hoy su único llamador es el planificador de deshacer, donde un manifiesto
-   corto falla su comparación y bloquea —el lado seguro—, pero el próximo llamador no tiene por qué saberlo.
-7. **Las dos cachés no podan entradas de archivos borrados.** Crecen una fila por cada (archivo, versión) visto:
-   532 KB tras 119 escaneos, en un directorio que macOS puede purgar. Podar por existencia está **rechazado con
-   número** —el corpus vive en un disco externo, y desmontado *todas* sus entradas se verían muertas— así que lo
-   que falta es una regla que sí sea segura, no la poda ingenua.
-8. **La cancelación dentro de un archivo corta entre chunks de 1 MiB.** Es el límite, no un problema: bajarlo
-   solo tiene sentido si alguien mide un caso donde 1 MiB tarda.
-9. **Dos ramas del disposer no son alcanzables con un `FileManager` real** y están marcadas en el código: que
-   `trashItem` no lance y tampoco reporte destino, y el default de `Application Support` con `urls(for:in:)`
-   vacío.
-10. **`folder-decisions/` no tiene lector externo.** El CLI tiene el slot y nunca escribió uno, así que su
-    round-trip se prueba contra un documento sintetizado. Nada que arreglar; algo que recordar.
-
-### P3 — funcionalidad que se puede agregar
-
-11. **Metadata en el visor de carpetas.** Ahí el detalle es la lista de archivos del par; el tamaño de una
-    carpeta exige recorrerla, así que es otra decisión, no la misma línea.
-12. **El bitrate se lee y no se muestra.** Misma categoría que los cuatro reportadores ya resueltos, pero cinco
-    campos en un panel angosto ya es el límite: mostrarlo pide decidir qué sale.
-13. **`PerceptualHash(hex:)` y `hexString` solo existen para el diferencial y los tests.** Ningún hash
-    perceptual aparece en el JSON compartido. Deuda barata y deliberada —hace depurable un desacuerdo contra
-    Python— pero es superficie pública que producción no usa.
-
-### P4 — medición pendiente
-
-14. **Barrido de concurrencia en frío.** Necesita `sudo purge`, así que lo corre el usuario. El barrido caliente
-    no tiene codo hasta c=16, pero a 2,350 MB/s eso lo sirvió el page cache: mide SHA-256, no disco. **Por eso
-    la política enviada no se cambió**, y cambiarla sin el dato frío sería el error que este proyecto lleva
-    sesenta PRs registrando.
-15. **Los corpora sintéticos del plan nunca se construyeron.** C1 (200k archivos, 40 GB, power-law, con 500
-    pares de ≥1 GB del mismo tamaño para ejercitar la etapa de prefijo) y C3 (profundidad 8, 5,000 directorios).
-    Todo lo medido salió de árboles reales, que es mejor evidencia para *este* usuario y peor para reproducir.
-16. **Video contra `ffmpeg` como línea base.** Está medida la concurrencia de decodes (4 workers, 213→151 ms) y
-    no el "quitamos ffmpeg y además es más rápido", que el plan pedía como medición y no como eslogan.
+**Lo que ya se cerró desde que existe esta sección**: Quick Look de tamaño completo y Mostrar en Finder en los tres
+visores, los fallos de apply localizados, la poda de journals de sesiones deshechas, la metadata bajo la vista
+previa, la cancelación dentro de un archivo grande, y los cuatro reportadores silenciosos que este documento
+encontró en su primera pasada.
 
 ## Deuda conocida
 
