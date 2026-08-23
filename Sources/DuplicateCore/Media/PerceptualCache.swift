@@ -71,13 +71,28 @@ public enum PerceptualCacheFormat {
 
     // MARK: - Encoding
 
-    public static func encodeHeader(salt: UInt64) -> [UInt8] {
+    /// - Parameter rowsAtLastPrune: how many rows the file held when dead ones were last removed. Lives in the
+    ///   header's padding, which an older build ignores and this one reads as zero -- "never pruned", which is
+    ///   right.
+    public static func encodeHeader(salt: UInt64, rowsAtLastPrune: UInt64 = 0) -> [UInt8] {
         var bytes = magic
         bytes += littleEndian(version)
         bytes += littleEndian(UInt32(recordSize))
         bytes += littleEndian(salt)
+        bytes += littleEndian(rowsAtLastPrune)
         bytes += [UInt8](repeating: 0, count: headerSize - bytes.count)
         return bytes
+    }
+
+    /// The marker written by ``encodeHeader(salt:rowsAtLastPrune:)``, or zero.
+    public static func rowsAtLastPrune(_ bytes: [UInt8]) -> UInt64 {
+        let offset = magic.count + 4 + 4 + 8
+        guard bytes.count >= offset + 8 else { return 0 }
+        var value: UInt64 = 0
+        for index in (0..<8).reversed() {
+            value = value << 8 | UInt64(bytes[offset + index])
+        }
+        return value
     }
 
     public static func decodeHeader(_ bytes: [UInt8], salt: UInt64) -> Bool {
@@ -211,6 +226,8 @@ public actor PerceptualCache {
     private var appended: [(key: HashCacheKey, entry: PerceptualCacheEntry)] = []
     private var recordsOnDisk = 0
     private var lockDescriptor: Int32 = -1
+    private var rowsAtLastPrune: UInt64 = 0
+    private let pruneFloor: Int
     private(set) public var report = LoadReport()
 
     deinit {
@@ -220,9 +237,11 @@ public actor PerceptualCache {
     public init(
         url: URL = PerceptualCache.defaultURL(),
         imageConfiguration: ImageHasher.Configuration = ImageHasher.Configuration(),
-        videoConfiguration: VideoHasher.Configuration = VideoHasher.Configuration()
+        videoConfiguration: VideoHasher.Configuration = VideoHasher.Configuration(),
+        pruneFloor: Int = HashCache.defaultPruneFloor
     ) {
         self.url = url
+        self.pruneFloor = pruneFloor
         self.salt = PerceptualCacheFormat.salt(
             imageConfiguration: imageConfiguration, videoConfiguration: videoConfiguration)
     }
@@ -232,6 +251,7 @@ public actor PerceptualCache {
         report = LoadReport()
         entries.removeAll()
         recordsOnDisk = 0
+        rowsAtLastPrune = 0
         acquireLock()
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return }
         let bytes = [UInt8](data)
@@ -244,6 +264,7 @@ public actor PerceptualCache {
             return
         }
 
+        rowsAtLastPrune = PerceptualCacheFormat.rowsAtLastPrune(bytes)
         let body = bytes.count - PerceptualCacheFormat.headerSize
         let whole = body / PerceptualCacheFormat.recordSize
         report.hadTornTail = body % PerceptualCacheFormat.recordSize != 0
@@ -332,14 +353,56 @@ public actor PerceptualCache {
         (report.hadTornTail || report.corruptRecords > 0) && !report.isReadOnly
     }
 
+    /// Whether enough rows have piled up since the last prune to be worth checking them.
+    ///
+    /// **Measured today at zero waste, and built for the bound rather than for the reclaim.** All 3,396 rows of
+    /// the real file describe files that still exist -- a photo library churns far slower than the temporary
+    /// trees that had made the digest cache 55.8% dead weight. What is still true is that the file grows a row
+    /// per `(file, version)` ever seen and reclaims none, so a corpus that gets re-encoded or deleted leaves rows
+    /// forever. The mechanism is shared with the digest cache, so this costs no new risk.
+    public var needsPruning: Bool {
+        !report.isReadOnly
+            && recordsOnDisk >= max(pruneFloor, Int(rowsAtLastPrune) + pruneFloor)
+    }
+
+    /// Drops rows whose file is gone, and rewrites the file.
+    ///
+    /// Same three exceptions as the digest cache, for the same reasons: a row on an unmounted volume cannot be
+    /// judged and this user's corpus lives on an external disk; a row that fails to resolve with anything other
+    /// than `ENOENT` is this process being unable to look, not a deleted file; and a row that still matches is
+    /// the point of a cache. Length is compared and mtime never is -- the key's mtime is `Date`-derived and
+    /// `stat`'s is exact.
+    @discardableResult
+    public func prune() throws -> Int {
+        guard !report.isReadOnly else { return 0 }
+        let volumes = CacheLiveness.mountedVolumes()
+        guard !volumes.isEmpty else { return 0 }
+
+        var dropped = 0
+        for (key, _) in entries {
+            guard let devices = volumes[key.volume] else { continue }
+            switch CacheLiveness.resolve(key: key, devices: devices) {
+            case .gone, .lengthChanged:
+                entries.removeValue(forKey: key)
+                dropped += 1
+            case .live, .cannotTell:
+                continue
+            }
+        }
+        // The marker moves either way, or every load pays for the lookups again.
+        _ = try? compact()
+        rowsAtLastPrune = UInt64(entries.count)
+        return dropped
+    }
+
     /// Loads, then rewrites the file if it holds bytes that cannot be trusted.
     ///
     /// A failed repair is dropped, not propagated: the hashes already loaded are still good, and a perceptual
     /// scan costs 177 seconds on a real tree.
     public func loadAndRepair() {
         load()
-        guard needsRewrite else { return }
-        _ = try? compact()
+        if needsRewrite { _ = try? compact() }
+        if needsPruning { _ = try? prune() }
     }
 
     /// Rewrites the file with one row per live key.
@@ -353,7 +416,8 @@ public actor PerceptualCache {
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        var payload = PerceptualCacheFormat.encodeHeader(salt: salt)
+        var payload = PerceptualCacheFormat.encodeHeader(
+            salt: salt, rowsAtLastPrune: UInt64(entries.count))
         for key in entries.keys.sorted(by: PerceptualCache.isOrdered) {
             payload += PerceptualCacheFormat.encode(key: key, entry: entries[key]!)
         }

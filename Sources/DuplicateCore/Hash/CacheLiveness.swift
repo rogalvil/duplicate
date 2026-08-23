@@ -92,52 +92,100 @@ public enum CacheLiveness {
         return mapping
     }
 
-    /// Reads a digest cache file and reports how much of it is still true.
+    /// Classifies keys against the filesystem. **The one implementation**, shared by both caches.
     ///
-    /// Read-only: opens the cache for reading and resolves inodes. Never writes, never deletes.
-    public static func measure(hashCacheAt url: URL) -> Report {
+    /// Two copies of this would be two chances to disagree about whether a row is dead, and one of those
+    /// answers deletes it -- the same argument that collapsed the two folder-manifest builders into one.
+    public static func classify(keys: [HashCacheKey]) -> Report {
         var report = Report()
-        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return report }
-        let bytes = [UInt8](data)
-        guard bytes.count > HashCacheFormat.headerSize else { return report }
-        let body = bytes.count - HashCacheFormat.headerSize
-        report.totalRows = body / HashCacheFormat.recordSize
+        report.totalRows = keys.count
         let volumes = mountedVolumes()
-
-        for index in 0..<report.totalRows {
-            let start = HashCacheFormat.headerSize + index * HashCacheFormat.recordSize
-            let row = Array(bytes[start..<(start + HashCacheFormat.recordSize)])
-            guard let record = HashCacheFormat.decode(row) else { continue }
-            guard let devices = volumes[record.key.volume] else {
+        for key in keys {
+            guard let devices = volumes[key.volume] else {
                 report.unmountedRows += 1
                 continue
             }
             report.checkableRows += 1
-            var status = stat()
-            var resolved = false
-            var sawOnlyMissing = true
-            for device in devices {
-                if stat("/.vol/\(device)/\(record.key.inode)", &status) == 0 {
-                    resolved = true
-                    break
-                }
-                if errno != ENOENT { sawOnlyMissing = false }
-            }
-            guard resolved else {
-                if sawOnlyMissing {
-                    report.deadRows += 1
-                } else {
-                    report.unresolvableRows += 1
-                }
-                continue
-            }
-            // Same inode, different content: an earlier version of a file that is still there.
-            if Int64(status.st_size) != record.key.size {
-                report.supersededRows += 1
-            } else {
-                report.liveRows += 1
+            switch resolve(key: key, devices: devices) {
+            case .live: report.liveRows += 1
+            case .lengthChanged: report.supersededRows += 1
+            case .gone: report.deadRows += 1
+            case .cannotTell: report.unresolvableRows += 1
             }
         }
         return report
+    }
+
+    /// What the filesystem says about one key.
+    public enum Resolution: Sendable, Equatable {
+        /// The inode resolves and the length still matches.
+        case live
+        /// The inode resolves and the length does not: an older version of a file that is still there.
+        ///
+        /// **Length, never mtime.** The key's `mtimeNanoseconds` comes from Foundation's
+        /// `contentModificationDate`, a `Date` -- a `Double` whose granularity near 1.79e18 nanoseconds is
+        /// hundreds of nanoseconds -- while `stat` reports an exact `st_mtimespec`. Comparing them is comparing a
+        /// rounded number to an unrounded one, and the first version of this called **every live row superseded**,
+        /// which as a pruning rule deletes the whole cache.
+        case lengthChanged
+        /// `ENOENT` under every device the volume can appear as. The only proof a file is gone.
+        case gone
+        /// The inode failed to resolve for some other reason -- permission, most likely. **Never dead.**
+        case cannotTell
+    }
+
+    /// Resolves one key through `/.vol`, trying every device its volume can appear as.
+    public static func resolve(key: HashCacheKey, devices: [Int32]) -> Resolution {
+        var status = stat()
+        var sawOnlyMissing = true
+        for device in devices {
+            if stat("/.vol/\(device)/\(key.inode)", &status) == 0 {
+                return Int64(status.st_size) == key.size ? .live : .lengthChanged
+            }
+            if errno != ENOENT { sawOnlyMissing = false }
+        }
+        return sawOnlyMissing ? .gone : .cannotTell
+    }
+
+    /// Reads a digest cache file and reports how much of it is still true. Never writes.
+    public static func measure(hashCacheAt url: URL) -> Report {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return Report() }
+        let bytes = [UInt8](data)
+        guard bytes.count > HashCacheFormat.headerSize else { return Report() }
+        let rows = (bytes.count - HashCacheFormat.headerSize) / HashCacheFormat.recordSize
+        var keys: [HashCacheKey] = []
+        keys.reserveCapacity(rows)
+        for index in 0..<rows {
+            let start = HashCacheFormat.headerSize + index * HashCacheFormat.recordSize
+            guard
+                let record = HashCacheFormat.decode(
+                    bytes[start..<(start + HashCacheFormat.recordSize)])
+            else { continue }
+            keys.append(record.key)
+        }
+        return classify(keys: keys)
+    }
+
+    /// The same for the perceptual cache, whose rows are 112 bytes and hold hashes rather than a digest.
+    ///
+    /// The salt is not checked. A file written under different pipeline parameters is discarded whole on load,
+    /// so its liveness means nothing to a scan -- but counting its rows is still the honest answer to "how much
+    /// of this file describes files that exist".
+    public static func measure(perceptualCacheAt url: URL) -> Report {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return Report() }
+        let bytes = [UInt8](data)
+        guard bytes.count > PerceptualCacheFormat.headerSize else { return Report() }
+        let rows =
+            (bytes.count - PerceptualCacheFormat.headerSize) / PerceptualCacheFormat.recordSize
+        var keys: [HashCacheKey] = []
+        keys.reserveCapacity(rows)
+        for index in 0..<rows {
+            let start =
+                PerceptualCacheFormat.headerSize + index * PerceptualCacheFormat.recordSize
+            let row = Array(bytes[start..<(start + PerceptualCacheFormat.recordSize)])
+            guard let decoded = PerceptualCacheFormat.decode(row) else { continue }
+            keys.append(decoded.key)
+        }
+        return classify(keys: keys)
     }
 }

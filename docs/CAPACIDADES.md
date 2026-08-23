@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR de poda de cachés. 41 modos de selftest, 774 tests, 94.86% de cobertura sobre
-`DuplicateCore`.
+Última actualización: PR de poda de la caché perceptual. 41 modos de selftest, 776 tests, 94.72% de
+cobertura sobre `DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -77,7 +77,7 @@ recortadas de más.
 | Decode a 256 px | Barrido de 128 a 4096: los pares encontrados no se mueven (0.1% de rango). Pedir 32 px a ImageIO es un desastre (10.9% de coincidencia) | `Media/ImageHasher.swift` |
 | Orientación EXIF aplicada | Divergencia deliberada contra Pillow: una copia que solo cambia el flag **debe** coincidir con su original | `Media/ImageHasher.swift` |
 | Índice LSH multi-banda | `T+1` bandas por palomar (6 de 11,11,11,11,10,10 a T=5); colapso de hashes idénticos en clases (2,779 fotos → 1,630 clases) | `Media/MultiIndexLSH.swift` |
-| Caché perceptual | Filas de 112 bytes, salt **derivada de los parámetros del pipeline**, CRC, `flock`, reparación. **177 s → 0.5 s** medido | `Media/PerceptualCache.swift` |
+| Caché perceptual | Filas de 112 bytes, salt **derivada de los parámetros del pipeline**, CRC, `flock`, reparación, y poda de filas cuyo archivo se borró — medida hoy en **0% de desperdicio**, así que la poda es por el límite y no por el reclamo. **177 s → 0.5 s** medido | `Media/PerceptualCache.swift` |
 
 **Coincidencia con `imagehash`.** Medida sobre las 2,779 fotos reales del usuario: **90.9% de hashes
 idénticos** entre las 2,761 sin rotación, peor caso **4 bits**, **96.7% de Jaccard** entre los conjuntos de

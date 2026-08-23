@@ -335,4 +335,78 @@ struct PerceptualCacheTests {
         #expect(
             try Data(contentsOf: url) == original, "a file another build can read was overwritten")
     }
+
+    /// **Measured at zero waste on the real file and built for the bound anyway.** All 3,396 rows of this user's
+    /// perceptual cache describe files that still exist: a photo library churns far slower than the temporary
+    /// trees that had made the digest cache 55.8% dead weight. What stays true is that the file grows a row per
+    /// `(file, version)` seen and reclaims none.
+    @Test("A row whose file was deleted is dropped, and a live one is kept")
+    func prunesDeadRows() async throws {
+        let url = try scratch()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let tree = url.deletingLastPathComponent().path + "/tree"
+        try FileManager.default.createDirectory(atPath: tree, withIntermediateDirectories: true)
+
+        let survivor = tree + "/keep.jpg"
+        let doomed = tree + "/go.jpg"
+        try Data("a picture".utf8).write(to: URL(filePath: survivor))
+        try Data("another".utf8).write(to: URL(filePath: doomed))
+        let walk = try FileManagerWalker().walk(
+            root: tree, policy: ScanPolicy(), exclusions: ExclusionSet())
+        let survivorEntry = try #require(walk.entries.first { $0.path.hasSuffix("keep.jpg") })
+        let doomedEntry = try #require(walk.entries.first { $0.path.hasSuffix("go.jpg") })
+
+        do {
+            let cache = PerceptualCache(url: url, pruneFloor: 1)
+            await cache.load()
+            await cache.store(hashes([0x11]), for: survivorEntry, kind: .image)
+            await cache.store(hashes([0x22]), for: doomedEntry, kind: .image)
+            _ = try await cache.persist()
+        }
+        try FileManager.default.removeItem(atPath: doomed)
+
+        // Through `loadAndRepair`, which is what the scan session calls.
+        do {
+            let cache = PerceptualCache(url: url, pruneFloor: 1)
+            await cache.loadAndRepair()
+            let kept = await cache.count
+            #expect(kept == 1, "the prune kept \(kept) rows")
+            #expect(
+                await cache.hashes(for: survivorEntry, kind: .image) == hashes([0x11]),
+                "the live row was dropped")
+        }
+
+        let reader = PerceptualCache(url: url, pruneFloor: 1)
+        await reader.load()
+        #expect(await reader.report.recordsRead == 1)
+        #expect(await reader.hashes(for: survivorEntry, kind: .image) == hashes([0x11]))
+        // And the marker stops the next load from paying for the lookups again.
+        #expect(!(await reader.needsPruning), "the prune marker did not survive the rewrite")
+    }
+
+    @Test("A row on a volume that is not mounted is never dropped")
+    func keepsRowsFromUnmountedVolumes() async throws {
+        // The hazard that makes the naive rule wrong: this user's corpus lives on an external disk, and a
+        // perceptual scan of it costs 177 seconds to rebuild.
+        let url = try scratch()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let ghost = FileEntry(
+            path: "/Volumes/NotMounted/clip.mp4",
+            size: 4096,
+            identity: FileIdentity(volume: 0xFEED_FACE_FEED_FACE, inode: 424_242),
+            generation: 3,
+            modifiedNanoseconds: 1_700_000_000_000_000_000
+        )
+        do {
+            let cache = PerceptualCache(url: url, pruneFloor: 1)
+            await cache.load()
+            await cache.store(hashes([1, 2, 3, 4]), for: ghost, kind: .video)
+            _ = try await cache.persist()
+        }
+
+        let cache = PerceptualCache(url: url, pruneFloor: 1)
+        await cache.load()
+        #expect(try await cache.prune() == 0, "a row on an unmounted volume was dropped")
+        #expect(await cache.hashes(for: ghost, kind: .video) == hashes([1, 2, 3, 4]))
+    }
 }
