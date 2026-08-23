@@ -1,16 +1,36 @@
 name: CI
 
-# On pull requests only, never on push. This repo is private and GitHub bills macOS runner
-# minutes at 10x, so the Free plan's 2,000 minutes are really ~200 minutes of wall clock.
-# That leaves room for pull requests, nowhere near enough for every push to every branch.
+# On pull requests only, never on push. This was a billing constraint first -- while the repository was
+# private, GitHub billed macOS runners at 10x and the Free plan's 2,000 minutes ran out in eleven days
+# across 91 runs. The repository is public now and Actions is free, so what keeps this rule is the
+# ordinary reason: a run per push to every branch is noise, and the check that matters is the one on the
+# pull request.
 #
-# Stacked bases are included on purpose. With `branches: [main]` alone, a pull request based
-# on another feature branch reports no checks at all, and retargeting it to main afterwards
-# fires an `edited` event that is not among the default trigger types. The combination let a
-# stacked branch reach main having never been tested on the previous project.
+# **Two optimisations were tried here and removed, because measuring them said to.** A cache of `.build`
+# restored correctly on its second run and that run was 58 seconds *slower* than the uncached one; there
+# was no evidence of benefit, and GitHub scopes a cache to its own branch plus the default one, which
+# this workflow never runs on. And a step that classified documentation-only changes to skip the
+# compiling saved a couple of minutes of waiting at the price of a shell branch that, if it ever got the
+# base ref wrong, would turn the whole gate off silently. Both were paying for a bill that no longer
+# exists.
+#
+# Stacked bases are included on purpose. With `branches: [main]` alone, a pull request based on
+# another feature branch reports no checks at all, which once let a stacked branch reach main having
+# never been tested.
+#
+# **`edited` used to be in this list and is gone, because the ruleset already covers what it was for.**
+# It was there so retargeting a stacked pull request to `main` -- which fires `edited` and nothing else
+# -- would re-test against the new base. But the ruleset sets `strict_required_status_checks_policy`,
+# so a branch has to be up to date with `main` before it can merge: after retargeting, the branch must
+# be updated, that update is a push, and a push is a `synchronize`. The protection stands, and editing
+# a pull request title or body no longer starts a full build.
+#
+# **Not filtered with a job-level `if` instead**, which was the first attempt: a job skipped that way
+# reports its check as skipped, and whether a skipped check satisfies a *required* one is the kind of
+# uncertainty that leaves a pull request unmergeable with no way to retry but an empty commit.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
     branches:
       - main
       - "feat/**"
@@ -58,14 +78,14 @@ jobs:
       #
       # CONFIG=debug is the other half of why this is affordable. `make selftest` normally depends on
       # `make all`, which compiles in release -- a second full build. Measured locally: 14.5 s for the
-      # build, 10.6 s for all 21 modes.
+      # build, 26 s for all 43 modes.
       #
-      # Without this step the 21 modes only ever ran on a developer's machine, so a break in the bundle
+      # Without this step the 43 modes only ever ran on a developer's machine, so a break in the bundle
       # assembly, the string tables, the menu shortcuts or what a window actually displays reached main
       # unnoticed. Those are exactly the things `swift test` cannot see.
       #
-      # Verified on the runner: all 21 pass here, including the ones that touch the real Trash, the
-      # window server and APFS cloning. The four that need the shared state directory find none and skip
+      # Verified on the runner: all 43 pass here, including the ones that touch the real Trash, the
+      # window server and APFS cloning. The modes that need the shared state directory find none and skip
       # printing why -- a mode that passed silently without having done anything would be worse than no
       # mode at all.
       - name: Selftests
