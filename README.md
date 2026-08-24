@@ -26,6 +26,7 @@ deshacer.
 | Metadata bajo la vista previa: tamaño, fecha, resolución, codec — y fecha por carpeta | **funciona** |
 | Vista rápida a tamaño completo (⌘Y) y Mostrar en Finder, en los tres visores | **funciona** |
 | Historial de sesiones: listarlas y deshacer **cualquiera**, no solo la última | **funciona** |
+| Cuarentena cuando la Papelera no existe, probada en un montaje SMB real | **funciona** |
 | Limpiar los journals de sesiones ya deshechas, con su regla probable | **funciona** |
 
 O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,
