@@ -44,7 +44,7 @@ enum SelfTest {
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
             "similar-window", "video", "similar-apply", "folder-apply", "cancel", "keeper",
             "format", "progress", "volumes", "realroot", "phash-differential", "history",
-            "cache-liveness", "video-timing", "corpus",
+            "cache-liveness", "video-timing", "corpus", "network-fallback",
         ]
 
         let modes: [String]
@@ -104,6 +104,7 @@ enum SelfTest {
                 case "cache-liveness": try checkCacheLiveness(arguments: arguments)
                 case "video-timing": try await checkVideoTiming(arguments: arguments)
                 case "corpus": try await checkCorpus(arguments: arguments)
+                case "network-fallback": try await checkNetworkFallback(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
                 default:
@@ -5432,6 +5433,134 @@ enum SelfTest {
                 + "\(String(format: "%.0f", Double(files) / max(seconds, 1e-9))) files/s, "
                 + "\(String(format: "%.0f", Double(snapshot.bytesRead) / 1e6 / max(seconds, 1e-9))) MB/s, "
                 + "peak RSS \(ByteSize.format(peak))")
+    }
+
+    // MARK: - network-fallback
+
+    /// Proves the quarantine fallback on a real network volume.
+    ///
+    /// **The one path in the destructive code that had never run.** `TrashDisposer` is the primary and
+    /// `QuarantineDisposer` is what catches the cases where the Trash refuses -- and every volume this machine
+    /// could produce accepted it. Measured: the boot volume and `$HOME` land in `~/.Trash`, both external APFS
+    /// disks land in `<volume>/.Trashes/501`, and even a FAT32 disk image creates `.Trashes/501`. A read-only
+    /// image refuses the Trash **and** the quarantine, because moving a file off one has to delete the source.
+    ///
+    /// A network mount is the case that is actually rescued, and it took one:
+    ///
+    /// ```
+    /// mount_smbfs //roger@localhost/roger /tmp/smbtest
+    /// ```
+    ///
+    /// On that volume `trashItem` fails with `NSCocoaErrorDomain` 3328 -- *"the volume doesn't have one"* -- and
+    /// the fallback moves the file to a local quarantine, journals it as `.quarantine`, and an undo brings it
+    /// back byte-identical. That chain is what this asserts.
+    ///
+    /// Teeth: point `FallbackDisposer` at `TrashDisposer` for both mechanisms and the move fails instead of
+    /// falling back.
+    ///
+    /// **And a tooth that did not bite, which is worth recording.** Writing `.trash` into the journal instead of
+    /// the mechanism the disposer reported changes nothing: the undo restores from `resultingPath` and never
+    /// consults the mechanism. So that field is not load-bearing for recovery -- it exists so a report can tell
+    /// someone whose duplicates live on a NAS that the files went to a quarantine rather than to the Trash,
+    /// which is a promise about where to look, not about how to get them back. It is asserted through the
+    /// journal below for that reason and not for the undo's.
+    private static func checkNetworkFallback(arguments: [String]) async throws {
+        guard let mount = value(for: "--dir", in: arguments) else {
+            print("  SKIPPED: pass --dir <network mount> to run this")
+            print("  e.g. mount_smbfs //you@localhost/you /tmp/smbtest")
+            return
+        }
+        let manager = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard manager.fileExists(atPath: mount, isDirectory: &isDirectory), isDirectory.boolValue
+        else { throw SelfTestFailure("\(mount) is not a directory") }
+
+        // **Asserted, not assumed.** A local directory passed here would let every check below pass while
+        // proving nothing about a network volume, which is the whole point.
+        // `statfs` rather than `attributesOfFileSystem`, which does not carry the type name.
+        var systemInfo = statfs()
+        guard statfs(mount, &systemInfo) == 0 else {
+            throw SelfTestFailure("cannot statfs \(mount)")
+        }
+        let filesystem = withUnsafePointer(to: &systemInfo.f_fstypename) {
+            String(cString: UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self))
+        }
+        try expect(
+            filesystem != "apfs" && filesystem != "hfs",
+            "\(mount) is \(filesystem), a local volume: nothing here would be tested")
+        print("  \(mount) is \(filesystem)")
+
+        let tree = mount + "/duplicate-selftest-\(getpid())"
+        try manager.createDirectory(atPath: tree, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(atPath: tree) }
+        let victim = tree + "/on-the-share.txt"
+        try Data("this file lives on a network volume".utf8).write(to: URL(filePath: victim))
+        let before = try ContentHasher().fullDigest(atPath: victim)
+
+        // 1. The Trash refuses, and says why.
+        do {
+            _ = try TrashDisposer().dispose(path: victim)
+            throw SelfTestFailure(
+                "the Trash accepted a file on \(filesystem), so nothing is being tested")
+        } catch let error as DisposalError {
+            guard case .trashUnavailable(let path, let reason) = error else {
+                throw SelfTestFailure("wrong refusal from the Trash: \(error)")
+            }
+            try expect(path == victim, "the refusal names \(path)")
+            try expect(!reason.isEmpty, "the refusal carries no reason")
+            print("  the Trash refused it: \(reason)")
+        }
+        try expect(manager.fileExists(atPath: victim), "the file left the share on a failed move")
+
+        // 2. The fallback rescues it, into a local quarantine, and records which mechanism it used.
+        let quarantineRoot = NSTemporaryDirectory() + "duplicate-quarantine-\(getpid())"
+        defer { try? manager.removeItem(atPath: quarantineRoot) }
+        let session = "20260823-120000-000000"
+        let outcome = try FallbackDisposer(quarantineRoot: quarantineRoot, sessionID: session)
+            .dispose(path: victim)
+        try expect(
+            outcome.mechanism == .quarantine,
+            "the fallback reported \(outcome.mechanism), not the quarantine")
+        try expect(!manager.fileExists(atPath: victim), "the file is still on the share")
+        try expect(
+            manager.fileExists(atPath: outcome.resultingPath),
+            "the quarantine has no file at \(outcome.resultingPath)")
+        // **The mechanism is recorded per file, not per session.** A user whose duplicates live on a NAS must
+        // not be told the files went to the Trash when they did not.
+        print("  the quarantine took it: \(outcome.resultingPath)")
+
+        // 3. And the undo puts it back on the share, byte-identical.
+        let stateRoot = NSTemporaryDirectory() + "duplicate-netstate-\(getpid())"
+        defer { try? manager.removeItem(atPath: stateRoot) }
+        try manager.createDirectory(atPath: stateRoot, withIntermediateDirectories: true)
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": stateRoot], homePath: stateRoot)
+        _ = try MoveJournal.append(
+            [
+                JournalEntry(
+                    originalPath: outcome.originalPath, resultingPath: outcome.resultingPath,
+                    mechanism: outcome.mechanism, byteCount: outcome.byteCount,
+                    digest: before.digest, groupKey: "0:network", scanID: "selftest",
+                    timestamp: "2026-08-23T12:00:00.000000Z")
+            ], sessionID: session, in: state)
+        // The mechanism survives the round trip, because that is what a report tells the user to go look at.
+        let reloaded = try MoveJournal.load(sessionID: session, in: state)
+        let entry = try expectSome(reloaded.entries.first, "the journal holds no entry")
+        try expect(
+            entry.mechanism == .quarantine,
+            "the journal recorded \(entry.mechanism), so a report would send the user to the Trash")
+
+        let restored = await UndoCoordinator.undo(
+            sessionID: session, in: state,
+            cacheURL: URL(filePath: stateRoot + "/hashes.v1"))
+        try expect(
+            restored.restoredCount == 1, "the undo restored \(restored.restoredCount), wanted 1")
+        try expect(manager.fileExists(atPath: victim), "the file did not come back to the share")
+        let after = try ContentHasher().fullDigest(atPath: victim)
+        try expect(
+            after.digest == before.digest,
+            "the restored file does not hash to what left the share")
+
+        print("  and the undo put it back on the share, byte-identical")
     }
 
     // MARK: - cancel

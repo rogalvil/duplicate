@@ -8,7 +8,7 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR de metadata en el visor de carpetas. 43 modos de selftest, 776 tests, 94.77% de
+Última actualización: PR del fallback en un montaje de red. 44 modos de selftest, 776 tests, 94.76% de
 cobertura sobre `DuplicateCore`.
 
 ## Resumen en una tabla
@@ -122,7 +122,7 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Capacidad | Detalle |
 |---|---|
 | Papelera real | `trashItem` da el "Devolver" de Finder gratis. Medido: funciona en los tres volúmenes de esta máquina, y también en FAT32 |
-| Cuarentena como fallback | Para montajes de red. **Medido: no rescata un volumen de solo lectura**, porque mover fuera de uno tiene que borrar el origen |
+| Cuarentena como fallback | Para montajes de red, **y por fin probado en uno**: en `smbfs` la Papelera falla con `NSCocoaErrorDomain` 3328 —no hay Papelera en un volumen SMB— y el fallback mueve a una cuarentena local, la journaliza como `.quarantine` y el deshacer devuelve el archivo al share byte-idéntico. **Medido: no rescata un volumen de solo lectura**, porque mover fuera de uno tiene que borrar el origen |
 | Verificar antes de actuar | Exactos: se re-hashea contra el digest del escaneo. Perceptual: se **re-puntúa el par** (un escaneo perceptual no guarda digests). Carpetas: **contención**, no similitud — cada archivo necesita gemelo byte-idéntico en la misma ruta relativa |
 | Compuerta de dry-run | Aplicar exige una simulación **vigente**: editar una decisión invalida la aprobación, comparada por huella FNV-1a (no el `Hasher` de Swift, que está sembrado por proceso) |
 | Journal JSON Lines | Lotes de 32 durante el apply, no al final. Un `undone_at` se **agrega**, no reescribe |
@@ -223,7 +223,7 @@ gh issue list --label bloqueado       # y por qué está bloqueado
 
 | Nivel | Qué significa | Abiertos |
 |---|---|---|
-| `priority:p1` | El usuario lo nota, o hay datos en juego | fallback en montaje de red (#73, bloqueado) |
+| `priority:p1` | El usuario lo nota, o hay datos en juego | *(vacío)* |
 | `priority:p2` | Deuda de corrección que hoy no muerde | lo que solo una pantalla puede verificar (#81, bloqueado) |
 | `priority:p3` | Funcionalidad agregable | *(vacío)* |
 | `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`) |

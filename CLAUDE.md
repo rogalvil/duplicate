@@ -285,6 +285,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   que `trashItem` no lance y tampoco reporte destino, y el default de `Application Support` cuando
   `urls(for:in:)` devuelve vacío. Las dos se conservan porque su alternativa es prometer algo que el journal no
   puede cumplir.
+- **Y el único volumen donde falla es uno de red, medido por fin.** `mount_smbfs //roger@localhost/roger` da un
+  `smbfs` real, y ahí `trashItem` falla con `NSCocoaErrorDomain` **3328**: *"el volumen «roger» no tiene"* —no hay
+  Papelera en un volumen SMB—. Esa es la rama que la cuarentena existe para atender, y la cadena completa corrió:
+  la Papelera rehúsa, el fallback mueve a una cuarentena local, el journal lo registra como `.quarantine`, y el
+  deshacer lo devuelve al share **byte-idéntico**. Era el último camino del código destructivo sin probar.
+- **El `mechanism` del journal NO es load-bearing para el deshacer**, y creía que sí. Escribir `.trash` donde iba
+  `.quarantine` no cambia nada: el undo restaura desde `resultingPath` y nunca consulta el mecanismo. El campo
+  existe para que un reporte le diga a alguien cuyos duplicados viven en un NAS **dónde ir a buscar**, no cómo
+  recuperarlos. Se afirma por el journal por esa razón, no por la del undo.
+- **Un `sed`/`replace` con conteo 1 sobre `SelfTest.swift` toca la ocurrencia equivocada.** Probando el diente
+  anterior parcheé `mechanism: outcome.mechanism` y el modo siguió verde: había tres ocurrencias y la primera
+  estaba en otro modo, 4,000 líneas antes. Un diente que no muerde puede ser un diente mal puesto.
 - **`FileManager.trashItem` funciona en todos los volúmenes de esta máquina.** Medido: boot y `$HOME`
   aterrizan en `~/.Trash`, WD12TB y SED4TB en `<volumen>/.Trashes/501`. Era el riesgo más grande del
   plan (que el externo fuera exFAT y no pudiera), y está descartado. La cuarentena es fallback de
