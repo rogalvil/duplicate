@@ -230,12 +230,35 @@ verificación a mano, con un árbol de prueba de respuestas medidas.
 | `priority:p2` | Deuda de corrección que hoy no muerde | lo que solo una pantalla puede verificar (#81, bloqueado) |
 | `priority:p3` | Funcionalidad agregable | *(vacío)* |
 | `priority:p4` | Medición pendiente | *(vacío)* |
-| `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |
+| — | Las decisiones tomadas con evidencia viven **en este documento**, no en un issue: uno abierto para siempre se lee como trabajo sin hacer | ver abajo |
 
 **Lo que ya se cerró desde que existe esta sección**: el historial de sesiones (#72), Quick Look de tamaño
 completo y Mostrar en Finder en los tres visores, los fallos de apply localizados, la poda de journals de sesiones
 deshechas, la metadata bajo la vista previa, la cancelación dentro de un archivo grande, y los cuatro reportadores
 silenciosos que este documento encontró en su primera pasada.
+
+## Decisiones tomadas, para no volver a derivar la objeción
+
+Ninguna es un pendiente. Están aquí porque cada una se volvió a discutir al menos una vez.
+
+- **Dos ramas del disposer no son alcanzables con un `FileManager` real**, y están marcadas en el código: que
+  `trashItem` **no lance y tampoco reporte destino**, y el default de `Application Support` cuando
+  `urls(for:in:)` devuelve vacío. Las dos se conservan porque su alternativa es prometer algo que el journal no
+  puede cumplir. `Disposer.swift` está en 93% y las 10 líneas que faltan son estas.
+- **`folder-decisions/` no tiene lector externo.** El CLI tiene el slot y nunca escribió uno, así que su
+  round-trip se prueba contra un documento sintetizado. Nada que arreglar; algo que recordar.
+- **`PerceptualHash(hex:)` y `hexString` solo los usan el diferencial y los tests.** Ningún hash perceptual
+  aparece en el JSON compartido, así que producción no los necesita — existen porque hacen depurable lado a lado
+  contra Python un desacuerdo del pipeline, que es justo lo que hace el modo `phash-differential`.
+- **La cancelación corta entre chunks de 1 MiB, no dentro de uno.** Es el límite, no un problema: bajarlo solo
+  tiene sentido si alguien mide un caso donde una lectura de 1 MiB tarda.
+- **Los bookmarks security-scoped del plan no hacen falta.** La app no está en sandbox, así que un permiso de
+  TCC concedido persiste por bundle id y los volúmenes externos no piden ninguno. Su ausencia no es deuda.
+- **No se pide Full Disk Access.** No hay API para pedirlo —solo un toggle manual—, los duplicados dentro de
+  `~/Library` son abrumadoramente cachés donde quitar uno rompe una app, y una app que pide Acceso Total al
+  Disco para ordenar Descargas es indistinguible de malware para alguien cuidadoso.
+- **No se sandboxea.** `~/.local/state/rav/` está fuera del contenedor, y el estado compartido con el CLI es el
+  punto de la app.
 
 ## Deuda conocida
 
