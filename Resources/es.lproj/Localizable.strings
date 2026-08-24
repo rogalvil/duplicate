@@ -376,6 +376,8 @@
 "folders.warnLoss" = "Mover %1$@ perdería %2$d archivos que tiene y la otra no.";
 "folders.warnNoLoss" = "Todo lo de %@ está también en la otra carpeta.";
 "folders.review.apply" = "Simular y aplicar…";
+"folders.meta.side" = "%1$@: %2$d archivos, %3$@";
+"folders.meta.side.noDate" = "%1$@: %2$d archivos, fecha ilegible";
 "similar.filter.similarity" = "Parecidas al menos";
 "similar.filter.similarity.any" = "cualquiera";
 "similar.filter.similarity.value" = "%d%%";

@@ -23,7 +23,7 @@ deshacer.
 | Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
 | Progreso con etapa durante el apply: verificar y mover se distinguen | **funciona** |
 | Cancelar dentro del hasheo de un archivo grande, no solo entre archivos | **funciona** |
-| Metadata del archivo bajo la vista previa: tamaño, fecha, resolución, codec | **funciona** |
+| Metadata bajo la vista previa: tamaño, fecha, resolución, codec — y fecha por carpeta | **funciona** |
 | Vista rápida a tamaño completo (⌘Y) y Mostrar en Finder, en los tres visores | **funciona** |
 | Historial de sesiones: listarlas y deshacer **cualquiera**, no solo la última | **funciona** |
 | Limpiar los journals de sesiones ya deshechas, con su regla probable | **funciona** |
