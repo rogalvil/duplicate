@@ -3916,6 +3916,32 @@ enum SelfTest {
         // folder scans is the common case.
         // Teeth: return `[]` from `quickLookPaths` and this fails.
         viewer.selectPairForSelftest(0)
+
+        // **What the two folders are, beside how alike they are.** The header already carries the similarity
+        // and the file counts; the question a person asks next is which copy is newer, and that is one `stat`
+        // per side. A folder's *size* is deliberately absent: a directory has none of its own, so producing
+        // one means walking it -- the folder apply pays that once to build a manifest and it costs tens of
+        // seconds on a real tree -- and paying it on every arrow key to draw a number nobody decides on is
+        // the wrong trade.
+        //
+        // Teeth: return an empty string from `metadataText` and the first two fail; ignore the preference in
+        // `refreshDetail` and the last two do.
+        let folderMeta = viewer.metadataForSelftest
+        try expect(!folderMeta.hidden, "the folder metadata line is hidden with the preference on")
+        try expect(
+            !folderMeta.text.contains("folders.meta"),
+            "the folder metadata line shows a key literal: \(folderMeta.text)")
+        try expect(
+            folderMeta.text.contains("2") || folderMeta.text.contains("3"),
+            "the folder metadata line does not say a file count: \(folderMeta.text)")
+        MetadataPreference.isEnabled = false
+        viewer.selectPairForSelftest(0)
+        try expect(
+            viewer.metadataForSelftest.hidden, "the folder viewer ignores the metadata preference")
+        MetadataPreference.isEnabled = true
+        viewer.selectPairForSelftest(0)
+        try expect(!viewer.metadataForSelftest.hidden, "the folder metadata line did not come back")
+
         let folderLook = viewer.quickLookPathsForSelftest
         try expect(
             folderLook.count == 2,

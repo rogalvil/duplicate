@@ -377,6 +377,8 @@
 "folders.warnLoss" = "Moving %1$@ would lose %2$d files it has and the other does not.";
 "folders.warnNoLoss" = "Everything in %@ is in the other folder too.";
 "folders.review.apply" = "Simulate and apply...";
+"folders.meta.side" = "%1$@: %2$d files, %3$@";
+"folders.meta.side.noDate" = "%1$@: %2$d files, date unreadable";
 "similar.filter.similarity" = "Alike at least";
 "similar.filter.similarity.any" = "any";
 "similar.filter.similarity.value" = "%d%%";

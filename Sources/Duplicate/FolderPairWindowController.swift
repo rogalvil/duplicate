@@ -31,6 +31,15 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     private let table = NSTableView()
     private let headerLabel = NSTextField(labelWithString: "")
     private let detailView = NSTextView()
+    /// **What the two folders are, beside how alike they are.** The header already says the similarity and
+    /// the file counts -- those come out of the scan document -- and the one thing a person reaching for
+    /// "which of these two do I keep" asks next is which one is newer. That is one `stat` per side.
+    ///
+    /// **A folder's size is not here, and that is a measurement rather than an omission.** A directory has no
+    /// size of its own: getting one means walking it, and the folder apply already pays for that walk once to
+    /// build a manifest -- 979 MB/s over a 10,506-file tree, tens of seconds. Paying it again on every arrow
+    /// key, to draw a number nobody decides on, is the wrong trade.
+    private let metadataLabel = NSTextField(labelWithString: "")
     private let quickLook = QuickLookCoordinator()
     private let footerLabel = NSTextField(labelWithString: "")
 
@@ -60,6 +69,7 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         build()
+        observeMetadataPreference()
         if !pairs.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
         refreshDetail()
     }
@@ -117,7 +127,10 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         adviceLabel.maximumNumberOfLines = 2
         tallyLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         tallyLabel.textColor = .secondaryLabelColor
-        for label in [headerLabel, footerLabel, adviceLabel, tallyLabel] {
+        metadataLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        metadataLabel.textColor = .secondaryLabelColor
+        metadataLabel.isHidden = true
+        for label in [headerLabel, footerLabel, adviceLabel, tallyLabel, metadataLabel] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             label.lineBreakMode = .byTruncatingMiddle
         }
@@ -148,7 +161,8 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         decisionRow.addView(applyButton, in: .trailing)
 
         let content = NSStackView(views: [
-            scroll, headerLabel, detailScroll, adviceLabel, decisionRow, tallyLabel, footerLabel,
+            scroll, headerLabel, metadataLabel, detailScroll, adviceLabel, decisionRow, tallyLabel,
+            footerLabel,
         ])
         content.orientation = .vertical
         content.alignment = .leading
@@ -199,13 +213,53 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
             + "  ·  " + Strings.string("folders.orientation")
     }
 
+    /// Locale-aware, unlike the byte counts, which are pinned to the CLI's format because they are interop.
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    /// The counts the scan recorded and the date each folder carries on disk.
+    ///
+    /// Built here rather than in Core, because Core never produces prose. A folder whose date cannot be read
+    /// is named without one rather than skipped: the pair is still worth deciding, and a missing date is
+    /// itself information.
+    static func metadataText(for pair: FolderPair, formatter: DateFormatter) -> String {
+        func describe(_ path: String, _ count: Int) -> String {
+            let name = (path as NSString).lastPathComponent
+            let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+            guard let modified = attributes?[.modificationDate] as? Date else {
+                return String(format: Strings.string("folders.meta.side.noDate"), name, count)
+            }
+            return String(
+                format: Strings.string("folders.meta.side"), name, count,
+                formatter.string(from: modified))
+        }
+        return describe(pair.folderA, pair.totalA) + "     "
+            + describe(pair.folderB, pair.totalB)
+    }
+
+    /// The same preference the file viewers honour, or "Show File Metadata" would govern two windows out of
+    /// three, which makes the menu item a lie rather than a setting.
+    private func observeMetadataPreference() {
+        NotificationCenter.default.addObserver(
+            forName: MetadataPreference.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshDetail() }
+        }
+    }
+
     private func refreshDetail() {
         guard let pair = selectedPair else {
             headerLabel.stringValue = Strings.string("folders.empty")
             detailView.string = ""
+            metadataLabel.stringValue = ""
+            metadataLabel.isHidden = true
             footerLabel.stringValue = footerString()
+            refreshAdvice()
             return
-                refreshAdvice()
         }
         headerLabel.stringValue = String(
             format: Strings.string("folders.header"),
@@ -218,21 +272,21 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         if !pair.onlyInA.isEmpty {
             lines.append(String(format: Strings.string("folders.onlyIn"), pair.folderA))
             lines.append(contentsOf: pair.onlyInA.map { "    " + $0 })
-            refreshAdvice()
         }
         if !pair.onlyInB.isEmpty {
             lines.append(String(format: Strings.string("folders.onlyIn"), pair.folderB))
             lines.append(contentsOf: pair.onlyInB.map { "    " + $0 })
-            refreshAdvice()
         }
         if !pair.changed.isEmpty {
             lines.append(Strings.string("folders.changedHeader"))
             lines.append(contentsOf: pair.changed.map { "    " + $0 })
-            refreshAdvice()
         }
         if lines.isEmpty { lines.append(Strings.string("folders.identical")) }
         detailView.string = lines.joined(separator: "\n")
 
+        metadataLabel.stringValue = Self.metadataText(for: pair, formatter: dateFormatter)
+        metadataLabel.isHidden =
+            !MetadataPreference.isEnabled || metadataLabel.stringValue.isEmpty
         footerLabel.stringValue = footerString()
         refreshAdvice()
     }
@@ -416,6 +470,9 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     var pairRowCount: Int { table.numberOfRows }
     var headerText: String { headerLabel.stringValue }
     var detailText: String { detailView.string }
+    var metadataForSelftest: (text: String, hidden: Bool) {
+        (metadataLabel.stringValue, metadataLabel.isHidden)
+    }
     var footerText: String { footerLabel.stringValue }
     var requiredContentSize: NSSize {
         window?.contentView?.layoutSubtreeIfNeeded()

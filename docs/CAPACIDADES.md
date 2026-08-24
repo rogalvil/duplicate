@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR de los corpora sintéticos. 43 modos de selftest, 776 tests, 94.76% de cobertura
-sobre `DuplicateCore`.
+Última actualización: PR de metadata en el visor de carpetas. 43 modos de selftest, 776 tests, 94.77% de
+cobertura sobre `DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -111,7 +111,9 @@ pares, y **cero pares** que una implementación llame casi idénticos y la otra 
 | Avisos al decidir, no al aplicar | Un par de carpetas dice "mover la segunda perdería 5 archivos" *mientras eliges* |
 | Presencia de archivos | El panel distingue "el archivo ya no está" de "la miniatura no llega". Se refresca también al deshacer |
 | Miniaturas | Clave por digest en grupos exactos (ocho archivos idénticos = **una** miniatura) y **por ruta** en pares perceptuales, donde son fotos distintas |
-| Metadata del archivo bajo la vista previa | Tamaño y fecha de inmediato, y al responder la sonda la resolución, el codec y la duración: `3.9 KB · 22 ago 2026, 12:26 p.m. · 320×240 · h264 · 0:06`. En los dos visores, con **Ver > Mostrar metadata del archivo** (⌘⌥I) para ocultarla |
+| Metadata del archivo bajo la vista previa | Tamaño y fecha de inmediato, y al responder la sonda la resolución, el codec y la duración: `3.9 KB · 22 ago 2026, 12:26 p.m. · 320×240 · h264 · 0:06`. En los dos visores de archivos, con **Ver > Mostrar metadata del archivo** (⌘⌥I) para ocultarla |
+| Metadata del par de carpetas | Nombre, conteo de archivos y **fecha** de cada lado, que es lo que decide "conservar la más nueva". El **tamaño no está**: una carpeta no tiene uno propio, así que producirlo es recorrerla —el apply paga ese recorrido una vez para el manifiesto y cuesta decenas de segundos en un árbol real— y pagarlo en cada tecla de flecha para dibujar un número que nadie decide es el trueque equivocado. Misma preferencia, así que el ítem de menú gobierna los **tres** visores |
+| El bitrate se muestra donde decide | Dentro de la frase del consejo, y solo cuando los dos son conocidos y distintos. No como campo permanente de un panel angosto |
 | Cuántos cuadros sostienen un veredicto de video | El encabezado dice "juzgado con 4 de 8 cuadros" cuando el clip es tan corto que algunas marcas caen pasado su final |
 | Claves impartibles avisadas | Un par decidido cuya clave `a||b` no se puede volver a partir se reporta al cerrar. Medido: ninguna ruta del corpus lo tiene, y por eso se avisa en vez de confiar |
 
@@ -223,7 +225,7 @@ gh issue list --label bloqueado       # y por qué está bloqueado
 |---|---|---|
 | `priority:p1` | El usuario lo nota, o hay datos en juego | fallback en montaje de red (#73, bloqueado) |
 | `priority:p2` | Deuda de corrección que hoy no muerde | lo que solo una pantalla puede verificar (#81, bloqueado) |
-| `priority:p3` | Funcionalidad agregable | metadata en el visor de carpetas (#76), bitrate (#77) |
+| `priority:p3` | Funcionalidad agregable | *(vacío)* |
 | `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`) |
 | `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |
 

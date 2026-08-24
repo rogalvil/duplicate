@@ -444,6 +444,18 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   presionado igual que una decisión real, las dos se ven idénticas y el único que sabe la diferencia es el
   archivo. Aquí la sugerencia toma el `keyEquivalent` de Return y ninguna se ve pulsada hasta que alguien
   decide.
+- **Una carpeta no tiene tamaño propio, y eso decide qué se muestra.** El visor de carpetas dice nombre, conteo
+  y **fecha** por lado —la fecha es lo que contesta "conservar la más nueva" y cuesta un `stat`—, y el tamaño no
+  aparece: producirlo es recorrer el árbol, que el apply ya paga una vez para el manifiesto a decenas de segundos,
+  y pagarlo en cada tecla de flecha para un número que nadie decide es el trueque equivocado.
+- **El bitrate ya se mostraba y escribí un issue diciendo que no.** Vive dentro de la frase del consejo
+  (`SimilarAdviceText.swift:66`) y `MediaAdvice` solo lo emite cuando los dos son conocidos y distintos — que es
+  exactamente la política de "mostrarlo cuando decide" que el issue proponía. Antes de abrir un issue sobre algo
+  que falta, buscarlo.
+- **`return refreshAdvice()` compila y no avisa.** Un `return` seguido de una llamada a `Void` en la línea
+  siguiente se parsea como devolver ese `Void`, así que funcionaba por accidente de formato y sin warning; había
+  además tres llamadas redundantes que recomputaban el consejo hasta cuatro veces por selección. Un `sed` que
+  inserta en cada match las deja así.
 - **Las facts de media se piden por par, no por escaneo.** Probar los 2,460 archivos de un escaneo real antes de
   dibujar la ventana repetiría buena parte del escaneo; se piden para el par que se está viendo, con un contador
   de generación que tira la respuesta que llega después de que la selección se movió.
