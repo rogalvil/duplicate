@@ -936,7 +936,7 @@ tiempo es el mismo, así que la protección sale gratis. Se queda.
 | corpus | archivos | candidatos por tamaño | leído |
 |---|---|---|---|
 | interno (`~/duplicados`) | 3,421 | 2,259 | 1.517 GB |
-| externo (`WD12TB/Tmp/_____check`) | 1,137 | **29** | **0.011 GB** |
+| externo (un externo) | 1,137 | **29** | **0.011 GB** |
 
 El bucketing por tamaño elimina el 97% del corpus externo antes de abrir un archivo. Así que el caso que el plan
 llamaba el importante —"la política de concurrencia externa (tope 2) es la que importa"— **no se puede medir sobre

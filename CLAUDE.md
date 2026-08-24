@@ -2,7 +2,7 @@
 
 App con ventana para macOS que encuentra archivos duplicados: exactos por SHA-256, carpetas por
 coeficiente de Dice, media por hash perceptual. Swift nativo, AppKit programático, sin dependencias
-externas. Puerto de `rav duplicate` (`/Users/roger/me/code/cli`).
+externas. Puerto de `rav duplicate`, un CLI en Python del mismo autor.
 
 El detalle de arquitectura y las alternativas descartadas están en
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). **Lo que la app hace hoy, capacidad por capacidad, está en
@@ -137,7 +137,7 @@ No re-descubrirlas:
   sin haberse revisado nunca. Y `String <` no es orden de code point, así que ordenar con él
   divergiría del `sorted()` de Python. Todo pasa por `PathOrder`, que compara bytes UTF-8.
 - **La normalización Unicode de un nombre de archivo depende del volumen.** Medido: el volumen de
-  arranque (APFS case-insensitive) **convierte a NFD** un nombre escrito como NFC, mientras WD12TB
+  arranque (APFS case-insensitive) **convierte a NFD** un nombre escrito como NFC, mientras el externo
   (APFS case-sensitive) **preserva NFC**. Consecuencia práctica: no se puede montar en `/tmp` un
   fixture con un nombre NFC, así que la divergencia entre orden por bytes y `String <` se testea sobre
   strings en memoria (suite `PathOrder`) y no a través del filesystem.
@@ -146,7 +146,7 @@ No re-descubrirlas:
   solo-NFC** de 71,580. Y APFS es normalization-**insensitive** para lookup en los dos volúmenes, así
   que el mismo nombre en NFC y en NFD es un solo archivo — el par del corpus son nombres *distintos*
   que usan formas distintas, no un nombre en dos formas.
-- **WD12TB es APFS case-sensitive.** `Foo.jpg` y `foo.jpg` son dos archivos ahí y uno en el volumen
+- **el externo es APFS case-sensitive.** `Foo.jpg` y `foo.jpg` son dos archivos ahí y uno en el volumen
   de arranque. Otra razón para no normalizar rutas nunca.
 - **`git diff --quiet` ignora los archivos sin trackear**, así que un árbol lleno de fuentes nuevas
   reporta limpio y el build diría ser exactamente el commit nombrado. El Makefile usa
@@ -298,7 +298,7 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
   anterior parcheé `mechanism: outcome.mechanism` y el modo siguió verde: había tres ocurrencias y la primera
   estaba en otro modo, 4,000 líneas antes. Un diente que no muerde puede ser un diente mal puesto.
 - **`FileManager.trashItem` funciona en todos los volúmenes de esta máquina.** Medido: boot y `$HOME`
-  aterrizan en `~/.Trash`, WD12TB y SED4TB en `<volumen>/.Trashes/501`. Era el riesgo más grande del
+  aterrizan en `~/.Trash`, los dos externos en `<volumen>/.Trashes/501`. Era el riesgo más grande del
   plan (que el externo fuera exFAT y no pudiera), y está descartado. La cuarentena es fallback de
   verdad, para montajes de red y volúmenes read-only.
 - **Si `trashItem` no devuelve `resultingItemURL`, el movimiento se considera fallido.** Sin destino no

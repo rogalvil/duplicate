@@ -60,7 +60,7 @@ struct SimilarScanCodecTests {
     func roundTrips() throws {
         let scan = SimilarScan(
             scanID: "20260813-120000-000000",
-            root: "/Volumes/WD12TB/Tmp",
+            root: "/Volumes/Externo/Tmp",
             createdAt: "2026-08-13T12:00:00.000000Z",
             imageThreshold: 10,
             videoThreshold: 0.7,

@@ -21,8 +21,8 @@ struct PathElisionTests {
     /// the directory levels in between are what nobody needs.
     @Test("A long path loses its middle")
     func elidesTheMiddle() {
-        let elided = PathElision.elide("/Volumes/WD12TB/Fotos/2019/07/viaje/IMG_1234.jpg")
-        #expect(elided == "/Volumes/WD12TB/\u{2026}/viaje/IMG_1234.jpg")
+        let elided = PathElision.elide("/Volumes/Externo/Fotos/2019/07/viaje/IMG_1234.jpg")
+        #expect(elided == "/Volumes/Externo/\u{2026}/viaje/IMG_1234.jpg")
         // The file name always survives, which is the point.
         #expect(elided.hasSuffix("IMG_1234.jpg"))
     }

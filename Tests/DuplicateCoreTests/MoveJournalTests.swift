@@ -108,7 +108,7 @@ struct MoveJournalTests {
         let entry = journalEntry(
             // a decomposed path, which the corpus really contains
             original: "/x/Sua\u{0301}rez.mp4",
-            resulting: "/Volumes/WD12TB/.Trashes/501/Sua\u{0301}rez.mp4",
+            resulting: "/Volumes/Externo/.Trashes/501/Sua\u{0301}rez.mp4",
             mechanism: .quarantine,
             size: 496_243_319,
             seed: "e"

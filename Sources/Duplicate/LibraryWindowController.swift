@@ -830,7 +830,7 @@ extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
         case "root":
             field.stringValue = summary.root
             // Head truncation: the tail of a path is the part that identifies it, and a column of
-            // `/Volumes/WD12TB/Tmp/…` truncated at the end is a column of identical cells.
+            // `/Volumes/Externo/Tmp/…` truncated at the end is a column of identical cells.
             field.lineBreakMode = .byTruncatingHead
             field.toolTip = summary.root
         case "created":

@@ -2157,15 +2157,15 @@ enum SelfTest {
         try store.save(
             DuplicateScan(
                 scanID: "20260511-064716-685054",
-                root: "/Volumes/WD12TB/Fotos",
+                root: "/Volumes/Externo/Fotos",
                 createdAt: "2026-05-11T06:47:16.685054Z",
                 groups: [
                     group(
                         "a", size: 2048,
-                        files: ["/Volumes/WD12TB/Fotos/a", "/Volumes/WD12TB/Fotos/b"]),
+                        files: ["/Volumes/Externo/Fotos/a", "/Volumes/Externo/Fotos/b"]),
                     group(
                         "b", size: 1024,
-                        files: ["/Volumes/WD12TB/Fotos/c", "/Volumes/WD12TB/Fotos/d"]),
+                        files: ["/Volumes/Externo/Fotos/c", "/Volumes/Externo/Fotos/d"]),
                 ]
             )
         )
@@ -2223,7 +2223,7 @@ enum SelfTest {
 
         // Newest first, and the root column shows the root.
         try expect(
-            controller.displayedValue(row: 0, column: "root") == "/Volumes/WD12TB/Fotos",
+            controller.displayedValue(row: 0, column: "root") == "/Volumes/Externo/Fotos",
             "row 0 root was \(controller.displayedValue(row: 0, column: "root") ?? "nil")"
         )
         try expect(
@@ -2271,7 +2271,7 @@ enum SelfTest {
         // Sorting and filtering reach the table.
         controller.applyForSelftest(sort: .mostGroups, filter: "")
         try expect(
-            controller.displayedValue(row: 0, column: "root") == "/Volumes/WD12TB/Fotos",
+            controller.displayedValue(row: 0, column: "root") == "/Volumes/Externo/Fotos",
             "sorting by group count did not reach the table"
         )
         controller.applyForSelftest(sort: .newest, filter: "descargas")
@@ -3521,7 +3521,7 @@ enum SelfTest {
         // string for `.done` and the last one does.
         try expect(
             sheet.progressLineForSelftest.hidden, "the progress line shows before an apply starts")
-        let sample = "/Volumes/WD12TB/Fotos/2019/verano/copias"
+        let sample = "/Volumes/Externo/Fotos/2019/verano/copias"
         let sentences = [
             applyProgressText(
                 ApplyProgress(
@@ -5185,7 +5185,7 @@ enum SelfTest {
     ///
     /// **A row on an unmounted volume is unknowable, never dead.** This user's corpus lives on an external disk,
     /// so a pruner that read "cannot resolve" as "delete" would throw away the cache that took 177 seconds to
-    /// build the moment WD12TB is unplugged. Those rows are counted apart and never judged, and this mode
+    /// build the moment that disk is unplugged. Those rows are counted apart and never judged, and this mode
     /// asserts that separation rather than trusting it.
     private static func checkCacheLiveness(arguments: [String]) throws {
         let url =
@@ -5363,6 +5363,29 @@ enum SelfTest {
         try FileManager.default.createDirectory(
             atPath: scratch, withIntermediateDirectories: true)
         let state = StateDirectory(environment: ["XDG_STATE_HOME": scratch], homePath: scratch)
+
+        // The perceptual detector, for checking what a demo tree actually contains before someone is asked to
+        // verify it by hand. Read-only over the corpus; the document goes to a temporary state directory.
+        if arguments.contains("--similar") {
+            let clock = ContinuousClock()
+            let started = clock.now
+            let result = try await SimilarScanSession(
+                store: ScanStore(state: state),
+                cacheURL: URL(filePath: scratch + "/phashes.v1")
+            ).run(
+                SimilarScanSession.Request(root: root),
+                instant: ScanIdentifier.Instant(
+                    year: 2026, month: 8, day: 24, hour: 0, minute: 0, second: 0, microsecond: 0))
+            let elapsed = clock.now - started
+            let seconds =
+                Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+            print(
+                "  similar: \(result.hashedCount) hashed (\(result.videoCount) videos), "
+                    + "\(result.scan.pairCount(of: .image)) image pairs, "
+                    + "\(result.scan.pairCount(of: .video)) video pairs, "
+                    + "\(String(format: "%.2f", seconds))s")
+            return
+        }
 
         // The folder detector instead, which is what C3 exists to measure: a deep tree with whole subtrees
         // duplicated, where the redesign's only quadratic case lives.

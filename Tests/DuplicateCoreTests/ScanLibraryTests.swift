@@ -139,7 +139,7 @@ struct ScanLibraryTests {
         let scratch = try LibraryScratch()
         defer { scratch.remove() }
 
-        try scratch.add(id: "20260101-000000-000000", root: "/Volumes/WD12TB/Photos")
+        try scratch.add(id: "20260101-000000-000000", root: "/Volumes/Externo/Photos")
         try scratch.add(id: "20260102-000000-000000", root: "/Users/tester/Downloads")
 
         let library = ScanLibrary(store: scratch.store)

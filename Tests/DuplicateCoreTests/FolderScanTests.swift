@@ -65,7 +65,7 @@ struct FolderScanCodecTests {
     func roundTrips() throws {
         let scan = FolderScan(
             scanID: "20260813-120000-000000",
-            root: "/Volumes/WD12TB/Tmp",
+            root: "/Volumes/Externo/Tmp",
             createdAt: "2026-08-13T12:00:00.000000Z",
             threshold: 0.9,
             pairs: [
