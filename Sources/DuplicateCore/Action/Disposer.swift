@@ -63,8 +63,8 @@ public protocol ItemDisposing: Sendable {
 /// |---|---|
 /// | boot volume, `/tmp` | `~/.Trash/` |
 /// | home | `~/.Trash/` |
-/// | `/Volumes/WD12TB` (external, case-sensitive APFS) | `/Volumes/WD12TB/.Trashes/501/` |
-/// | `/Volumes/SED4TB` (external APFS) | `/Volumes/SED4TB/.Trashes/501/` |
+/// | `/Volumes/Externo` (external, case-sensitive APFS) | `/Volumes/Externo/.Trashes/501/` |
+/// | `/Volumes/Externo2` (external APFS) | `/Volumes/Externo2/.Trashes/501/` |
 ///
 /// That measurement mattered: the plan's largest open risk was that the external volume holding the real
 /// corpus would be exFAT, where `trashItem` fails outright and the fallback would have been the primary

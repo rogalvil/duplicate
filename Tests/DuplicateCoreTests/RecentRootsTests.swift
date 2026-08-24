@@ -35,10 +35,10 @@ struct RecentRootsTests {
         let scratch = try RootsScratch()
         defer { scratch.remove() }
 
-        scratch.store.remember("/Volumes/WD12TB/Fotos", at: "2026-08-12T12:00:00.000000Z")
+        scratch.store.remember("/Volumes/Externo/Fotos", at: "2026-08-12T12:00:00.000000Z")
         let roots = scratch.store.load()
         #expect(roots.count == 1)
-        #expect(roots[0].path == "/Volumes/WD12TB/Fotos")
+        #expect(roots[0].path == "/Volumes/Externo/Fotos")
         #expect(roots[0].lastUsed == "2026-08-12T12:00:00.000000Z")
     }
 

@@ -49,7 +49,7 @@ correcto — una copia que solo cambia el flag debería coincidir con su origina
   nada, ni SwiftPM resolviendo paquetes de red.
 
 Para que la interoperabilidad tenga sentido hace falta también el CLI
-(`/Users/roger/me/code/cli`), pero la app funciona sin él: lee el directorio de estado, no el CLI.
+(un CLI en Python del mismo autor), pero la app funciona sin él: lee el directorio de estado, no el CLI.
 
 ## Instalación
 
@@ -276,6 +276,12 @@ Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.m
 
 El detalle y las alternativas que se descartaron están en
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## La pasada a mano
+
+Lo que ningún arnés alcanza —que un panel del sistema aparezca, que un texto quepa, y sobre todo **qué permisos
+tiene la app de verdad**— está en [`docs/PASADA-A-MANO.md`](docs/PASADA-A-MANO.md), con un árbol de prueba de
+respuestas medidas y el orden en que conviene mirarlo.
 
 ## Qué hace, capacidad por capacidad
 

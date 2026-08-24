@@ -55,15 +55,15 @@ en las posiciones 8 y 15.
 ```json
 {
   "scan_id": "20260511-064716-685054",
-  "root": "/Volumes/WD12TB/Tmp",
+  "root": "/Volumes/Externo/Tmp",
   "created_at": "2026-05-11T06:47:16.685054Z",
   "groups": [
     {
       "size": 15,
       "sha256": "a1b2c3...",
       "files": [
-        "/Volumes/WD12TB/Tmp/a.txt",
-        "/Volumes/WD12TB/Tmp/sub/a.txt"
+        "/Volumes/Externo/Tmp/a.txt",
+        "/Volumes/Externo/Tmp/sub/a.txt"
       ]
     }
   ]
@@ -110,7 +110,7 @@ produjo el walker.** Nunca normalizar, nunca `standardizedFileURL`, nunca `resol
   "scan_id": "20260511-064716-685054",
   "created_at": "2026-05-11T06:50:00.000001Z",
   "decisions": {
-    "15:a1b2c3...": ["/Volumes/WD12TB/Tmp/a.txt"]
+    "15:a1b2c3...": ["/Volumes/Externo/Tmp/a.txt"]
   }
 }
 ```

@@ -15,7 +15,7 @@ import Foundation
 ///
 /// **Which is exactly where the danger lives.** A row whose volume is not mounted cannot be checked at all, and
 /// this user's corpus is on an external disk: treating unresolvable as dead would throw away the cache that
-/// took 177 seconds to build the moment WD12TB is unplugged. So those rows are counted separately and never
+/// took 177 seconds to build the moment that disk is unplugged. So those rows are counted separately and never
 /// judged.
 public enum CacheLiveness {
 

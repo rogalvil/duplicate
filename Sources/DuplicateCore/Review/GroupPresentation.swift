@@ -11,7 +11,7 @@ public enum PathElision {
     /// Keeps the first `leading` and last `trailing` components, eliding the middle.
     ///
     /// Elides the **middle**, not the end. The tail of a path is what identifies it -- twenty files under
-    /// `/Volumes/WD12TB/Fotos/2019/` truncated at the end are twenty identical cells -- and the head says
+    /// `/Volumes/Externo/Fotos/2019/` truncated at the end are twenty identical cells -- and the head says
     /// which volume it is on, which is the other thing a person needs. What nobody needs is the four
     /// directory levels in between.
     ///

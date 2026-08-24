@@ -8,7 +8,7 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR del barrido de concurrencia. 44 modos de selftest, 776 tests, 94.76% de cobertura
+Última actualización: PR del saneo y el guion a mano. 44 modos de selftest, 776 tests, 94.76% de cobertura
 sobre `DuplicateCore`.
 
 ## Resumen en una tabla
@@ -220,6 +220,9 @@ que es la parte que cuesta reconstruir.
 gh issue list --label priority:p1     # cerca de los datos del usuario
 gh issue list --label bloqueado       # y por qué está bloqueado
 ```
+
+Y lo que ningún issue puede cerrar solo: [`docs/PASADA-A-MANO.md`](PASADA-A-MANO.md), el guion de la
+verificación a mano, con un árbol de prueba de respuestas medidas.
 
 | Nivel | Qué significa | Abiertos |
 |---|---|---|
