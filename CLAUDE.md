@@ -524,10 +524,24 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **En el corpus externo real no hay E/S que paralelizar**: 1,137 archivos, **29 candidatos por tamaño**, 0.011 GB
   leídos. El bucketing elimina el 97% antes de abrir nada, así que el caso que el plan llamaba el importante —el
   tope de 2 en externos— no se puede medir sobre estos datos.
-- **El barrido interno no tiene codo**: sigue mejorando hasta c=16 y el tope de 8 deja ~13%. Pero 2,350 MB/s está
-  por encima de lo que leen muchos SSD, o sea que esa corrida la sirvió el page cache y mide SHA-256, no disco. Un
-  barrido en frío necesita `sudo purge`. **Por eso la política no se cambió**: cambiar un default enviado sobre una
-  medición con esa salvedad sería el error que este archivo lleva cincuenta PRs registrando.
+- **El barrido de concurrencia es plano de c=1 a c=16, y la afirmación anterior era ruido.** Este archivo decía
+  que "sigue mejorando hasta c=16 y el tope de 8 deja ~13%". Con **mejor de tres** por nivel, sobre 5 GB de
+  archivos de 64 MiB: 3,230 / 3,056 / 3,200 / 2,998 / 3,375 / 3,275 / 3,108 / 3,108 MB/s. ±6% alrededor de 3,170,
+  sin tendencia. **Un solo worker ya satura.** La corrida única que produjo el 13% también produjo 939 MB/s en c=4
+  entre vecinos de 3,084 y 2,896 — un 3× de swing entre vecinos no es una curva.
+
+  Consecuencia: el tope de 8 **no deja rendimiento en la mesa**, y la predicción del plan —"hashear con un hilo es
+  CPU-bound por factor 2-4, hacen falta 3-4 hasheadores para saturar"— está **falsada** en esta máquina: un hilo
+  llega a 3.0 GB/s.
+- **Y el frío contra el caliente es una distinción vacía arriba de 1 MiB, por construcción.** `noCacheThreshold`
+  es 1 MiB, así que esos archivos se leen con `F_NOCACHE` y **saltan el page cache**: `purge` no cambia nada para
+  ellos. Confirmado empíricamente sobre el corpus real, que sí tiene muchos archivos chicos y cacheables:
+  **2,300 MB/s en frío contra 2,350 caliente**, o sea 2%. El barrido en frío que este archivo pedía no podía
+  arrojar otra cosa.
+- **Un benchmark de una sola corrida por punto produjo una afirmación falsa que vivió aquí semanas.** El ruido de
+  disco es siempre hacia abajo —nada hace que un disco lea más rápido de lo que puede—, así que la corrida más
+  rápida es la menos contaminada y promediar mezcla señal con interferencia. Mejor de tres, como en la línea base
+  de video.
 - **RSS pico entre 21.7 y 54.8 MB**, contra el objetivo de < 400 MB. Sobra un orden de magnitud.
 - **No había un solo `autoreleasepool` en el proyecto, y el walk lo necesitaba.** `nextObject()` y
   `resourceValues` devuelven objetos autoreleased, y un loop síncrono que nunca vuelve a un run loop no libera

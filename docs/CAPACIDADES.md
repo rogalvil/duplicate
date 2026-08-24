@@ -8,8 +8,8 @@ verifica.
 > o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
 > documentación: la que suena autorizada y miente.
 
-Última actualización: PR del fallback en un montaje de red. 44 modos de selftest, 776 tests, 94.76% de
-cobertura sobre `DuplicateCore`.
+Última actualización: PR del barrido de concurrencia. 44 modos de selftest, 776 tests, 94.76% de cobertura
+sobre `DuplicateCore`.
 
 ## Resumen en una tabla
 
@@ -37,7 +37,7 @@ confirmar identidad byte a byte. El documento resultante es el mismo que escribe
 | Agrupación por tamaño y luego digest | Ordenar-y-detectar-runs en vez de `defaultdict(list)`: cero allocation por bucket | `Scan/DuplicateFinder.swift` |
 | Etapa de prefijo | Sonda cabeza+cola+tamaño antes del hash completo, **solo arriba de 8 MiB** (recalibrado midiendo: a 256 KiB cobraba 54% del tiempo y ahorraba 1 MB de 1.5 GB). Sobre el caso que existe para atender —80 archivos de 64 MiB del mismo tamaño con colas distintas— **58×: 0.03 s contra 1.75 s, y 5.0 GB de lecturas que no ocurren** | `Hash/ContentHasher.swift` |
 | `F_NOCACHE` arriba de 1 MiB | Medido: 4× menos page cache (+0.10 GB contra +0.40 GB) al mismo tiempo de reloj | `Hash/ChunkedReader.swift` |
-| Concurrencia acotada por volumen | NVMe interno `min(max(cpus-2,2),8)`; externo/rotacional 2; red 2. Ventana deslizante, no 800k tareas | `Runtime/IOConcurrencyPolicy.swift` |
+| Concurrencia acotada por volumen | NVMe interno `min(max(cpus-2,2),8)`; externo/rotacional 2; red 2. Ventana deslizante, no 800k tareas. **Medido con mejor de tres: la curva es plana de c=1 a c=16**, así que el tope no deja nada en la mesa — y un solo worker ya satura a 3.0 GB/s, lo que falsa la predicción del plan | `Runtime/IOConcurrencyPolicy.swift` |
 | Clases de almacenamiento | Hardlinks y clones APFS se cuentan como **ya deduplicado**, no como duplicado ni se ocultan. El conjunto de acción nunca es `files[1:]` | `Model/StoragePartition.swift` |
 | Progreso a 10 Hz por *pull* | Contadores atómicos leídos por un `Timer`, no 800k pushes | `Runtime/ProgressCounters.swift` |
 | Cancelación | Por lote del recorrido, por archivo, **y entre chunks dentro de un archivo** | `Scan/DuplicateFinder.swift`, `Hash/ContentHasher.swift` |
@@ -226,7 +226,7 @@ gh issue list --label bloqueado       # y por qué está bloqueado
 | `priority:p1` | El usuario lo nota, o hay datos en juego | *(vacío)* |
 | `priority:p2` | Deuda de corrección que hoy no muerde | lo que solo una pantalla puede verificar (#81, bloqueado) |
 | `priority:p3` | Funcionalidad agregable | *(vacío)* |
-| `priority:p4` | Medición pendiente | barrido en frío (#78, bloqueado por `sudo`) |
+| `priority:p4` | Medición pendiente | *(vacío)* |
 | `wontfix` | Decisiones tomadas con evidencia, para no volver a derivar la objeción | #82 |
 
 **Lo que ya se cerró desde que existe esta sección**: el historial de sesiones (#72), Quick Look de tamaño

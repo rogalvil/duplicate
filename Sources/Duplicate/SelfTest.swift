@@ -5355,6 +5355,9 @@ enum SelfTest {
         else { throw SelfTestFailure("\(root) is not a directory") }
 
         let threshold = value(for: "--prefix-threshold", in: arguments).flatMap { Int64($0) }
+        // The knob the cold sweep turns. Absent, the shipped policy decides -- which is what the sweep is for:
+        // finding out whether that policy was calibrated against a warm page cache.
+        let concurrency = value(for: "--concurrency", in: arguments).flatMap { Int($0) }
         let scratch = NSTemporaryDirectory() + "duplicate-corpus-\(getpid())"
         defer { try? FileManager.default.removeItem(atPath: scratch) }
         try FileManager.default.createDirectory(
@@ -5424,7 +5427,8 @@ enum SelfTest {
         print(
             "  \(root)"
                 + (threshold.map { " (prefix threshold \(ByteSize.format($0)))" }
-                    ?? " (shipped threshold)"))
+                    ?? " (shipped threshold)")
+                + (concurrency.map { ", concurrency \($0)" } ?? ", shipped concurrency"))
         print(
             "  \(files) files, \(outcome.scan.groups.count) groups, "
                 + "\(ByteSize.format(snapshot.bytesRead)) read, \(snapshot.filesProbed) probed")
