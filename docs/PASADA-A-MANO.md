@@ -68,6 +68,30 @@ sistema, así que no trae el consentimiento con ella.
 
 **Qué anotar**: cuál de las cuatro, y si preguntó, si el diálogo salió en tu idioma.
 
+### Lo que salió, medido
+
+**5 grupos sin preguntar**, también desde recientes y tras cerrar la app por completo. Con eso, y con que la app
+no aparezca en Ajustes → Privacidad → Archivos y carpetas, el cuadro cierra: el consentimiento del panel
+persiste para esa ruta.
+
+**Y `open` sí entrega la app a Launch Services**: el padre del proceso es `launchd`, no la terminal. Así que la
+app es su propio responsable y no está heredando permisos de nadie.
+
+**Conclusión, y es de diseño**: en uso normal **la superficie de TCC de esta app es casi inalcanzable**. La raíz
+de un escaneo siempre sale del panel del sistema o de recientes, así que nunca hay una carpeta protegida a la
+que la app llegue sin que alguien la haya señalado — que es exactamente por lo que nunca necesita pedir Acceso
+Total al Disco.
+
+### Lo único que queda expuesto, y sigue sin probarse
+
+Elegir una carpeta **que contenga** una protegida: escanear `~` hace que la app descienda a `~/Desktop`,
+`~/Documents` y `~/Downloads` **sin** que nadie las haya señalado. Ahí TCC sí puede negar, y ahí es donde el
+`errorHandler` del walker importa — si se comporta mal, el escaneo devuelve menos archivos y reporta "no
+encontré duplicados", indistinguible del éxito.
+
+**Lo que hay que ver**: que al terminar aparezca el banner contando los directorios que no pudo leer. Es un
+escaneo largo (cientos de GB), así que va suelto cuando la máquina esté libre.
+
 ## 2. Que la biblioteca liste los cuatro tipos (1 min)
 
 Repite el escaneo con los otros tres detectores (el panel de escaneo los ofrece).
