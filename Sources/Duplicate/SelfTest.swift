@@ -2726,8 +2726,11 @@ enum SelfTest {
             promised == moved,
             "the footer promises \(promised) bytes and the plan moves \(moved)"
         )
+        // `contains` and not `hasSuffix`: the Spanish table ends the sentence with the figure and the
+        // English one does not ("... would be freed"), so anchoring to the end asserts a word order. CI
+        // runs in English and caught it.
         try expect(
-            reopened.tallyText.hasSuffix(ByteSize.format(moved)),
+            reopened.tallyText.contains(ByteSize.format(moved)),
             "the footer reads \(reopened.tallyText), and the plan moves \(ByteSize.format(moved))"
         )
 
