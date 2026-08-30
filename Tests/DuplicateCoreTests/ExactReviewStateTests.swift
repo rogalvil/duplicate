@@ -410,6 +410,49 @@ struct ExactReviewStateRehydrationTests {
         #expect(plan[0].paths == ["/root/other"])
         #expect(!plan[0].paths.contains("/root/keep-link"))
     }
+
+    /// **The number on screen and the files that move are the same decision, or one of them is a lie.**
+    ///
+    /// `plannedReclaimBytes` used to add `group.reclaimableBytes` for every decided group -- the group's
+    /// own "keep one, drop the rest", which never looks at what was kept. So a group with every file kept
+    /// contributed a full copy's worth of bytes while `removalPlan` correctly moved nothing, and the
+    /// window announced a saving beside the button that trashes files.
+    ///
+    /// The property is the invariant, not the number: whatever the decisions, the announced bytes are the
+    /// bytes of the files the plan moves.
+    @Test("The announced bytes are the bytes of the files the plan moves")
+    func announcedBytesMatchThePlan() {
+        let groups = [
+            group(["/root/a1", "/root/a2"], size: 1000, seed: "a"),
+            group(["/root/b1", "/root/b2", "/root/b3"], size: 300, seed: "b"),
+            group(["/root/c1", "/root/c2"], size: 70, seed: "c"),
+        ]
+        var state = ExactReviewState(scan: scan(groups), root: "/root")
+
+        // Group 1: keep everything. Nothing moves, so nothing is freed.
+        state.go(to: 0)
+        state.keepAll()
+        _ = state.confirm()
+        #expect(state.removalPlan.isEmpty)
+        #expect(state.plannedReclaimBytes == 0)
+
+        // Group 2: keep two of three. One file moves.
+        state.go(to: 1)
+        state.keepAll()
+        while state.fileIndex != 2 { state.moveCursor(by: state.fileIndex < 2 ? 1 : -1) }
+        _ = state.toggleCursor()
+        _ = state.confirm()
+
+        // Group 3: discard all. Both copies go.
+        state.go(to: 2)
+        state.discardEntireGroup()
+
+        let moved = state.removalPlan.reduce(Int64(0)) { total, entry in
+            total + entry.group.size * Int64(entry.paths.count)
+        }
+        #expect(state.plannedReclaimBytes == moved)
+        #expect(state.plannedReclaimBytes == 300 + 70 * 2)
+    }
 }
 
 @Suite("DecisionsCodec")

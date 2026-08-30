@@ -258,6 +258,14 @@ public struct ExactReviewState: Sendable {
         return result
     }
 
+    /// The kept indices as paths, in index order, dropping any index the group does not have.
+    ///
+    /// The order matters only in that it is stable; `removalCandidates(keepingAll:)` treats the set as a
+    /// set. Out-of-range indices can arrive from a decisions document written against a different scan.
+    private func keptPaths(_ keep: Set<Int>, in group: DuplicateGroup) -> [String] {
+        keep.sorted().compactMap { group.files.indices.contains($0) ? group.files[$0] : nil }
+    }
+
     /// Every file the decisions say to remove, with the storage partition honoured.
     ///
     /// One representative per storage cluster, never every other file -- so a hardlink that shares an inode
@@ -267,13 +275,7 @@ public struct ExactReviewState: Sendable {
         for (index, group) in scan.groups.enumerated() {
             switch decision(at: index) {
             case .decided(let keep):
-                guard let first = keep.sorted().first, group.files.indices.contains(first) else {
-                    continue
-                }
-                let keptPaths = Set(
-                    keep.compactMap { group.files.indices.contains($0) ? group.files[$0] : nil })
-                let candidates = group.removalCandidates(keeping: group.files[first])
-                    .filter { candidate in !keptPaths.contains { PathOrder.equal($0, candidate) } }
+                let candidates = group.removalCandidates(keepingAll: keptPaths(keep, in: group))
                 if !candidates.isEmpty { plan.append((group, candidates)) }
             case .discardAll:
                 plan.append((group, group.files))
@@ -296,8 +298,11 @@ public struct ExactReviewState: Sendable {
             case .discardAll:
                 // Every copy goes, so every copy's storage is freed -- not one fewer.
                 total += group.size * Int64(group.storage?.distinctCopies ?? group.files.count)
-            case .decided:
-                total += group.reclaimableBytes
+            case .decided(let keep):
+                // **The same set the plan moves, not "every copy but one".** A group with every file
+                // kept removes nothing, and saying otherwise puts a number nobody will see happen right
+                // next to the button that trashes files.
+                total += group.reclaimableBytes(keepingAll: keptPaths(keep, in: group))
             case .undecided, .skipped:
                 continue
             }
