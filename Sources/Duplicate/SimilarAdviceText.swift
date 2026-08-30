@@ -66,9 +66,16 @@ enum SimilarAdviceText {
         case .higherBitrate(let kept, let other):
             return String(
                 format: Strings.string("similar.why.bitrate"), bitrate(kept), bitrate(other))
+        case .lowerBitrate(let kept, let other):
+            return String(
+                format: Strings.string("similar.why.bitrateLower"), bitrate(kept), bitrate(other))
         case .higherResolution(let keptWidth, let keptHeight, let otherWidth, let otherHeight):
             return String(
                 format: Strings.string("similar.why.resolution"),
+                keptWidth, keptHeight, otherWidth, otherHeight)
+        case .lowerResolution(let keptWidth, let keptHeight, let otherWidth, let otherHeight):
+            return String(
+                format: Strings.string("similar.why.resolutionLower"),
                 keptWidth, keptHeight, otherWidth, otherHeight)
         case .higherQualityScore(let ratio):
             return String(format: Strings.string("similar.why.qualityRatio"), number(ratio))
