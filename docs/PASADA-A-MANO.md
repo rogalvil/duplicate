@@ -41,16 +41,56 @@ sabe nada de carpetas.
 
 ## 1. Que la app tenga permisos de verdad (2 min)
 
+**Elegir la carpeta en el panel del sistema no dispara ningún diálogo, y eso es correcto.** Lo dice el
+comentario de `chooseRoot`: *"`NSOpenPanel` is what grants access to it: the user picking a folder is what macOS
+treats as consent"*. macOS da acceso a lo que el usuario señaló, sin preguntar y **sin dejar entrada en Ajustes →
+Privacidad → Archivos y carpetas**. La primera versión de este documento decía que Escritorio y Documentos
+**debían** preguntar; medido, no preguntan, no aparece la app en esa lista, y el escaneo lee todo. Las tres
+observaciones son consistentes y el código tenía razón.
+
+Así que la prueba útil no es el panel, es **la lista de raíces recientes**: esa ruta no pasa por el panel del
+sistema, así que no trae el consentimiento con ella.
+
 1. `make run`. Debe abrir la **biblioteca de escaneos**.
-2. Nuevo escaneo (⌘N) → elige `~/demo-duplicate` → escanea.
-3. **Mira si macOS pide permiso.** Si el árbol está en tu carpeta de inicio no debería pedir nada; si lo pones
-   en Escritorio o Documentos, macOS **debe** preguntar la primera vez, con el texto de
-   `NSDesktopFolderUsageDescription` en el idioma del sistema.
+2. Nuevo escaneo (⌘N) → elige `~/Desktop/demo-duplicate` **por el panel** → escanea. Debe dar **5 grupos** sin
+   preguntar nada.
+3. **⌘Q para cerrar la app del todo**, `make run` otra vez, ⌘N, y ahora toma la misma carpeta de la lista de
+   **recientes** en vez de abrir el panel. Escanea.
 
-**Está mal si**: el escaneo termina con cero archivos y sin preguntar nada. Eso es un permiso negado
-disfrazado de "no encontré nada", y es el fallo de mayor consecuencia de toda la app.
+**Lo que decide el paso 3:**
 
-**Qué anotar**: si preguntó, y si el texto del diálogo está en tu idioma.
+| Qué ves | Qué significa |
+|---|---|
+| Pregunta el permiso | Correcto, y ahí sí debe aparecer en la lista de Ajustes |
+| 5 grupos sin preguntar | El consentimiento del panel persistió para esa ruta |
+| **0 archivos y ningún aviso** | **El fallo de mayor consecuencia de la app**: un permiso negado que se lee igual que "no hay duplicados" |
+| 0 archivos **con el banner** de directorios inaccesibles | Funciona: no pudo entrar y lo dice |
+
+**Qué anotar**: cuál de las cuatro, y si preguntó, si el diálogo salió en tu idioma.
+
+### Lo que salió, medido
+
+**5 grupos sin preguntar**, también desde recientes y tras cerrar la app por completo. Con eso, y con que la app
+no aparezca en Ajustes → Privacidad → Archivos y carpetas, el cuadro cierra: el consentimiento del panel
+persiste para esa ruta.
+
+**Y `open` sí entrega la app a Launch Services**: el padre del proceso es `launchd`, no la terminal. Así que la
+app es su propio responsable y no está heredando permisos de nadie.
+
+**Conclusión, y es de diseño**: en uso normal **la superficie de TCC de esta app es casi inalcanzable**. La raíz
+de un escaneo siempre sale del panel del sistema o de recientes, así que nunca hay una carpeta protegida a la
+que la app llegue sin que alguien la haya señalado — que es exactamente por lo que nunca necesita pedir Acceso
+Total al Disco.
+
+### Lo único que queda expuesto, y sigue sin probarse
+
+Elegir una carpeta **que contenga** una protegida: escanear `~` hace que la app descienda a `~/Desktop`,
+`~/Documents` y `~/Downloads` **sin** que nadie las haya señalado. Ahí TCC sí puede negar, y ahí es donde el
+`errorHandler` del walker importa — si se comporta mal, el escaneo devuelve menos archivos y reporta "no
+encontré duplicados", indistinguible del éxito.
+
+**Lo que hay que ver**: que al terminar aparezca el banner contando los directorios que no pudo leer. Es un
+escaneo largo (cientos de GB), así que va suelto cuando la máquina esté libre.
 
 ## 2. Que la biblioteca liste los cuatro tipos (1 min)
 

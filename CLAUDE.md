@@ -180,6 +180,20 @@ No re-descubrirlas:
   Siempre.** El SDK contra el que compila CI (macOS 15) carece de anotaciones `Sendable` que el SDK
   local sí tiene, y el mismo código es error duro allá. No se puede reproducir local. Si sobra, no
   molesta; si falta, CI lo descubre en 45 segundos.
+- **Elegir la carpeta en `NSOpenPanel` *es* el consentimiento, así que Escritorio y Documentos no disparan
+  diálogo.** Medido con la app lanzada por Launch Services: no pregunta, lee los 15 archivos de un árbol en el
+  Escritorio, y **no aparece en Ajustes → Privacidad → Archivos y carpetas** — las tres cosas consistentes entre
+  sí. El comentario de `chooseRoot` ya lo decía y la primera versión de la pasada a mano afirmaba lo contrario.
+  Y no es porque el usuario sea administrador: TCC es una capa aparte de los permisos POSIX, y ni `sudo` la evita.
+- **Y las raíces recientes tampoco muerden**: medido, escanear la misma carpeta del Escritorio desde recientes,
+  tras cerrar la app por completo, da los mismos 5 grupos sin preguntar. El consentimiento del panel persiste
+  para esa ruta. `open` además entrega la app a Launch Services de verdad —el padre del proceso es `launchd`,
+  no la terminal—, así que no está heredando permisos de nadie.
+- **En uso normal la superficie de TCC de esta app es casi inalcanzable, y es de diseño.** La raíz siempre sale
+  del panel o de recientes, así que nunca hay una carpeta protegida a la que se llegue sin que alguien la haya
+  señalado. Lo único que queda expuesto es elegir una carpeta **que contenga** una protegida —escanear `~`, que
+  desciende a Escritorio y Documentos sin que nadie los señale—, y eso sigue sin probarse porque son cientos de
+  GB.
 - **TCC atribuye el permiso al proceso responsable, no al binario.** Lanzada desde la terminal, la
   app hereda los permisos de la terminal; lanzada por Launch Services es su propio responsable.
   Consecuencia: **un selftest verde no dice nada sobre el estado de TCC de la app.** Reportar los dos
