@@ -3303,7 +3303,22 @@ enum SelfTest {
 
         let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
         let store = ScanStore(state: state)
-        let controller = ScanPanelController(stateDirectory: state)
+
+        // **The recents popup is filled from a throwaway file, never the user's own.** Its width is its
+        // widest menu item and those items are paths, so the row's appetite depends on what was scanned
+        // last: reading the real file would measure this machine, and reading nothing would hide the popup
+        // altogether -- which is what CI does, and the spill only exists when the popup is there.
+        let deepRoots = (0..<3).map { index in
+            root + "/Volumes/Respaldo Externo 2019/Fotos/Biblioteca/Exportadas/lote-\(index)"
+        }
+        for path in deepRoots {
+            try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        }
+        let recents = RecentRootsStore(url: URL(filePath: root + "/recent-roots.json"))
+        try recents.save(
+            deepRoots.map { RecentRoot(path: $0, lastUsed: "2026-08-30T12:00:00.000000Z") })
+
+        let controller = ScanPanelController(stateDirectory: state, recentRoots: recents)
         defer { controller.window?.close() }
 
         // 1. A root that cannot be scanned is refused before any work.
@@ -3315,6 +3330,25 @@ enum SelfTest {
 
         controller.setRootForSelftest(tree)
         try expect(controller.canStart, "a readable folder was refused")
+
+        // **Nothing in the options area may spill past the content margin.**
+        //
+        // The panel is a fixed 620 points wide and cannot grow, so a row that asks for more does not widen
+        // the window -- it runs off the edge. With recent roots in the popup the row wanted 596 points
+        // inside a 580-point content area, and the path label ended two points from the window edge.
+        // Reported from real use as text that looked crowded; `requiredContentSize` above cannot see it,
+        // because it reports what the layout wanted rather than what it did with a width it could not
+        // change.
+        //
+        // Teeth: drop the `rootRow` width constraint in `build()` and this reads twenty points of
+        // overflow, naming the path label -- which is exactly the amount of the right inset it ate.
+        controller.setRootForSelftest(deepRoots[0])
+        let spill = controller.optionsOverflowForSelftest
+        try expect(
+            spill.points == 0,
+            "the options area spills \(Int(spill.points)) points past its margin: \(spill.control)"
+        )
+        controller.setRootForSelftest(tree)
 
         // The options page grew a grey explanation under every checkbox; this is what keeps that from
         // turning into a window taller than a laptop screen.

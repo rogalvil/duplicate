@@ -30,7 +30,13 @@ final class ScanPanelController: NSWindowController {
     private let rootLabel = NSTextField(labelWithString: "")
     private let chooseButton = NSButton()
     private let recentPopup = NSPopUpButton()
-    private let recentRoots = RecentRootsStore()
+    /// Injected so the harness can supply its own.
+    ///
+    /// **The popup's width is this store's contents.** An `NSPopUpButton` is as wide as its widest menu
+    /// item and these items are paths, so how much the row asks for depends on what the user scanned last.
+    /// A harness reading the real file measures this machine; a harness with no file at all measures a
+    /// hidden popup, which is what CI would have done -- and the spill only exists when the popup is there.
+    private let recentRoots: RecentRootsStore
     /// Which detector to run. Exact files, or similar folders.
     private let detectorPopup = NSPopUpButton()
     private let thresholdPopup = NSPopUpButton()
@@ -51,8 +57,9 @@ final class ScanPanelController: NSWindowController {
     private let optionsStack: NSStackView
     private let progressStack: NSStackView
 
-    init(stateDirectory: StateDirectory) {
+    init(stateDirectory: StateDirectory, recentRoots: RecentRootsStore = RecentRootsStore()) {
         self.stateDirectory = stateDirectory
+        self.recentRoots = recentRoots
         self.session = ScanSession(store: ScanStore(state: stateDirectory))
         self.folderSession = FolderScanSession(store: ScanStore(state: stateDirectory))
         self.similarSession = SimilarScanSession(store: ScanStore(state: stateDirectory))
@@ -241,6 +248,16 @@ final class ScanPanelController: NSWindowController {
             content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             bar.widthAnchor.constraint(equalToConstant: 560),
             rootLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 330),
+            // **An `NSPopUpButton` is as wide as its widest menu item, and these items are paths.** With a
+            // few recent roots the popup asked for 281 points, the row then wanted 596 inside a 580-point
+            // content area, and the window is a fixed 620 that cannot grow to absorb it -- so the row
+            // spilled and the path ran to two points from the window edge.
+            //
+            // Capping the row is the whole fix. Lowering the popup's and the label's compression
+            // resistance was tried and removed: with the cap in place the row already resolves by
+            // squeezing them, and the button never gives way even when their resistance is raised to
+            // required. Two lines that read like a fix and change nothing are worse than no lines.
+            rootRow.widthAnchor.constraint(lessThanOrEqualTo: content.widthAnchor, constant: -40),
             pathLabel.widthAnchor.constraint(equalToConstant: 560),
             buttons.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -40),
         ])
@@ -661,6 +678,53 @@ final class ScanPanelController: NSWindowController {
     }
 
     func setRootForSelftest(_ path: String) { setRoot(path) }
+
+    /// How far the widest control in the options area spills past the content margin, in points.
+    ///
+    /// **The panel is a fixed 620 points wide and cannot grow**, so a row that asks for more does not
+    /// widen the window -- it spills. Measured before the fix, with a few recent roots in the popup: the
+    /// row wanted 596 points inside a 580-point content area and the path label ran to two points from the
+    /// window edge.
+    ///
+    /// Reading frames rather than `fittingSize` on purpose: a fixed-width window's fitting size says what
+    /// the layout wanted, not what it did with what it got.
+    /// The width the "choose a folder" button ends up with, after the row has been squeezed.
+    ///
+    /// **Which end gives way is a choice, not a default.** Capping the row makes something compress, and
+    /// with every view at the same resistance AppKit is free to pick the button -- a truncated "Elegir
+    /// carpeta..." is a control nobody can read, while a truncated path and a truncated menu title both
+    /// still say which folder they mean.
+    var optionsOverflowForSelftest: (points: CGFloat, control: String) {
+        guard let contentView = window?.contentView else { return (0, "") }
+        window?.layoutIfNeeded()
+        contentView.layoutSubtreeIfNeeded()
+        let limit = contentView.bounds.maxX - 20
+        var worst: CGFloat = 0
+        var offender = ""
+        func walk(_ view: NSView) {
+            for sub in view.subviews where !sub.isHidden {
+                if sub is NSControl, let parent = sub.superview {
+                    // **The alignment rect, not the frame.** An `NSTextField` draws about two points
+                    // outside its alignment rect on each side -- which is why the grey explanations sit at
+                    // x 18 under a 20-point inset -- and AutoLayout aligns the rect, not the bleed. Reading
+                    // frames here makes every label look like a two-point overflow.
+                    let aligned = parent.convert(
+                        sub.alignmentRect(forFrame: sub.frame), to: contentView)
+                    let over = aligned.maxX - limit
+                    if over > worst {
+                        worst = over
+                        let title =
+                            (sub as? NSButton)?.title ?? (sub as? NSTextField)?.stringValue
+                            ?? (sub as? NSPopUpButton)?.titleOfSelectedItem ?? ""
+                        offender = "\(type(of: sub)) \"\(title.prefix(40))\""
+                    }
+                }
+                walk(sub)
+            }
+        }
+        walk(optionsStack)
+        return (max(0, worst), offender)
+    }
     func startForSelftest() { startScan(nil) }
     func cancelForSelftest() { cancelScan(nil) }
     func refreshProgressForSelftest() { refreshProgress() }
