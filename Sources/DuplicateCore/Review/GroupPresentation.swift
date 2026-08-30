@@ -149,10 +149,13 @@ public struct GroupPresentation: Sendable, Equatable {
             group.files.indices.contains($0) ? group.files[$0] : nil
         }
         let siblings = keeperPath.map { Set(group.storageSiblings(of: $0)) } ?? []
-        let removable: Set<String> =
-            keeperPath.map { Set(group.removalCandidates(keeping: $0)) } ?? []
-        let keptPaths = Set(
-            keep.compactMap { group.files.indices.contains($0) ? group.files[$0] : nil })
+        let keptOrdered = keep.sorted().compactMap {
+            group.files.indices.contains($0) ? group.files[$0] : nil
+        }
+        // The same call the plan and the byte count make, so the checkboxes, the sentence above them and
+        // the sheet that moves files cannot describe three different sets.
+        let removable = Set(group.removalCandidates(keepingAll: keptOrdered))
+        let keptPaths = Set(keptOrdered)
 
         var clusterOf: [String: Int] = [:]
         for (index, cluster) in (group.storage?.clusters ?? []).enumerated() {
@@ -166,8 +169,7 @@ public struct GroupPresentation: Sendable, Equatable {
                 displayPath: parent.map { PathElision.relative(path, to: $0) } ?? path,
                 isKept: kept,
                 sharesStorageWithKeeper: !kept && siblings.contains(path),
-                isRemovable: !kept && removable.contains(path)
-                    && !keptPaths.contains { PathOrder.equal($0, path) },
+                isRemovable: !kept && removable.contains(path),
                 looksLikeCopy: CopyNamePattern.score(path: path) == 1,
                 storageCluster: clusterOf[path]
             )
@@ -177,7 +179,10 @@ public struct GroupPresentation: Sendable, Equatable {
         case .discardAll:
             self.reclaimableBytes = group.size * Int64(self.distinctCopies)
         case .decided:
-            self.reclaimableBytes = group.size * Int64(max(0, self.distinctCopies - 1))
+            // **Not `distinctCopies - 1`.** That is "keep one, drop the rest", which is the group's own
+            // question and not this decision's. Keeping two files of two removes nothing, and the header
+            // used to announce a full copy's worth of savings anyway.
+            self.reclaimableBytes = group.reclaimableBytes(keepingAll: keptOrdered)
         case .undecided, .skipped:
             self.reclaimableBytes = 0
         }

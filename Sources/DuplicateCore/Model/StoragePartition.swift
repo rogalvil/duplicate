@@ -95,6 +95,22 @@ public struct StoragePartition: Hashable, Sendable {
             .compactMap(\.first)
     }
 
+    /// The files to remove when every path in `kept` survives.
+    ///
+    /// One representative per cluster, minus **every** cluster that holds a kept path -- which is not
+    /// the same as ``removalCandidates(keeping:)`` plus a filter over the kept paths. That version
+    /// excludes one cluster and then drops kept paths from the representatives of the others, so a
+    /// cluster whose byte-order first member is not the kept one still offered its other name. Moving
+    /// that frees nothing, because it is the same storage, and it takes away a path the user chose to
+    /// keep -- the same failure `removalCandidates(keeping:)` exists to prevent, one case further out.
+    public func removalCandidates(keepingAll kept: [String]) -> [String] {
+        clusters
+            .filter { cluster in
+                !cluster.contains { path in kept.contains { PathOrder.equal($0, path) } }
+            }
+            .compactMap(\.first)
+    }
+
     /// Every path that shares storage with `keeper`, excluding it.
     ///
     /// What the UI shows as "these are the same file", rather than offering them for removal.
