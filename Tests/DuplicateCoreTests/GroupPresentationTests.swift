@@ -279,4 +279,60 @@ struct GroupPresentationTests {
         #expect(presentation.isReclaimExact == false)
         #expect(presentation.rows.allSatisfy { $0.storageCluster == nil })
     }
+
+    /// **Keeping every file frees nothing, and the header used to say otherwise.**
+    ///
+    /// The old figure was `distinctCopies - 1` -- the group's own "keep one, drop the rest" -- which does
+    /// not read the decision at all. With both files of a pair checked, the window announced a full
+    /// copy's worth of savings next to the button that trashes files, while the plan correctly moved
+    /// nothing.
+    @Test("Keeping every file in a group frees nothing")
+    func keepingEverythingFreesNothing() {
+        let presentation = GroupPresentation(
+            group: group(files: ["/r/a", "/r/b"], size: 15_300),
+            keep: [0, 1],
+            decision: .decided(keep: [0, 1]),
+            root: "/r"
+        )
+        #expect(presentation.reclaimableBytes == 0)
+        #expect(presentation.removableCount == 0)
+        #expect(presentation.rows.allSatisfy { $0.isRemovable == false })
+    }
+
+    /// The figure tracks the kept set rather than the file count: three files with two kept leaves one to
+    /// move, so one file's worth of bytes and no more.
+    @Test("The figure counts what the decision actually removes")
+    func countsWhatTheDecisionRemoves() {
+        let three = group(files: ["/r/a", "/r/b", "/r/c"], size: 1000)
+        let keepOne = GroupPresentation(
+            group: three, keep: [0], decision: .decided(keep: [0]), root: "/r")
+        #expect(keepOne.reclaimableBytes == 2000)
+        #expect(keepOne.removableCount == 2)
+
+        let keepTwo = GroupPresentation(
+            group: three, keep: [0, 2], decision: .decided(keep: [0, 2]), root: "/r")
+        #expect(keepTwo.reclaimableBytes == 1000)
+        #expect(keepTwo.removableCount == 1)
+        #expect(keepTwo.rows.map(\.isRemovable) == [false, true, false])
+    }
+
+    /// **A clone of a kept file is not removable, whichever name the cluster lists first.**
+    ///
+    /// The old code excluded the first keeper's cluster and then filtered the kept paths out of the other
+    /// representatives, which is not the same rule: here cluster 1 lists `/r/b2` before `/r/b`, so keeping
+    /// `/r/b` still offered `/r/b2` -- the same storage under another name. Removing it frees nothing and
+    /// takes away a path the user chose to keep.
+    @Test("A clone of a kept file is never offered, whatever the cluster order")
+    func neverOffersACloneOfAKeptFile() {
+        let partition = StoragePartition(
+            clusters: [["/r/a"], ["/r/b2", "/r/b"]], isExact: true)
+        let presentation = GroupPresentation(
+            group: group(files: ["/r/a", "/r/b", "/r/b2"], size: 1000, storage: partition),
+            keep: [0, 1],
+            decision: .decided(keep: [0, 1]),
+            root: "/r"
+        )
+        #expect(presentation.rows.allSatisfy { $0.isRemovable == false })
+        #expect(presentation.reclaimableBytes == 0)
+    }
 }
