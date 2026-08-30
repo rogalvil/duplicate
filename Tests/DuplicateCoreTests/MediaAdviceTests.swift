@@ -183,6 +183,75 @@ struct MediaAdvisorTests {
                 return false
             })
     }
+
+    /// **The winner can lose on a field and still win, and the sentence has to say so.**
+    ///
+    /// Measured on the demo tree: `clip-recodificado.mp4` is 320x240 at 232 kbps against
+    /// `clip-original.mp4` at 640x480 and 49 kbps. The score weighs bitrate against pixels, so the smaller
+    /// frame wins -- and the advice read "mayor resolucion (320 x 240 contra 640 x 480)", which is the
+    /// opposite of what its own numbers show, in the line that decides which file goes to the Trash.
+    ///
+    /// The guard that emits the reason asks whether the two *differ*; only the case name said "higher".
+    @Test("A winner with fewer pixels says fewer, not more")
+    func namesTheDirectionItActuallyWent() {
+        let advice = MediaAdvisor.advise(
+            a: video("/original.mp4", bitrate: 49_000, width: 640, height: 480),
+            b: video("/recoded.mp4", bitrate: 232_000, width: 320, height: 240),
+            kind: .video
+        )
+        guard case .prefer(.b, let reasons) = advice else {
+            Issue.record("expected B, got \(advice)")
+            return
+        }
+        // It really did win on bitrate, so that reason keeps its name.
+        #expect(
+            reasons.contains {
+                if case .higherBitrate(let kept, let other) = $0 {
+                    return kept == 232_000 && other == 49_000
+                }
+                return false
+            })
+        // And it really did lose on pixels, so this one must not claim otherwise.
+        #expect(
+            reasons.contains {
+                if case .lowerResolution(let w, let h, let ow, let oh) = $0 {
+                    return w == 320 && h == 240 && ow == 640 && oh == 480
+                }
+                return false
+            })
+        #expect(
+            !reasons.contains {
+                if case .higherResolution = $0 { return true }
+                return false
+            })
+    }
+
+    /// The other direction of the same hole: `higherBitrate` was emitted on inequality too, and only
+    /// happened to be right in the pair that exposed the resolution case.
+    @Test("A winner with fewer bits says fewer, not more")
+    func namesTheBitrateDirection() {
+        let advice = MediaAdvisor.advise(
+            a: video("/small.mp4", codec: "h264", bitrate: 4_000_000, width: 640, height: 480),
+            b: video("/big.mp4", codec: "hevc", bitrate: 3_000_000, width: 3840, height: 2160),
+            kind: .video
+        )
+        guard case .prefer(.b, let reasons) = advice else {
+            Issue.record("expected B, got \(advice)")
+            return
+        }
+        #expect(
+            reasons.contains {
+                if case .lowerBitrate(let kept, let other) = $0 {
+                    return kept == 3_000_000 && other == 4_000_000
+                }
+                return false
+            })
+        #expect(
+            !reasons.contains {
+                if case .higherBitrate = $0 { return true }
+                return false
+            })
+    }
 }
 
 @Suite("SimilarDecision")

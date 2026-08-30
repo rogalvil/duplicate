@@ -30,8 +30,25 @@ public enum MediaAdvice: Sendable, Hashable {
         case moreEfficientCodec(
             keptCodec: String, keptMultiplier: Double, otherCodec: String,
             otherMultiplier: Double, keptCodecKnown: Bool, otherCodecKnown: Bool)
+        /// The kept side spends more bits.
         case higherBitrate(kept: Int, other: Int)
+        /// The kept side spends **fewer** bits, and won on something else.
+        ///
+        /// **A separate case and not a sign convention.** Both directions used to arrive as
+        /// `higherBitrate`, because the guard that emits it asks whether the two differ, and the sentence
+        /// under the suggestion then claimed the winner had more of something it had less of. That is a
+        /// statement about the user's files that nobody established, in the line that decides which of the
+        /// two goes to the Trash.
+        case lowerBitrate(kept: Int, other: Int)
+        /// The kept side has more pixels.
         case higherResolution(
+            keptWidth: Int, keptHeight: Int, otherWidth: Int, otherHeight: Int)
+        /// The kept side has **fewer** pixels, and won on something else.
+        ///
+        /// Kept rather than dropped: "keep the second despite the smaller frame, because it carries 4.7x
+        /// the bitrate" is exactly what somebody needs to not get it wrong. Emitting nothing would hide the
+        /// one fact that makes the choice look surprising.
+        case lowerResolution(
             keptWidth: Int, keptHeight: Int, otherWidth: Int, otherHeight: Int)
         /// The ratio of the two quality scores, which is the number the decision was actually made on.
         case higherQualityScore(ratio: Double)
@@ -100,14 +117,26 @@ public enum MediaAdvisor {
                     otherCodecKnown: otherMultiplier.isKnown
                 ))
         }
+        // **The guard asks whether they differ, so the case has to carry which way.** The winner is chosen
+        // by the quality score, which weighs codec, bitrate and pixels together -- so it can lose on any one
+        // of them and still win. Naming the reason for the greater side regardless is how "mayor resolucion
+        // (320 x 240 contra 640 x 480)" reached the screen.
         if kept.bitrate > 0, other.bitrate > 0, kept.bitrate != other.bitrate {
-            reasons.append(.higherBitrate(kept: kept.bitrate, other: other.bitrate))
+            reasons.append(
+                kept.bitrate > other.bitrate
+                    ? .higherBitrate(kept: kept.bitrate, other: other.bitrate)
+                    : .lowerBitrate(kept: kept.bitrate, other: other.bitrate))
         }
         if kept.pixelCount > 0, other.pixelCount > 0, kept.pixelCount != other.pixelCount {
+            let higher = kept.pixelCount > other.pixelCount
             reasons.append(
-                .higherResolution(
-                    keptWidth: kept.pixelWidth, keptHeight: kept.pixelHeight,
-                    otherWidth: other.pixelWidth, otherHeight: other.pixelHeight))
+                higher
+                    ? .higherResolution(
+                        keptWidth: kept.pixelWidth, keptHeight: kept.pixelHeight,
+                        otherWidth: other.pixelWidth, otherHeight: other.pixelHeight)
+                    : .lowerResolution(
+                        keptWidth: kept.pixelWidth, keptHeight: kept.pixelHeight,
+                        otherWidth: other.pixelWidth, otherHeight: other.pixelHeight))
         }
         let ratio =
             winner == .a
