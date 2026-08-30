@@ -29,13 +29,22 @@ python3 scripts/make-demo-tree.py ~/demo-duplicate
 
 | detector | resultado |
 |---|---|
-| exactos | **5 grupos** sobre 15 archivos |
+| exactos | **7 grupos** sobre 19 archivos |
 | parecidos | **1 par de imagen y 1 par de video**, 4 archivos hasheados |
-| carpetas | **1 par** sobre 7 directorios — pero a 90% es `notas ↔ notas`, no las padre (#99) |
+| carpetas | **2 pares** sobre 7 directorios: `copia-a ↔ copia-b` al 90.9% y `notas ↔ notas` al 100% |
 
-Los 5 grupos exactos sorprenden si esperabas 2: los dos pares que el árbol declara, **más los tres archivos que
+Los 7 grupos exactos sorprenden si esperabas 2: los dos pares que el árbol declara, **más los cinco archivos que
 `copia-a` y `copia-b` comparten**. Es correcto, y es un buen primer recordatorio de que el detector exacto no
 sabe nada de carpetas.
+
+**Los dos pares de carpetas también son correctos.** El anidado se colapsa dentro del padre al *aplicar* —mover
+`copia-a` se lleva `copia-a/notas`— pero el documento del escaneo los reporta a los dos, porque los dos son
+ciertos. El par que el paso 5 necesita es el de las carpetas padre.
+
+**Y los cinco archivos compartidos salen de una desigualdad, no de un gusto.** Con `s` iguales y uno solo en
+`copia-b`, el Dice es `2s / (2s + 1)`; llegar al 90% por default pide `s >= 4.5`. Con tres daba 85.7% y el par
+de las padre no existía — el detector sólo veía `notas ↔ notas`, un par de un archivo sin nada de sobra de
+ningún lado, que es justo lo contrario de lo que el paso 5 va a mirar.
 
 ---
 
@@ -52,7 +61,7 @@ Así que la prueba útil no es el panel, es **la lista de raíces recientes**: e
 sistema, así que no trae el consentimiento con ella.
 
 1. `make run`. Debe abrir la **biblioteca de escaneos**.
-2. Nuevo escaneo (⌘N) → elige `~/Desktop/demo-duplicate` **por el panel** → escanea. Debe dar **5 grupos** sin
+2. Nuevo escaneo (⌘N) → elige `~/Desktop/demo-duplicate` **por el panel** → escanea. Debe dar **7 grupos** sin
    preguntar nada.
 3. **⌘Q para cerrar la app del todo**, `make run` otra vez, ⌘N, y ahora toma la misma carpeta de la lista de
    **recientes** en vez de abrir el panel. Escanea.
@@ -62,7 +71,7 @@ sistema, así que no trae el consentimiento con ella.
 | Qué ves | Qué significa |
 |---|---|
 | Pregunta el permiso | Correcto, y ahí sí debe aparecer en la lista de Ajustes |
-| 5 grupos sin preguntar | El consentimiento del panel persistió para esa ruta |
+| Los grupos, sin preguntar | El consentimiento del panel persistió para esa ruta |
 | **0 archivos y ningún aviso** | **El fallo de mayor consecuencia de la app**: un permiso negado que se lee igual que "no hay duplicados" |
 | 0 archivos **con el banner** de directorios inaccesibles | Funciona: no pudo entrar y lo dice |
 
@@ -70,7 +79,9 @@ sistema, así que no trae el consentimiento con ella.
 
 ### Lo que salió, medido
 
-**5 grupos sin preguntar**, también desde recientes y tras cerrar la app por completo. Con eso, y con que la app
+**5 grupos sin preguntar**, también desde recientes y tras cerrar la app por completo. (Cinco y no siete: el
+árbol de prueba tenía entonces tres archivos compartidos entre las copias y hoy tiene cinco, por #99. El número
+se deja como se midió, porque es lo que se midió.) Con eso, y con que la app
 no aparezca en Ajustes → Privacidad → Archivos y carpetas, el cuadro cierra: el consentimiento del panel
 persiste para esa ruta.
 
@@ -117,7 +128,11 @@ Las tres filas aparecieron **solas**, sin cerrar ni reabrir la ventana. Sobre `~
 | Carpetas | 1 par, 2 carpetas, umbral 90% |
 | Imágenes | 1 par de imagen, 1 de video, 4 archivos hasheados, umbral 5 bits |
 
-Los 15 archivos del árbol contra los 10 de la columna no es una discrepancia: los otros cinco
+**Medido sobre el árbol anterior**, el de tres archivos compartidos entre las copias. Con el de hoy los mismos
+segmentos dan 7 grupos y 2 pares de carpetas; los números de arriba se dejan como se tomaron. Lo que la corrida
+probaba —que las filas aparecen solas— no depende de ellos.
+
+Los 15 archivos de ese árbol contra los 10 de la columna no eran una discrepancia: los otros cinco
 —`solo-aqui.txt`, los dos JPEG y los dos MP4— no tienen gemelo **exacto**.
 
 Y elegir la raíz desde **Recientes** tampoco disparó diálogo de permisos, que es la misma observación del paso 1
@@ -208,11 +223,9 @@ decide cuál de los dos archivos se manda a la Papelera.
 
 ## 5. El visor de carpetas (3 min)
 
-> **Antes de correr este paso, ver #99.** Con el umbral por default de 90% el par que este paso describe **no
-> existe**: `copia-a` y `copia-b` comparten 3 archivos de 4, o sea Dice `2·3/(3+4) = 85.7%`. Lo que el detector
-> encuentra a 90% es `copia-a/notas ↔ copia-b/notas` al 100%, un par de un archivo sin nada que solo esté de un
-> lado — y la tabla del árbol de prueba acierta el conteo de "1 par" por accidente. Para correr el paso como
-> está escrito hay que bajar el umbral a **80%** en el panel de escaneo.
+La lista trae **dos** pares. Abre el de **`copia-a ↔ copia-b`, al 90.9%** — el otro es `notas ↔ notas` al 100%,
+que no tiene nada de sobra de ningún lado y no sirve para lo que este paso mira. Los dos son ciertos: el anidado
+se colapsa dentro del padre al aplicar, no al escanear.
 
 1. El detalle debe listar **`solo-aqui.txt`** como el archivo que solo está en `copia-b`.
 2. Al elegir conservar `copia-a`, la ventana debe **avisar antes de aplicar** que mover la otra perdería ese

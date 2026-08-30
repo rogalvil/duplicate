@@ -10,7 +10,11 @@ Lo que arma, y lo que cada detector debe encontrar:
     exactos/          4 archivos, dos pares byte-idénticos  -> 2 grupos exactos
     parecidas/        2 JPEG de la misma foto a calidades distintas -> 1 par de imagen
     parecidas/        2 clips del mismo video recodificado   -> 1 par de video
-    copia-a/ copia-b/ el mismo contenido con otro nombre     -> 1 par de carpetas
+    copia-a/ copia-b/ 5 archivos iguales y 1 solo en copia-b -> 1 par de carpetas al 90.9%
+
+El detector exacto ve **7** grupos sobre 19 archivos, no 2: los dos pares que exactos/ declara más los
+cinco archivos que copia-a y copia-b comparten. Es correcto, y es el recordatorio de que el detector
+exacto no sabe nada de carpetas.
 
 Uso: python3 scripts/make-demo-tree.py ~/demo-duplicate
 """
@@ -77,13 +81,21 @@ def main() -> int:
     else:
         print("  video: SALTADO, falta ffmpeg")
 
-    # 4. Carpetas: el mismo árbol con otro nombre. El detector debe verlas al 100% de Dice.
+    # 4. Carpetas: el mismo árbol con otro nombre, más un archivo que solo tiene una.
+    #
+    # **Cinco compartidos y no tres, y el número sale de una desigualdad.** Con `s` archivos iguales y uno
+    # solo en `copia-b`, el Dice es `2s / (2s + 1)`; para llegar al umbral por default de 90% hace falta
+    # `s >= 4.5`, o sea cinco. Con tres daba 85.7% y el par de las carpetas padre **no se encontraba**: el
+    # detector sólo veía `copia-a/notas` contra `copia-b/notas` al 100%, un par de un archivo sin nada que
+    # sobre de un lado -- justo lo que el paso 5 de la pasada a mano existe para mirar.
     folder_a = f"{root}/copia-a"
     os.makedirs(f"{folder_a}/notas", exist_ok=True)
     for name, payload in [
         ("uno.txt", b"primero\n"),
         ("dos.txt", b"segundo\n"),
+        ("cuatro.txt", b"cuarto\n"),
         ("notas/tres.txt", b"tercero\n"),
+        ("notas/cinco.txt", b"quinto\n"),
     ]:
         with open(f"{folder_a}/{name}", "wb") as handle:
             handle.write(payload)
@@ -95,7 +107,8 @@ def main() -> int:
     print(f"\nÁrbol listo en {root}")
     print("  exactos/    -> 2 grupos exactos")
     print("  parecidas/  -> 1 par de imagen y 1 par de video")
-    print("  copia-a vs copia-b -> 1 par de carpetas, con 1 archivo que solo está en copia-b")
+    print("  copia-a vs copia-b -> 1 par de carpetas al 90.9%, con solo-aqui.txt de más en copia-b")
+    print("  y el detector exacto ve 7 grupos: los 2 de exactos/ más los 5 que las copias comparten")
     return 0
 
 

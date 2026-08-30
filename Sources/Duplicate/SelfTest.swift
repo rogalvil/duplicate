@@ -5478,6 +5478,18 @@ enum SelfTest {
             print(
                 "  \(String(format: "%.2f", seconds))s wall, peak RSS "
                     + ByteSize.format(Int64(usage.ru_maxrss)))
+            // **Which pairs, not how many.** The count alone said "1 pair" for the demo tree and was
+            // right by accident: at the default threshold the pair it found was `copia-a/notas` against
+            // `copia-b/notas` at 100%, not the parent folders the manual pass describes -- a pair of one
+            // file with nothing left over on either side. A number cannot tell those apart.
+            for pair in result.scan.pairs.prefix(5) {
+                let a = PathElision.relative(pair.folderA, to: root)
+                let b = PathElision.relative(pair.folderB, to: root)
+                print(
+                    "  pair: \(a) <-> \(b) at \(String(format: "%.1f", pair.similarity * 100))%, "
+                        + "\(pair.matching) matching, \(pair.onlyInA.count) only in A, "
+                        + "\(pair.onlyInB.count) only in B")
+            }
             for truncated in result.truncated.prefix(3) {
                 print("  truncated: \(truncated.basename) with \(truncated.fileCount) files")
             }
