@@ -341,7 +341,9 @@
 "similar.why.codec" = "%1$@ carries more picture per bit than %2$@ (%3$@x against %4$@x)";
 "similar.why.codecUnknown" = "%1$@ is not a codec this app knows, so its %2$@x is a placeholder";
 "similar.why.bitrate" = "higher bitrate (%1$@ against %2$@)";
+"similar.why.bitrateLower" = "lower bitrate (%1$@ against %2$@)";
 "similar.why.resolution" = "higher resolution (%1$d x %2$d against %3$d x %4$d)";
+"similar.why.resolutionLower" = "lower resolution (%1$d x %2$d against %3$d x %4$d)";
 "similar.why.qualityRatio" = "%@x the normalised quality";
 "similar.contradiction.title" = "One file is kept by one pair and discarded by another";
 "similar.contradiction.body" = "%1$d files are in that position, %2$@ among them. Acting on every decision would delete a file you chose to keep elsewhere. Decide those pairs again before applying.";
