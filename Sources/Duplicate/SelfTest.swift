@@ -2701,6 +2701,36 @@ enum SelfTest {
         try expect(
             reopened.reviewFlow.isAvailable(.apply) == false, "apply is offered with no dry run")
 
+        // 10b. **The footer promises exactly what the plan will move.**
+        //
+        // The number beside the button that trashes files used to come from `distinctCopies - 1` -- the
+        // group's own "keep one, drop the rest", which never reads the decision. So a group with every
+        // file kept announced a full copy's worth of savings while `removalPlan` correctly moved nothing.
+        // Reported from real use: two files checked, "se liberarian 14.9 KB", and a simulation that would
+        // have listed nothing.
+        //
+        // `tallyText` was exposed for the harness when the window was written and nothing ever read it,
+        // which is how the label and the plan drifted apart unnoticed.
+        //
+        // Teeth: restore `total += group.reclaimableBytes` in `plannedReclaimBytes` and the first
+        // assertion fails with the label promising bytes the plan does not move.
+        reopened.selectGroupForSelftest(0)
+        await reopened.awaitPresenceForSelftest()
+        reopened.keepAll(nil)
+        reopened.confirmGroup(nil)
+        let promised = reopened.reviewState.plannedReclaimBytes
+        let moved = reopened.reviewState.removalPlan.reduce(Int64(0)) { total, entry in
+            total + entry.group.size * Int64(entry.paths.count)
+        }
+        try expect(
+            promised == moved,
+            "the footer promises \(promised) bytes and the plan moves \(moved)"
+        )
+        try expect(
+            reopened.tallyText.hasSuffix(ByteSize.format(moved)),
+            "the footer reads \(reopened.tallyText), and the plan moves \(ByteSize.format(moved))"
+        )
+
         // 11. **A decisions file that covers every group is flagged, not trusted.**
         //
         // The CLI writes one for every group including the ones nobody opened. Measured on this user's

@@ -76,6 +76,32 @@ public struct DuplicateGroup: Hashable, Sendable {
         return storage.removalCandidates(keeping: keeper)
     }
 
+    /// The files to remove when every path in `kept` survives.
+    ///
+    /// **The one rule three places used to carry a copy of.** The plan, the row-by-row preview and the
+    /// byte count all have to agree about which files a decision removes, and one of those answers moves
+    /// files. They disagreed: the plan and the preview filtered the kept paths out of the candidates
+    /// while the byte count assumed exactly one survivor, so keeping every file in a group announced a
+    /// saving that nothing would produce.
+    public func removalCandidates(keepingAll kept: [String]) -> [String] {
+        guard !kept.isEmpty else { return [] }
+        guard let storage else {
+            return files.filter { path in !kept.contains { PathOrder.equal($0, path) } }
+        }
+        return storage.removalCandidates(keepingAll: kept)
+    }
+
+    /// Bytes that removing ``removalCandidates(keepingAll:)`` would free.
+    ///
+    /// Each candidate is the only representative of its storage class, so each one frees ``size``.
+    ///
+    /// Not to be confused with ``reclaimableBytes``, which answers the group's own question -- keep one
+    /// class, drop the rest -- and knows nothing about what anybody decided. That number belongs in a
+    /// library column, where there is no decision yet; this one belongs anywhere a decision is on screen.
+    public func reclaimableBytes(keepingAll kept: [String]) -> Int64 {
+        size * Int64(removalCandidates(keepingAll: kept).count)
+    }
+
     /// Paths that share storage with `keeper`. Shown as "the same file", never offered for removal.
     public func storageSiblings(of keeper: String) -> [String] {
         storage?.siblings(of: keeper) ?? []
