@@ -4015,6 +4015,46 @@ enum SelfTest {
             folderLook.count == 2,
             "Quick Look would show \(folderLook.count) of the pair's 2 folders")
 
+        // **Deciding the last pair must not blank the window.**
+        //
+        // `mutate` reloads the table and `reloadData()` drops the selection, while `decisionChosen` only put
+        // it back when there was a next row. So the last pair -- which on a one-pair scan is the only pair --
+        // left "no pair selected", no advice, and no tally: nothing on screen said the decision landed.
+        // Reported from real use as "no warning appeared", and the warning had been there a moment earlier.
+        //
+        // The tally is a second, separate hole: it counts the whole review, so `refreshAdvice` clearing it
+        // along with the per-row advice removed the one number that survives having no selection.
+        //
+        // Teeth: drop the selection restore in `mutate` and the first assertion reads -1; put the tally
+        // write back inside `refreshAdvice`'s guard and the second reads empty.
+        let lastRow = viewer.pairRowCount - 1
+        viewer.decideForSelftest("keepB", row: lastRow)
+        try expect(
+            viewer.selectedRowForSelftest == lastRow,
+            "deciding the last pair left row \(viewer.selectedRowForSelftest) selected"
+        )
+        try expect(
+            !viewer.tallyText.isEmpty,
+            "deciding the last pair emptied the tally, the only sign that the decision landed"
+        )
+        try expect(
+            !viewer.headerText.isEmpty && !viewer.detailText.isEmpty,
+            "deciding the last pair emptied the detail pane"
+        )
+
+        // And with nothing selected at all -- which a click on empty table space produces -- the advice
+        // goes, because it talks about a pair, and the tally stays, because it counts the review.
+        //
+        // Teeth: move the tally write back inside `refreshAdvice`'s guard and the second reads empty.
+        viewer.clearSelectionForSelftest()
+        try expect(
+            viewer.adviceText.isEmpty, "the per-pair advice survived having no pair selected")
+        try expect(
+            !viewer.tallyText.isEmpty,
+            "deselecting emptied the whole-review tally, which no pair owns"
+        )
+        viewer.selectPairForSelftest(0)
+
         print("  and Command-Z takes a decision back, in the window and in the file")
 
         print(

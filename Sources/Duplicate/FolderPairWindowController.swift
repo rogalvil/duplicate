@@ -302,9 +302,14 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     /// apply, and read it in a refusal list. The apply still checks: the scan may be old, and its counts are what
     /// was true then.
     private func refreshAdvice() {
+        // **The tally is the whole review's and does not belong behind the per-row guard.** The advice
+        // talks about this pair, so it clears with the selection; `decided / skipped / not looked at` is
+        // about all of them, and clearing it took away the one number that says a decision landed.
+        let tally = review.tally
+        tallyLabel.stringValue = String(
+            format: Strings.string("folders.tally"), tally.decided, tally.skipped, tally.undecided)
         guard pairs.indices.contains(selectedRow) else {
             adviceLabel.stringValue = ""
-            tallyLabel.stringValue = ""
             return
         }
         let pair = pairs[selectedRow]
@@ -322,10 +327,6 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
                 format: Strings.string("folders.warnLoss"), name, losing.count)
             adviceLabel.textColor = .systemOrange
         }
-
-        let tally = review.tally
-        tallyLabel.stringValue = String(
-            format: Strings.string("folders.tally"), tally.decided, tally.skipped, tally.undecided)
 
         let decision = review.decision(at: selectedRow)
         let kept = decision.keptPaths
@@ -388,7 +389,15 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
             MainActor.assumeIsolated { controller.mutate { $0 = before } }
         }
         saveDecisions()
+        // **`reloadData()` drops the table's selection**, and every mutation has to put it back or the
+        // window goes blank: no detail, no advice, and no tally -- so nothing at all says the decision
+        // registered. Restoring here rather than at the call sites covers undo too, which had the same
+        // hole and no `next` row to hide behind.
+        let selected = selectedRow
         table.reloadData()
+        if pairs.indices.contains(selected) {
+            table.selectRowIndexes([selected], byExtendingSelection: false)
+        }
         refreshDetail()
     }
 
@@ -481,6 +490,13 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
 
     var adviceText: String { adviceLabel.stringValue }
     var tallyText: String { tallyLabel.stringValue }
+    var selectedRowForSelftest: Int { table.selectedRow }
+
+    /// Clicking empty space in the table deselects, and the tally has to survive that.
+    func clearSelectionForSelftest() {
+        table.deselectAll(nil)
+        refreshDetail()
+    }
     var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
     var applySheetForSelftest: FolderApplySheetController? { applySheet }
 
