@@ -31,7 +31,7 @@ python3 scripts/make-demo-tree.py ~/demo-duplicate
 |---|---|
 | exactos | **5 grupos** sobre 15 archivos |
 | parecidos | **1 par de imagen y 1 par de video**, 4 archivos hasheados |
-| carpetas | **1 par** sobre 7 directorios |
+| carpetas | **1 par** sobre 7 directorios — pero a 90% es `notas ↔ notas`, no las padre (#99) |
 
 Los 5 grupos exactos sorprenden si esperabas 2: los dos pares que el árbol declara, **más los tres archivos que
 `copia-a` y `copia-b` comparten**. Es correcto, y es un buen primer recordatorio de que el detector exacto no
@@ -92,15 +92,41 @@ encontré duplicados", indistinguible del éxito.
 **Lo que hay que ver**: que al terminar aparezca el banner contando los directorios que no pudo leer. Es un
 escaneo largo (cientos de GB), así que va suelto cuando la máquina esté libre.
 
-## 2. Que la biblioteca liste los cuatro tipos (1 min)
+## 2. Que la biblioteca liste los tres tipos (1 min)
 
-Repite el escaneo con los otros tres detectores (el panel de escaneo los ofrece).
+Repite el escaneo con los otros dos detectores (el panel de escaneo los ofrece).
 
-Deben aparecer cuatro filas nuevas, con el badge de origen **app** y no CLI, y el pie contando lo que la lista
+Deben aparecer dos filas nuevas, con el badge de origen **app** y no CLI, y el pie contando lo que la lista
 muestra.
+
+**Son tres y no cuatro.** El control de segmentos ofrece Archivos, Carpetas e Imágenes, y el panel de escaneo
+ofrece tres detectores. Los **cuatro** que menciona `CLAUDE.md` son los directorios vigilados —`scans/`,
+`decisions/`, `folder-scans/`, `similar-scans/`—, que no son lo mismo: `decisions/` cambia el badge de una fila
+sin agregar ninguna. La versión anterior de este paso pedía cuatro filas y cuatro detectores; no existen.
 
 **Está mal si**: una fila no aparece hasta reabrir la ventana. El watcher de ese directorio no está enganchado
 —pasó con `folder-scans/` y `similar-scans/`— y se lee como "no encontró nada".
+
+### Lo que salió, medido
+
+Las tres filas aparecieron **solas**, sin cerrar ni reabrir la ventana. Sobre `~/demo-duplicate`:
+
+| segmento | contenido de la fila |
+|---|---|
+| Archivos | 5 grupos, 10 archivos, 23.6 KB recuperables |
+| Carpetas | 1 par, 2 carpetas, umbral 90% |
+| Imágenes | 1 par de imagen, 1 de video, 4 archivos hasheados, umbral 5 bits |
+
+Los 15 archivos del árbol contra los 10 de la columna no es una discrepancia: los otros cinco
+—`solo-aqui.txt`, los dos JPEG y los dos MP4— no tienen gemelo **exacto**.
+
+Y elegir la raíz desde **Recientes** tampoco disparó diálogo de permisos, que es la misma observación del paso 1
+por el otro camino.
+
+**Lo que sí salió mal es el panel de escaneo, y es #98.** Con una ruta larga, la fila de la carpeta se encima
+sobre la de abajo y esconde el cuadrito de **Incluir archivos ocultos**. Sale con los detectores de archivos y
+de carpetas, y **no** sale con el perceptual —cuyo checkbox de video ensancha la fila de arriba y con ella la
+ventana—, que es justo lo que señala la causa: `rootLabel` pide el ancho de su texto y no cede.
 
 ## 3. La revisión exacta: lo que se ve y lo que se puede achicar (5 min)
 
@@ -114,10 +140,39 @@ Doble clic en el escaneo exacto.
 3. **La metadata bajo la vista previa**: tamaño y fecha. Con ⌘⌥I se esconde y vuelve; con ⌘Y abre **Vista
    rápida** a tamaño completo. *Está mal si* el panel de Quick Look abre **vacío**: eso es cableado faltante que
    se ve igual que una vista previa rota.
-4. **⌘Z.** Marca una casilla de conservar, confirma con Return, y deshace con ⌘Z. El ítem **Edición > Deshacer**
+4. **⌘Z.** Marca una casilla de conservar, confirma con Return —o ⌘Return, que es el equivalente del menú; el
+   Return pelado solo cuenta con la lista de archivos enfocada— y deshace con ⌘Z. El ítem **Edición > Deshacer**
    tiene que estar **habilitado**, no gris. *Está mal si* está gris: la ventana no está entregando su
    `UndoManager`, y el deshacer existe siendo invisible.
 5. **Mostrar en Finder** (⌘R) sobre un archivo seleccionado.
+
+### Lo que salió, medido
+
+Los cinco puntos pasaron, con la ventana arrastrada hasta ~790 pt de ancho:
+
+| # | qué | qué se vio |
+|---|---|---|
+| 1 | achicar sin vaciar | la tabla y el panel de detalle siguieron completos |
+| 2 | truncado por el medio | `/Users/roger/dem…actos/foto 2.raw` |
+| 3 | ⌘⌥I y ⌘Y | la línea de tamaño y fecha se escondió y volvió; Quick Look abrió con nombre, tamaño y fecha |
+| 4 | ⌘Z | **Edición > Deshacer** habilitado; ⌘Z y ⌘⇧Z hicieron ida y vuelta |
+| 5 | ⌘R | Finder abrió en `exactos` con el archivo resaltado |
+
+**Y el paso destapó #100.** Con las dos casillas de un grupo marcadas —o sea conservar los dos archivos— la
+ventana anuncia que liberaría 14.9 KB. No se movería nada: `removalPlan` filtra lo conservado y devuelve cero
+candidatos, mientras `plannedReclaimBytes` suma `distinctCopies - 1` sin mirar el conjunto conservado. Es el
+número pegado al botón que borra, y es la tercera función sobre el mismo tri-estado que no concuerda con las
+otras dos.
+
+**Una sorpresa que no es un bug**: en el grupo de `informe.pdf` el keeper es el archivo **menos** profundo, al
+revés de la regla que `CLAUDE.md` describe. Es correcto. `CopyNamePattern` tiene una alternativa en español,
+`\s+copia`, así que `subcarpeta/informe copia.pdf` puntúa 1 — y en el orden lexicográfico de `KeeperHeuristic`
+el score de copia pesa **antes** que la profundidad.
+
+**Y un falso hallazgo mío, anotado porque volvería a pasar**: dos capturas seguidas parecían mostrar un deshacer
+que cambiaba el conjunto conservado sin quitar la decisión. No lo era — habían sido dos pulsaciones, una del menú
+y una del teclado. Un estado intermedio fotografiado no distingue "un paso de undo" de "dos", y el repro que sí
+lo distingue es leer el pie después de **cada** acción.
 
 ## 4. El visor de parecidos: el panel angosto (5 min)
 
@@ -134,7 +189,30 @@ Abre el escaneo perceptual. Verás el par de imagen y el de video.
    caminar entre ellos. Esa es la comparación a tamaño real, y la razón por la que esta app existe en vez del CLI.
 5. **⌘R** debe revelar **los dos** archivos en Finder a la vez.
 
+### Lo que salió, medido — dos de cinco
+
+Observado al abrir el escaneo perceptual del árbol de demo, sin correr el paso completo:
+
+- **Los dos lados muestran miniaturas distintas.** El punto 1 pasa, así que la clave de miniatura está
+  separando los pares como debe.
+- **El encabezado del par de video dice "100.00% de los cuadros muestreados coinciden"**, no una distancia de
+  bits. El punto 3 pasa.
+
+Los puntos 2, 4 y 5 —la línea de metadata en angosto, ⌘Y con los dos lados, ⌘R con los dos— siguen pendientes.
+
+**Y aquí vive #97.** El consejo del par de video dice *"Conservar el segundo — mayor bitrate (232 kbps contra
+49 kbps), **mayor resolución (320 x 240 contra 640 x 480)**"*. 320×240 no es mayor que 640×480: la guarda que
+emite esa razón es `!=` —*difieren*— mientras el caso se llama `higherResolution` y la cadena dice "mayor".
+`higherBitrate`, dos líneas arriba, tiene la misma forma y en este par acertó por casualidad. Es la frase que
+decide cuál de los dos archivos se manda a la Papelera.
+
 ## 5. El visor de carpetas (3 min)
+
+> **Antes de correr este paso, ver #99.** Con el umbral por default de 90% el par que este paso describe **no
+> existe**: `copia-a` y `copia-b` comparten 3 archivos de 4, o sea Dice `2·3/(3+4) = 85.7%`. Lo que el detector
+> encuentra a 90% es `copia-a/notas ↔ copia-b/notas` al 100%, un par de un archivo sin nada que solo esté de un
+> lado — y la tabla del árbol de prueba acierta el conteo de "1 par" por accidente. Para correr el paso como
+> está escrito hay que bajar el umbral a **80%** en el panel de escaneo.
 
 1. El detalle debe listar **`solo-aqui.txt`** como el archivo que solo está en `copia-b`.
 2. Al elegir conservar `copia-a`, la ventana debe **avisar antes de aplicar** que mover la otra perdería ese
