@@ -155,7 +155,6 @@ public struct GroupPresentation: Sendable, Equatable {
         // The same call the plan and the byte count make, so the checkboxes, the sentence above them and
         // the sheet that moves files cannot describe three different sets.
         let removable = Set(group.removalCandidates(keepingAll: keptOrdered))
-        let keptPaths = Set(keptOrdered)
 
         var clusterOf: [String: Int] = [:]
         for (index, cluster) in (group.storage?.clusters ?? []).enumerated() {
