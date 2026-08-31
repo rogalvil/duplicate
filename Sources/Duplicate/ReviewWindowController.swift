@@ -62,6 +62,14 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     /// Saving still happens: automatically before an apply, on ⌘S, and when the window closes with unsaved
     /// decisions. It is bookkeeping the app can do without being asked.
     private let simulateButton = NSButton()
+    /// **The most used action in the app, and it had no button.**
+    ///
+    /// Confirming is once per group -- 880 times on this user's real scan -- and until now it existed only as
+    /// a menu item and its shortcut. Nothing on screen said a group had to be confirmed, and nothing moves
+    /// without it: an undecided group never enters the plan, so somebody can approve every suggestion in the
+    /// window and end with an empty apply. Reported from real use, and the same lesson the simulate button
+    /// already carries.
+    private let confirmButton = NSButton()
     private let warningLabel = NSTextField(labelWithString: "")
 
     private let undo = UndoManager()
@@ -383,11 +391,28 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         simulateButton.target = self
         simulateButton.action = #selector(simulateApply(_:))
 
+        // Same title as the menu item, on purpose: two names for one action is how someone ends up looking
+        // for a second thing that does not exist.
+        confirmButton.title = Strings.string("menu.group.confirm")
+        confirmButton.bezelStyle = .rounded
+        confirmButton.target = self
+        confirmButton.action = #selector(confirmGroup(_:))
+        // **No key equivalent.** Return already means "confirm" inside the file list, where a list has focus
+        // and the gesture is unambiguous; a default button would claim it for the whole window. The shortcut
+        // lives in the menu, which is where a shortcut becomes discoverable after you know it exists.
+
         let spacer = NSView()
         spacer.translatesAutoresizingMaskIntoConstraints = false
-        let footer = NSStackView(views: [tallyLabel, spacer, simulateButton])
-        footer.orientation = .horizontal
-        footer.spacing = 10
+        // The per-group action on the leading side, the whole-review action on the trailing side, and the
+        // tally on its own line below -- the arrangement the similar and folder viewers already use. The
+        // exact review was the only one of the three without a decision row at all.
+        let decisionRow = NSStackView(views: [confirmButton, spacer, simulateButton])
+        decisionRow.orientation = .horizontal
+        decisionRow.spacing = 10
+        let footer = NSStackView(views: [decisionRow, tallyLabel])
+        footer.orientation = .vertical
+        footer.alignment = .leading
+        footer.spacing = 6
         footer.translatesAutoresizingMaskIntoConstraints = false
 
         let content = NSView()
@@ -398,6 +423,9 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             split.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             split.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             split.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -6),
+            // The row spans the footer so the trailing button lands on the trailing edge; a leading-aligned
+            // vertical stack would otherwise size it to its contents and leave both buttons on the left.
+            decisionRow.widthAnchor.constraint(equalTo: footer.widthAnchor),
             footer.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
             footer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
             footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -10),
@@ -1056,6 +1084,14 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     var subheaderText: String { subheaderLabel.stringValue }
     var warningText: String { warningLabel.stringValue }
     var tallyText: String { tallyLabel.stringValue }
+
+    /// Presses the confirm button the way somebody using the app does, target and action included.
+    ///
+    /// **Not `confirmGroup(nil)`.** Calling the action directly is exactly what passes against a window where
+    /// the button is missing or wired to nothing, which is the state this window shipped in: the action
+    /// worked perfectly and there was no button to reach it with.
+    func pressConfirmForSelftest() { confirmButton.performClick(nil) }
+    var confirmButtonTitleForSelftest: String { confirmButton.title }
     var groupRowCount: Int { groupTable.numberOfRows }
     var fileRowCount: Int { fileTable.numberOfRows }
     var canUndoReview: Bool { undo.canUndo }

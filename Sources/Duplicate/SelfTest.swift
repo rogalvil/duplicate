@@ -2717,6 +2717,7 @@ enum SelfTest {
         reopened.selectGroupForSelftest(0)
         await reopened.awaitPresenceForSelftest()
         reopened.keepAll(nil)
+
         reopened.confirmGroup(nil)
         let promised = reopened.reviewState.plannedReclaimBytes
         let moved = reopened.reviewState.removalPlan.reduce(Int64(0)) { total, entry in
@@ -2732,6 +2733,42 @@ enum SelfTest {
         try expect(
             reopened.tallyText.contains(ByteSize.format(moved)),
             "the footer reads \(reopened.tallyText), and the plan moves \(ByteSize.format(moved))"
+        )
+
+        // **Confirming has a button, and the button is what gets pressed here.**
+        //
+        // Confirming is the most used action in the window -- once per group, 880 times on this user's real
+        // scan -- and it existed only as a menu item and a shortcut. Nothing on screen said a group had to be
+        // confirmed, and nothing moves without it: an undecided group never enters the plan, so every
+        // suggestion can be approved and the apply still finds nothing to do. Reported from real use, and the
+        // same lesson the simulate button already carries.
+        //
+        // `performClick` and not `confirmGroup(nil)`: calling the action is exactly what passes against a
+        // window with no button at all, which is the state this shipped in. And on a group nobody has decided
+        // yet, because confirming a decided one leaves the count where it was and proves nothing -- the first
+        // version of this assertion did that and failed with "left 2 decided, was 2".
+        //
+        // Teeth: drop the button's `target` and `action` in `build()` and the count stays put.
+        try expect(
+            reopened.confirmButtonTitleForSelftest == Strings.string("menu.group.confirm"),
+            "the confirm button reads \(reopened.confirmButtonTitleForSelftest)"
+        )
+        reopened.selectGroupForSelftest(2)
+        await reopened.awaitPresenceForSelftest()
+        try expect(
+            reopened.reviewState.decision(at: 2) == .undecided,
+            "group 3 was already decided, so pressing confirm would prove nothing"
+        )
+        let decidedBeforeButton = reopened.reviewState.tally.decided
+        reopened.pressConfirmForSelftest()
+        try expect(
+            reopened.reviewState.decision(at: 2).isActionable,
+            "pressing the confirm button did not decide the group"
+        )
+        try expect(
+            reopened.reviewState.tally.decided == decidedBeforeButton + 1,
+            "pressing confirm left \(reopened.reviewState.tally.decided) decided, "
+                + "was \(decidedBeforeButton)"
         )
 
         // 11. **A decisions file that covers every group is flagged, not trusted.**
