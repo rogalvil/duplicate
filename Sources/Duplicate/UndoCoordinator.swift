@@ -77,8 +77,15 @@ enum UndoCoordinator {
         // Appended, never a rewrite of the original line: the journal stays a truthful log of what happened
         // in order rather than a mutable summary of the current state. One line per restored file, because a
         // restoration is an event per file.
+        //
+        // **And the ones somebody put back themselves count too.** `UndoPlanner` classifies an entry as
+        // `.alreadyRestored` only after checking that the original path holds the same bytes, so the fact the
+        // line records -- this file is home -- is established either way. Writing it for the moves alone left
+        // a session where Finder had returned one file permanently short of `restoredCount >= movedCount`, so
+        // `JournalPruner` never called it finished and Clean stayed grey forever. Reported from real use, and
+        // the apply sheet is the thing that suggests using Finder in the first place.
         let stamp = ScanIdentifier.timestamp(from: Date())
-        for entry in report.restored {
+        for entry in report.restored + plan.alreadyRestored {
             _ = try? MoveJournal.appendRestoration(
                 of: entry, at: stamp, sessionID: sessionID, in: state)
         }

@@ -1728,9 +1728,64 @@ enum SelfTest {
             MoveJournal.sessions(in: state).contains(sessionID),
             "the journal of a fully restored session survived the prune")
 
+        // **A file somebody put back themselves counts as back.**
+        //
+        // The apply sheet tells people that Finder's own put-back works on everything it moves, and then a
+        // session where they used it could never be pruned: only the files the runner *moved* got an
+        // `undone_at`, so `restoredCount >= movedCount` never held and Clean stayed grey forever. Measured
+        // from real use -- two files applied, one put back in Finder, and the history read "1 de 2 devueltos"
+        // for good even though both were home.
+        //
+        // The fact is established either way: `UndoPlanner` calls an entry `.alreadyRestored` only after
+        // checking the original path holds the same bytes. What the line records is where the file ended up,
+        // not who moved it.
+        //
+        // Two files here, with one put back out of band the way Finder does it, so the case is a mixed
+        // session rather than an all-or-nothing one.
+        //
+        // Teeth: drop `+ plan.alreadyRestored` in `UndoCoordinator` and the prunable list comes back empty.
+        let mixedSession = "20260812-200000-000000"
+        var mixedEntries: [JournalEntry] = []
+        var mixedPaths: [String] = []
+        for name in ["putback-a.txt", "putback-b.txt"] {
+            let path = scratch + "/tree/" + name
+            try Data("content of \(name)".utf8).write(to: URL(filePath: path))
+            let digest = try ContentHasher().fullDigest(atPath: path)
+            let outcome = try TrashDisposer().dispose(path: path)
+            mixedPaths.append(path)
+            mixedEntries.append(
+                JournalEntry(
+                    originalPath: outcome.originalPath, resultingPath: outcome.resultingPath,
+                    mechanism: outcome.mechanism, byteCount: outcome.byteCount,
+                    digest: digest.digest, groupKey: "0:putback", scanID: "selftest",
+                    timestamp: "2026-08-12T20:00:00.000000Z"))
+        }
+        _ = try MoveJournal.append(mixedEntries, sessionID: mixedSession, in: state)
+        // What Finder's put-back does: the file returns to its original path and leaves the Trash.
+        try manager.moveItem(
+            at: URL(filePath: mixedEntries[0].resultingPath),
+            to: URL(filePath: mixedEntries[0].originalPath))
+
+        let mixed = await UndoCoordinator.undo(
+            sessionID: mixedSession, in: state,
+            cacheURL: URL(filePath: scratch + "/hashes.v1"))
+        try expect(
+            mixed.restoredCount == 1,
+            "the coordinator moved \(mixed.restoredCount) back, and one was already home")
+        for path in mixedPaths {
+            try expect(manager.fileExists(atPath: path), "\(path) is not back")
+        }
+        let mixedPlan = JournalPruner.plan(in: state)
+        try expect(
+            mixedPlan.prunable.map(\.sessionID) == [mixedSession],
+            "prunable: \(mixedPlan.prunable.map(\.sessionID)), wanted the mixed session"
+        )
+        _ = JournalPruner.prune(mixedPlan, in: state)
+
         print("  4 files trashed, journalled, restored byte-identical")
         print("  and the journal of the restored session was prunable, and nothing else was")
         print("  a second undo over occupied work was refused, and the work survived")
+        print("  a file put back in Finder counts as back, so its session prunes")
     }
 
     // MARK: - review
