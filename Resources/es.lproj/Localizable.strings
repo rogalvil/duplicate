@@ -162,13 +162,11 @@
 /* Aplicar y deshacer */
 "apply.window.title" = "Aplicar";
 /* %1$d archivos, %2$@ tamaño total. */
-"apply.headline" = "Se moverían %1$d archivos al basurero, liberando %2$@";
 "apply.detail" = "Todavía no se ha movido nada. Cada archivo se vuelve a hashear justo antes de moverse, y cualquiera que haya cambiado desde el escaneo se deja en paz. El \"Sacar del basurero\" de Finder funciona con todo lo que se mueve así, y también Sesiones > Deshacer la última sesión.";
 "apply.button.apply" = "Mover al basurero";
 "apply.button.undo" = "Deshacer esta sesión";
 "apply.running" = "Moviendo archivos...";
 /* %1$d archivos movidos, %2$@ liberados. */
-"apply.done.headline" = "Se movieron %1$d archivos, liberando %2$@";
 "apply.done.clean" = "Se movieron todos. Sesiones > Deshacer la última sesión los devuelve.";
 /* %d archivos que fueron a cuarentena. */
 "apply.done.quarantined" = "%d no pudieron ir al basurero y se movieron a la carpeta de cuarentena.";
@@ -220,11 +218,9 @@
 "undo.done.headline" = "Se devolvieron %1$d archivos, %2$@";
 "undo.clean" = "Todo lo que esta sesión movió está de vuelta donde estaba.";
 /* %d archivos que no se pudieron restaurar. */
-"undo.failed" = "%d no se pudieron devolver.";
 /* %d archivos bloqueados por algo en la ruta original. */
 "undo.blocked" = "%d se dejaron en paz porque su ruta original está ocupada por contenido distinto. Nunca se sobrescribe nada.";
 /* %d archivos que ya estaban de vuelta. */
-"undo.alreadyRestored" = "%d ya estaban de vuelta, byte por byte — el \"Sacar del basurero\" de Finder hace lo mismo.";
 "undo.allRestored" = "Todo ya estaba de vuelta. Nada que hacer.";
 "undo.nothingToDo" = "Nada de esta sesión se puede devolver. El basurero pudo haberse vaciado.";
 "undo.noJournal" = "Esta sesión no tiene registro, así que no se puede devolver nada.";
@@ -359,7 +355,6 @@
 "similar.apply.refused.unreadable" = "no se pudo leer %@";
 "similar.apply.refused.missing" = "ya no está";
 "similar.review.apply" = "Simular y aplicar…";
-"folders.apply.headline" = "%1$d carpetas irían al basurero";
 "folders.apply.verifyNote" = "Cada carpeta se revisa al moverla: una que tenga un archivo que la conservada no tiene se salta.";
 "folders.apply.excluded" = "%d carpetas quedan fuera: otra decisión las conserva, o conserva algo adentro.";
 "folders.apply.collapsed" = "%d ya están dentro de una carpeta de esta lista.";
@@ -375,7 +370,6 @@
 "folders.decision.skip" = "Saltar";
 "folders.column.decision" = "Decisión";
 "folders.tally" = "%1$d decididas - %2$d saltadas - %3$d sin ver";
-"folders.warnLoss" = "Mover %1$@ perdería %2$d archivos que tiene y la otra no.";
 "folders.warnNoLoss" = "Todo lo de %@ está también en la otra carpeta.";
 "folders.review.apply" = "Simular y aplicar…";
 "folders.meta.side" = "%1$@: %2$d archivos, %3$@";

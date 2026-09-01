@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>apply.done.headline</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, liberando %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se movió 1 archivo</string>
+			<key>other</key>
+			<string>Se movieron %1$d archivos</string>
+		</dict>
+	</dict>
+	<key>apply.headline</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ al basurero, liberando %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se movería 1 archivo</string>
+			<key>other</key>
+			<string>Se moverían %1$d archivos</string>
+		</dict>
+	</dict>
+	<key>folders.apply.headline</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 carpeta iría al basurero</string>
+			<key>other</key>
+			<string>%1$d carpetas irían al basurero</string>
+		</dict>
+	</dict>
+	<key>folders.warnLoss</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Mover %2$@ perdería 1 archivo que tiene y la otra no.</string>
+			<key>other</key>
+			<string>Mover %2$@ perdería %1$d archivos que tiene y la otra no.</string>
+		</dict>
+	</dict>
+	<key>undo.alreadyRestored</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, byte por byte — el "Sacar del basurero" de Finder hace lo mismo.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 ya estaba de vuelta</string>
+			<key>other</key>
+			<string>%d ya estaban de vuelta</string>
+		</dict>
+	</dict>
+	<key>undo.failed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 no se pudo devolver</string>
+			<key>other</key>
+			<string>%d no se pudieron devolver</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

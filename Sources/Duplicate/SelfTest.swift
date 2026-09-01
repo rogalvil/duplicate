@@ -310,7 +310,39 @@ enum SelfTest {
                 "\(table): \(peninsular.joined(separator: ", ")) say Papelera, and this system says basurero"
             )
         }
-        try checkKeysUsedInCode()
+
+        // **The plural table is audited too, and its keys must not also live in `.strings`.**
+        //
+        // Spanish agrees the verb with the count as well as the noun, so "1 archivos" was only half of it:
+        // `apply.headline` also read "Se moverían 1 archivo", and the whole clause has to move inside the
+        // variant. `.stringsdict` is what `NSLocalizedString` already reads, so runtime needed no change.
+        //
+        // Teeth: delete an `other` from either file and this names the key; put one of these keys back into
+        // `.strings` and the duplicate check fails.
+        guard let basePlurals = Strings.plurals(localization: "en"),
+            let spanishPlurals = Strings.plurals(localization: "es")
+        else { throw SelfTestFailure("Localizable.stringsdict is missing from the bundle") }
+        try expect(
+            Set(basePlurals.keys) == Set(spanishPlurals.keys),
+            "the plural tables disagree: "
+                + "\(Set(basePlurals.keys).symmetricDifference(spanishPlurals.keys).sorted())"
+        )
+        for (key, forms) in spanishPlurals {
+            try expect(
+                forms.one != forms.other,
+                "\(key): the singular and the plural are the same string"
+            )
+        }
+        if let strings = Strings.table(localization: "es") {
+            let duplicated = Set(spanishPlurals.keys).intersection(strings.keys).sorted()
+            try expect(
+                duplicated.isEmpty,
+                "\(duplicated.joined(separator: ", ")) are in both the plural table and .strings"
+            )
+        }
+        print("  Localizable.stringsdict: \(basePlurals.count) pluralised keys in both")
+
+        try checkKeysUsedInCode(alsoDeclared: Set(basePlurals.keys))
     }
 
     /// Proves the tables and the code agree, in both directions.
@@ -332,7 +364,9 @@ enum SelfTest {
     ///
     /// Proof of teeth: misspell a key in any `Strings.string` call and the first assertion names it; add a
     /// key to both tables and use it nowhere and the second one does.
-    private static func checkKeysUsedInCode() throws {
+    /// - Parameter alsoDeclared: keys that live in `Localizable.stringsdict` rather than `.strings`.
+    ///   They are declared, just not in the file this scan reads.
+    private static func checkKeysUsedInCode(alsoDeclared: Set<String> = []) throws {
         let sources = "Sources/Duplicate"
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: sources) else {
             print("  SKIPPED: the key scan needs the repository as the working directory")
@@ -359,7 +393,7 @@ enum SelfTest {
             if !literal.contains("\\(") { literals.insert(literal) }
             rest = rest[end...]
         }
-        let unknown = literals.subtracting(base.keys).sorted()
+        let unknown = literals.subtracting(base.keys).subtracting(alsoDeclared).sorted()
         try expect(
             unknown.isEmpty,
             "used in code, absent from the tables: \(unknown.joined(separator: ", "))"
@@ -368,7 +402,7 @@ enum SelfTest {
         // Pass two: every declared key is referenced somewhere, however it is passed.
         var interpolated = Set(LibrarySort.allCases.map { "library.sort.\($0.rawValue)" })
         interpolated.formUnion(ScanPhase.allCases.map { "scan.phase.\($0)" })
-        let unreferenced = base.keys
+        let unreferenced = (Set(base.keys).union(alsoDeclared))
             .filter { !interpolated.contains($0) && !text.contains("\"\($0)\"") }
             .sorted()
         try expect(
@@ -377,7 +411,7 @@ enum SelfTest {
         )
 
         // And every key really resolves, rather than falling back to its own name.
-        for key in base.keys.sorted() {
+        for key in Set(base.keys).union(alsoDeclared).sorted() {
             try expect(Strings.string(key) != key, "\(key) resolved to its own key")
         }
         print(
