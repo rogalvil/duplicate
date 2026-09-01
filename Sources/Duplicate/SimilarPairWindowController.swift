@@ -226,7 +226,22 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         applyButton.bezelStyle = .rounded
         applyButton.target = self
         applyButton.action = #selector(simulateAndApply(_:))
-        decisionRow.addView(applyButton, in: .trailing)
+
+        // **The two scan-wide actions get their own line, and that is what lets the window narrow.**
+        //
+        // Measured: the five per-pair buttons want 664 points and these two want 314, so one row asked for
+        // 986 -- and a window cannot be dragged below what its widest row demands. This one would not go under
+        // 1000 while `minSize` claimed 720 and meant nothing. Reported from real use as "es lo mas que me deja
+        // achicarla", which made step 4 of the manual pass -- shrink the window and watch the metadata line
+        // truncate -- impossible to run at all.
+        //
+        // Splitting drops the floor to the wider row, 664, and the window now stops at the 720 it already
+        // advertised: the stated minimum becomes the true one instead of a decoration.
+        let actionRow = NSStackView()
+        actionRow.orientation = .horizontal
+        actionRow.spacing = 8
+        actionRow.translatesAutoresizingMaskIntoConstraints = false
+        actionRow.addView(applyButton, in: .trailing)
 
         let panes = NSStackView(views: [leftPane, rightPane])
         panes.orientation = .horizontal
@@ -234,10 +249,10 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         panes.spacing = 12
         panes.translatesAutoresizingMaskIntoConstraints = false
 
-        decisionRow.addView(confirmShownButton, in: .trailing)
+        actionRow.addView(confirmShownButton, in: .trailing)
 
         let content = NSStackView(views: [
-            filterRow, scroll, headerLabel, panes, adviceLabel, decisionRow, tallyLabel,
+            filterRow, scroll, headerLabel, panes, adviceLabel, decisionRow, actionRow, tallyLabel,
             footerLabel,
         ])
         content.orientation = .vertical
