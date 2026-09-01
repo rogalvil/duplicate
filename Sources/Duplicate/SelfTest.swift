@@ -2485,6 +2485,14 @@ enum SelfTest {
             required.width <= 1100,
             "the layout demands \(Int(required.width)) points of width, which will not fit"
         )
+        // The same invariant for the exact review, which advertised 780 while demanding 790.
+        // Teeth: put `minSize` back to 780 in `ReviewWindowController` and this reads 790 against 780.
+        let advertisedReview = controller.window?.minSize ?? .zero
+        try expect(
+            required.width <= advertisedReview.width,
+            "the review demands \(Int(required.width)) points of width and advertises "
+                + "\(Int(advertisedReview.width))"
+        )
 
         try expect(controller.groupRowCount == 3, "\(controller.groupRowCount) groups listed")
         try expect(controller.fileRowCount == 2, "\(controller.fileRowCount) files in group 1")
@@ -3960,6 +3968,23 @@ enum SelfTest {
             "the viewer layout demands \(Int(fit.width))x\(Int(fit.height))"
         )
 
+        // **A window's declared minimum has to be one its layout can reach.**
+        //
+        // `minSize` is where AppKit stops a drag, and it means nothing when the constraints demand more: the
+        // similar viewer advertised 720 and would not go under 1000, so the step of the manual pass that
+        // shrinks it and watches the metadata line truncate could not be run at all. Reported from real use
+        // as "es lo mas que me deja achicarla". The exact review had the same defect, ten points wide.
+        //
+        // Asserted against the window's own number rather than a constant: the two have to agree, and which
+        // of them is right is a design choice a harness cannot make.
+        //
+        // Teeth: put the two scan-wide buttons back on `decisionRow` and this reads 1000 against 720.
+        let advertisedFolder = viewer.window?.minSize ?? .zero
+        try expect(
+            fit.width <= advertisedFolder.width,
+            "the folder viewer demands \(Int(fit.width)) points of width and advertises \(Int(advertisedFolder.width))"
+        )
+
         // 5. Orientation, in the saved document, is decided by bytes and not by the walk.
         // `rav duplicate folders-move` keeps `folder_a` and quarantines `folder_b`, so a document this app
         // writes decides which folder that command destroys.
@@ -4520,6 +4545,23 @@ enum SelfTest {
         try expect(
             fit.height <= 700 && fit.width <= 1100,
             "the viewer layout demands \(Int(fit.width))x\(Int(fit.height))"
+        )
+
+        // **A window's declared minimum has to be one its layout can reach.**
+        //
+        // `minSize` is where AppKit stops a drag, and it means nothing when the constraints demand more: the
+        // similar viewer advertised 720 and would not go under 1000, so the step of the manual pass that
+        // shrinks it and watches the metadata line truncate could not be run at all. Reported from real use
+        // as "es lo mas que me deja achicarla". The exact review had the same defect, ten points wide.
+        //
+        // Asserted against the window's own number rather than a constant: the two have to agree, and which
+        // of them is right is a design choice a harness cannot make.
+        //
+        // Teeth: put the two scan-wide buttons back on `decisionRow` and this reads 1000 against 720.
+        let advertisedSimilar = viewer.window?.minSize ?? .zero
+        try expect(
+            fit.width <= advertisedSimilar.width,
+            "the similar viewer demands \(Int(fit.width)) points of width and advertises \(Int(advertisedSimilar.width))"
         )
 
         print(
