@@ -291,6 +291,24 @@ enum SelfTest {
                 "\(table): only in es.lproj: \(audit.orphaned.joined(separator: ", "))"
             )
             print("  \(table): \(base.count) keys, \(audit.identical.count) identical in both")
+
+            // **The Spanish table names the Trash the way this system does.**
+            //
+            // Measured on the machine this is developed on: `AppleLocale` is `es_MX`, and Finder's own menu
+            // reads "Sacar del basurero", "Vaciar basurero". The table was written in peninsular Spanish --
+            // "Papelera", and `apply.detail` quoting a Finder command called "Devolver" -- so it named a
+            // place and an action that do not exist for the person using it. Reported from real use as "no
+            // veo la opción devolver".
+            //
+            // There is only one `es.lproj`, so macOS serves it to `es-MX` as well; adding an `es-419` table
+            // would double the localisation work for a Spain user this project does not have.
+            //
+            // Teeth: put "Papelera" back into any Spanish value and this names the key.
+            let peninsular = spanish.filter { $0.value.contains("Papelera") }.keys.sorted()
+            try expect(
+                peninsular.isEmpty,
+                "\(table): \(peninsular.joined(separator: ", ")) say Papelera, and this system says basurero"
+            )
         }
         try checkKeysUsedInCode()
     }

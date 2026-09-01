@@ -96,7 +96,7 @@
 "review.note.copyName" = "parece una copia";
 "review.discardAll.title" = "¿Descartar todas las copias de este grupo?";
 /* %1$d archivos, %2$@ tamaño total. */
-"review.discardAll.body" = "Los %1$d archivos irían a la Papelera y se liberarían %2$@. Nada se mueve hasta que simules y luego apliques.";
+"review.discardAll.body" = "Los %1$d archivos irían al basurero y se liberarían %2$@. Nada se mueve hasta que simules y luego apliques.";
 "review.discardAll.confirm" = "Descartar el grupo";
 "review.saveFailed.title" = "No se pudieron guardar las decisiones";
 "review.saveFailed.body" = "%@";
@@ -162,16 +162,16 @@
 /* Aplicar y deshacer */
 "apply.window.title" = "Aplicar";
 /* %1$d archivos, %2$@ tamaño total. */
-"apply.headline" = "Se moverían %1$d archivos a la Papelera, liberando %2$@";
-"apply.detail" = "Todavía no se ha movido nada. Cada archivo se vuelve a hashear justo antes de moverse, y cualquiera que haya cambiado desde el escaneo se deja en paz. El \"Devolver\" de Finder funciona con todo lo que se mueve así, y también Sesiones > Deshacer la última sesión.";
-"apply.button.apply" = "Mover a la Papelera";
+"apply.headline" = "Se moverían %1$d archivos al basurero, liberando %2$@";
+"apply.detail" = "Todavía no se ha movido nada. Cada archivo se vuelve a hashear justo antes de moverse, y cualquiera que haya cambiado desde el escaneo se deja en paz. El \"Sacar del basurero\" de Finder funciona con todo lo que se mueve así, y también Sesiones > Deshacer la última sesión.";
+"apply.button.apply" = "Mover al basurero";
 "apply.button.undo" = "Deshacer esta sesión";
 "apply.running" = "Moviendo archivos...";
 /* %1$d archivos movidos, %2$@ liberados. */
 "apply.done.headline" = "Se movieron %1$d archivos, liberando %2$@";
 "apply.done.clean" = "Se movieron todos. Sesiones > Deshacer la última sesión los devuelve.";
 /* %d archivos que fueron a cuarentena. */
-"apply.done.quarantined" = "%d no pudieron ir a la Papelera y se movieron a la carpeta de cuarentena.";
+"apply.done.quarantined" = "%d no pudieron ir al basurero y se movieron a la carpeta de cuarentena.";
 /* %d archivos que fallaron. */
 "apply.done.failed" = "%d archivos se dejaron en paz.";
 "apply.done.stoppedEarly" = "La corrida se detuvo temprano porque las fallas siguieron llegando: hay algo mal más allá de un archivo suelto.";
@@ -201,7 +201,7 @@
 "history.state.unreadable" = "journal ilegible";
 "history.scan.several" = "%1$@ y %2$d más";
 "history.undo.title" = "¿Devolver los archivos de esta sesión?";
-"history.undo.body" = "%1$d archivos saldrían de la Papelera y volverían a donde estaban, %2$@ en total. Un archivo cuyo lugar original ya lo ocupa otra cosa se deja en paz en vez de sobrescribirse.";
+"history.undo.body" = "%1$d archivos saldrían del basurero y volverían a donde estaban, %2$@ en total. Un archivo cuyo lugar original ya lo ocupa otra cosa se deja en paz en vez de sobrescribirse.";
 "history.undo.confirm" = "Devolver";
 "sessions.prune.title" = "¿Borrar el registro de las sesiones que ya se devolvieron?";
 "sessions.prune.body" = "%1$d sesiones tienen todos sus archivos de vuelta, así que sus journals ya no ofrecen nada. Borrarlos libera %2$@. %3$d sesiones todavía tienen archivos que nunca se restauraron y se dejan en paz.";
@@ -224,15 +224,15 @@
 /* %d archivos bloqueados por algo en la ruta original. */
 "undo.blocked" = "%d se dejaron en paz porque su ruta original está ocupada por contenido distinto. Nunca se sobrescribe nada.";
 /* %d archivos que ya estaban de vuelta. */
-"undo.alreadyRestored" = "%d ya estaban de vuelta, byte por byte — el \"Devolver\" de Finder hace lo mismo.";
+"undo.alreadyRestored" = "%d ya estaban de vuelta, byte por byte — el \"Sacar del basurero\" de Finder hace lo mismo.";
 "undo.allRestored" = "Todo ya estaba de vuelta. Nada que hacer.";
-"undo.nothingToDo" = "Nada de esta sesión se puede devolver. La Papelera pudo haberse vaciado.";
+"undo.nothingToDo" = "Nada de esta sesión se puede devolver. El basurero pudo haberse vaciado.";
 "undo.noJournal" = "Esta sesión no tiene registro, así que no se puede devolver nada.";
-"undo.obstacle.movedFileMissing" = "ya no está en la Papelera — se vació, o algo más lo movió";
+"undo.obstacle.movedFileMissing" = "ya no está en el basurero — se vació, o algo más lo movió";
 "undo.obstacle.originalPathOccupied" = "otro archivo ocupa el lugar al que volvería, y no se sobrescribió";
 "undo.obstacle.parentMissing" = "la carpeta de donde salió ya no existe";
 "undo.obstacle.originalPathIsDirectory" = "ahora hay una carpeta donde estaba este archivo";
-"undo.obstacle.contentChanged" = "lo que está en la Papelera ya no es lo que se puso ahí";
+"undo.obstacle.contentChanged" = "lo que está en el basurero ya no es lo que se puso ahí";
 "undo.obstacle.unverifiable" = "no se pudo leer su contenido, así que no se pudo comprobar nada";
 "button.close" = "Cerrar";
 
@@ -349,7 +349,7 @@
 "similar.ambiguousKey.title" = "Una decisión se guardó con una clave que no se puede volver a leer";
 "similar.ambiguousKey.body" = "%1$d de los pares que decidiste traen \"||\" en una ruta, que es el separador de este formato. El CLI leería esas claves como otro par, así que revísalos antes de correr un movimiento: %2$@";
 "similar.saved" = "Decisiones guardadas";
-"similar.apply.headline" = "%1$d archivos de %2$d pares irían a la Papelera";
+"similar.apply.headline" = "%1$d archivos de %2$d pares irían al basurero";
 "similar.apply.verifyNote" = "Cada par se vuelve a puntuar en el momento de moverlo. Uno que ya no se parezca se salta.";
 "similar.apply.excluded" = "%d archivos quedan fuera: otra decisión los conserva.";
 "similar.apply.nothing" = "Nada que mover.";
@@ -359,7 +359,7 @@
 "similar.apply.refused.unreadable" = "no se pudo leer %@";
 "similar.apply.refused.missing" = "ya no está";
 "similar.review.apply" = "Simular y aplicar…";
-"folders.apply.headline" = "%1$d carpetas irían a la Papelera";
+"folders.apply.headline" = "%1$d carpetas irían al basurero";
 "folders.apply.verifyNote" = "Cada carpeta se revisa al moverla: una que tenga un archivo que la conservada no tiene se salta.";
 "folders.apply.excluded" = "%d carpetas quedan fuera: otra decisión las conserva, o conserva algo adentro.";
 "folders.apply.collapsed" = "%d ya están dentro de una carpeta de esta lista.";
@@ -391,18 +391,18 @@
 "similar.filter.count" = "%1$d de %2$d pares mostrados";
 "similar.confirmShown" = "Aceptar los %d mostrados";
 "similar.confirmShown.title" = "¿Aceptar la sugerencia de %d pares?";
-"similar.confirmShown.body" = "Al aplicar se moverían %1$d archivos a la Papelera: %2$@. Ahora no se mueve nada, y los pares fuera del filtro siguen sin decidir.";
+"similar.confirmShown.body" = "Al aplicar se moverían %1$d archivos al basurero: %2$@. Ahora no se mueve nada, y los pares fuera del filtro siguen sin decidir.";
 "similar.confirmShown.contradictions" = "\n\nOjo: %d archivos los conservaría un par y los descartaría otro. Esos quedan fuera del aplicar.";
 "button.accept" = "Aceptar";
 "apply.button.stop" = "Detener";
 "apply.stopped" = "Detenido tras %1$d archivos - %2$@";
-"apply.stopped.note" = "El resto no se tocó. Lo que sí se movió está en la Papelera y esta ventana lo puede devolver.";
+"apply.stopped.note" = "El resto no se tocó. Lo que sí se movió está en el basurero y esta ventana lo puede devolver.";
 "apply.progress.verifying" = "Verificando %1$d de %2$d: %3$@";
 "apply.progress.verifying.files" = "Verificando %1$d de %2$d: %3$@ — %4$d archivos revisados";
 "apply.progress.moving" = "Moviendo %1$d de %2$d: %3$@";
 "apply.failure.missing" = "%@ ya no está, así que no se movió nada";
 "apply.failure.contentChanged" = "%@ cambió desde el escaneo, así que se dejó en paz";
-"apply.failure.trashUnavailable" = "la Papelera rechazó este archivo y la cuarentena tampoco pudo recibirlo: %@";
+"apply.failure.trashUnavailable" = "el basurero rechazó este archivo y la cuarentena tampoco pudo recibirlo: %@";
 "apply.failure.quarantineFailed" = "la cuarentena no pudo recibir este archivo: %@";
 "apply.failure.noFreeName" = "todos los nombres de la carpeta de cuarentena estaban tomados, así que el archivo se quedó donde está";
 "apply.failure.cancelled" = "se detuvo antes de revisar este archivo, así que se quedó donde está";

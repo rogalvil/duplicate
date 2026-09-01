@@ -6,8 +6,8 @@
 
 "CFBundleDisplayName" = "Duplicados";
 
-"NSDesktopFolderUsageDescription" = "Duplicados lee tu Escritorio para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
-"NSDocumentsFolderUsageDescription" = "Duplicados lee tu carpeta Documentos para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
-"NSDownloadsFolderUsageDescription" = "Duplicados lee tu carpeta Descargas para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
-"NSRemovableVolumesUsageDescription" = "Duplicados lee discos externos para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
-"NSNetworkVolumesUsageDescription" = "Duplicados lee volúmenes de red para encontrar archivos duplicados. Nada se manda a la Papelera hasta que lo apruebes.";
+"NSDesktopFolderUsageDescription" = "Duplicados lee tu Escritorio para encontrar archivos duplicados. Nada se manda al basurero hasta que lo apruebes.";
+"NSDocumentsFolderUsageDescription" = "Duplicados lee tu carpeta Documentos para encontrar archivos duplicados. Nada se manda al basurero hasta que lo apruebes.";
+"NSDownloadsFolderUsageDescription" = "Duplicados lee tu carpeta Descargas para encontrar archivos duplicados. Nada se manda al basurero hasta que lo apruebes.";
+"NSRemovableVolumesUsageDescription" = "Duplicados lee discos externos para encontrar archivos duplicados. Nada se manda al basurero hasta que lo apruebes.";
+"NSNetworkVolumesUsageDescription" = "Duplicados lee volúmenes de red para encontrar archivos duplicados. Nada se manda al basurero hasta que lo apruebes.";
