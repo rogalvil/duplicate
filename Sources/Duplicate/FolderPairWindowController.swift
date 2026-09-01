@@ -324,7 +324,10 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
             adviceLabel.textColor = .secondaryLabelColor
         } else {
             adviceLabel.stringValue = String(
-                format: Strings.string("folders.warnLoss"), name, losing.count)
+                // **The count goes first.** Foundation chooses a `.stringsdict` variant from the argument
+                // at the plural variable's own position, so a leading `%1$@` made it read the folder name
+                // as the number and always pick the plural. Measured: "1 archivos" with the name mangled.
+                format: Strings.string("folders.warnLoss"), losing.count, name)
             adviceLabel.textColor = .systemOrange
         }
 

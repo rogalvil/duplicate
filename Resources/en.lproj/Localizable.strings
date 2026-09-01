@@ -163,13 +163,11 @@
 /* Apply and undo */
 "apply.window.title" = "Apply";
 /* %1$d files, %2$@ total size. */
-"apply.headline" = "%1$d files would be moved to the Trash, freeing %2$@";
 "apply.detail" = "Nothing has moved yet. Every file is re-hashed immediately before it is moved, and any file that changed since the scan is left alone. Finder's Put Back works on everything moved this way, and so does Sessions > Undo the last session.";
 "apply.button.apply" = "Move to Trash";
 "apply.button.undo" = "Undo This Session";
 "apply.running" = "Moving files...";
 /* %1$d files moved, %2$@ freed. */
-"apply.done.headline" = "Moved %1$d files, freeing %2$@";
 "apply.done.clean" = "Every file moved. Sessions > Undo the last session puts them back.";
 /* %d files that went to quarantine instead. */
 "apply.done.quarantined" = "%d could not go to the Trash and were moved to the quarantine folder instead.";
@@ -221,11 +219,9 @@
 "undo.done.headline" = "Put back %1$d files, %2$@";
 "undo.clean" = "Everything this session moved is back where it was.";
 /* %d files that could not be restored. */
-"undo.failed" = "%d could not be put back.";
 /* %d files blocked by something at the original path. */
 "undo.blocked" = "%d were left alone because their original path is occupied by different content. Nothing is ever overwritten.";
 /* %d files already back. */
-"undo.alreadyRestored" = "%d were already back, byte for byte -- Finder's Put Back does the same thing.";
 "undo.allRestored" = "Everything was already back. Nothing to do.";
 "undo.nothingToDo" = "Nothing in this session can be put back. The Trash may have been emptied.";
 "undo.noJournal" = "This session has no record, so nothing can be put back.";
@@ -360,7 +356,6 @@
 "similar.apply.refused.unreadable" = "%@ could not be read";
 "similar.apply.refused.missing" = "already gone";
 "similar.review.apply" = "Simulate and apply...";
-"folders.apply.headline" = "%1$d folders would go to the Trash";
 "folders.apply.verifyNote" = "Each folder is checked when it moves: one holding a file the kept folder does not have is skipped.";
 "folders.apply.excluded" = "%d folders are left out: another decision keeps them, or keeps something inside them.";
 "folders.apply.collapsed" = "%d are already inside a folder on this list.";
@@ -376,7 +371,6 @@
 "folders.decision.skip" = "Skip";
 "folders.column.decision" = "Decision";
 "folders.tally" = "%1$d decided - %2$d skipped - %3$d not looked at";
-"folders.warnLoss" = "Moving %1$@ would lose %2$d files it has and the other does not.";
 "folders.warnNoLoss" = "Everything in %@ is in the other folder too.";
 "folders.review.apply" = "Simulate and apply...";
 "folders.meta.side" = "%1$@: %2$d files, %3$@";
