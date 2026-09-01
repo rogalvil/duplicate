@@ -138,7 +138,11 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         // AutoLayout starts breaking constraints and the detail pane vanishes entirely -- seen in a real
         // screenshot: a squashed window with an empty right half and no footer. `minSize` makes the window
         // stop instead.
-        window.minSize = NSSize(width: 780, height: 420)
+        // **The declared minimum has to be one the layout can actually reach.** This said 780 while the
+        // constraints demanded 790, so the last ten points were a number nobody could drag to -- the same
+        // shape of defect as the similar viewer, which claimed 720 and stopped at 1000. The modes now assert
+        // that every window fits inside the minimum it advertises.
+        window.minSize = NSSize(width: 790, height: 420)
         super.init(window: window)
 
         window.delegate = self
