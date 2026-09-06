@@ -126,9 +126,34 @@ public struct ExclusionSet: Sendable {
     public static func forScan(
         of root: String,
         resolver: some TrashRootResolving,
-        quarantineRoots: [String] = []
+        quarantineRoots: [String] = [],
+        home: String = NSHomeDirectory()
     ) -> ExclusionSet {
-        resolving(resolver.trashRoots(forItemAt: root) + quarantineRoots)
+        var paths = resolver.trashRoots(forItemAt: root) + quarantineRoots
+        if let library = libraryToExclude(scanning: root, home: home) { paths.append(library) }
+        return resolving(paths)
+    }
+
+    /// `~/Library`, unless the scan root is inside it.
+    ///
+    /// **The README and CLAUDE.md both said this happened and nothing did it.** Measured by scanning a real
+    /// home directory: 1.3 million files and 91.3 GB, most of it browser cache, and five TCC prompts the app
+    /// declares no reason for -- iCloud Drive, Google Drive and other apps' data all live under here. The
+    /// duplicates in there are overwhelmingly caches where removing one breaks an app, which is the argument
+    /// the documentation already made.
+    ///
+    /// **Unless the root is inside it**, because then somebody pointed at it deliberately and excluding it
+    /// would be a scan that scans nothing. Equality counts: choosing `~/Library` itself is as deliberate as
+    /// choosing a folder within it.
+    ///
+    /// Returned as a path rather than pruned later, so it goes through the same identity resolution as the
+    /// Trash -- a `~/Library` reached through a firmlink or a symlink is the same directory and gets pruned
+    /// under any name that reaches it.
+    public static func libraryToExclude(scanning root: String, home: String) -> String? {
+        let library = home + "/Library"
+        if PathOrder.equal(root, library) { return nil }
+        if PathOrder.componentCount(of: root, under: library) != nil { return nil }
+        return library
     }
 
     /// Whether a directory with this identity is excluded. An unknown identity is not excluded.

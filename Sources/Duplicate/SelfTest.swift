@@ -986,6 +986,56 @@ enum SelfTest {
             "the excluded copies still formed a duplicate group"
         )
 
+        // Half one and a half: `~/Library` is pruned when it is *inside* the scan, and kept when it *is*
+        // the scan.
+        //
+        // The README and CLAUDE.md both said this happened and nothing did it. Measured by scanning a real
+        // home directory: 1,332,341 files and 91.3 GB, most of it browser cache, plus five TCC prompts the
+        // app declares no reason for -- iCloud Drive, Google Drive and other apps' data all live under here.
+        //
+        // A fake home rather than the real one, so this reads nothing of the user's.
+        //
+        // Teeth: return `nil` unconditionally from `libraryToExclude` and the first assertion keeps
+        // `Library/Caches/junk.txt`; return the path unconditionally and the second loses it.
+        let fakeHome = scratch + "/home"
+        try manager.createDirectory(
+            atPath: fakeHome + "/Library/Caches", withIntermediateDirectories: true)
+        try manager.createDirectory(
+            atPath: fakeHome + "/Pictures", withIntermediateDirectories: true)
+        try payload.write(to: URL(filePath: fakeHome + "/Pictures/photo.bin"))
+        try payload.write(to: URL(filePath: fakeHome + "/Library/Caches/junk.txt"))
+
+        let fromHome = try FileManagerWalker().walk(
+            root: fakeHome,
+            policy: ScanPolicy(),
+            exclusions: ExclusionSet.forScan(
+                of: fakeHome, resolver: FixedTrashRootResolver([]), home: fakeHome)
+        )
+        let fromHomeNames = fromHome.entries.map { $0.path.dropFirst(fakeHome.count + 1) }.sorted()
+        try expect(
+            fromHomeNames == ["Pictures/photo.bin"],
+            "scanning a home directory walked into Library: \(fromHomeNames)"
+        )
+
+        // And choosing it deliberately still scans it: excluding the root somebody picked would be a scan
+        // that scans nothing.
+        let fromLibrary = try FileManagerWalker().walk(
+            root: fakeHome + "/Library",
+            policy: ScanPolicy(),
+            exclusions: ExclusionSet.forScan(
+                of: fakeHome + "/Library", resolver: FixedTrashRootResolver([]), home: fakeHome)
+        )
+        try expect(
+            fromLibrary.entries.count == 1,
+            "scanning Library itself found \(fromLibrary.entries.count) files, wanted 1"
+        )
+        // A folder *inside* it counts as deliberate too.
+        try expect(
+            ExclusionSet.libraryToExclude(
+                scanning: fakeHome + "/Library/Caches", home: fakeHome) == nil,
+            "a root inside Library still excluded Library"
+        )
+
         // Half two: the real resolver, on this machine. Read-only.
         let resolver = SystemTrashRootResolver()
         let probeRoot = value(for: "--dir", in: arguments) ?? NSHomeDirectory()
@@ -1007,6 +1057,12 @@ enum SelfTest {
         try expect(
             live.resolvedPaths.contains { $0.hasSuffix("/.Trash") },
             "~/.Trash did not resolve into the exclusion set: \(live.resolvedPaths)"
+        )
+        // And the real `~/Library`, which exists on every Mac. Asserted on the resolved set: its identity
+        // came back, so the walk would prune it under any name that reaches it.
+        try expect(
+            live.resolvedPaths.contains { $0.hasSuffix("/Library") },
+            "~/Library did not resolve into the exclusion set: \(live.resolvedPaths)"
         )
         print(
             "  stand-in trash pruned; live resolver covers \(live.identities.count) "
