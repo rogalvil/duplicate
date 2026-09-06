@@ -283,6 +283,16 @@ Lo que ningún arnés alcanza —que un panel del sistema aparezca, que un texto
 tiene la app de verdad**— está en [`docs/PASADA-A-MANO.md`](docs/PASADA-A-MANO.md), con un árbol de prueba de
 respuestas medidas y el orden en que conviene mirarlo.
 
+```bash
+python3 scripts/make-demo-tree.py ~/demo-duplicate                  # el árbol chico, 7 grupos exactos
+python3 scripts/make-demo-tree.py ~/demo-grande --carpeta-grande    # 4,000 archivos, para la barra con etapa
+```
+
+El árbol trae fixtures que existen para forzar casos que no salen solos: un clip de medio segundo, para que el
+encabezado tenga que decir con cuántos cuadros juzgó; y un nombre con `||`, que es el separador de la clave de
+decisiones y no aparece en ninguna ruta real. El grande va aparte porque 4,000 archivos compartidos serían
+4,000 grupos exactos.
+
 ## Qué hace, capacidad por capacidad
 
 [`docs/CAPACIDADES.md`](docs/CAPACIDADES.md) es el inventario detallado de lo que la app hace hoy: los cuatro
