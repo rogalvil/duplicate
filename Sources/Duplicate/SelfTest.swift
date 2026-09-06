@@ -327,10 +327,31 @@ enum SelfTest {
             "the plural tables disagree: "
                 + "\(Set(basePlurals.keys).symmetricDifference(spanishPlurals.keys).sorted())"
         )
-        for (key, forms) in spanishPlurals {
+        for (key, forms) in spanishPlurals.sorted(by: { $0.key < $1.key }) {
             try expect(
                 forms.one != forms.other,
                 "\(key): the singular and the plural are the same string"
+            )
+
+            // **And Foundation has to actually pick the singular for one.**
+            //
+            // Comparing the table's two entries cannot see the failure that shipped: Foundation chooses a
+            // variant from the argument at the plural variable's own position, so `folders.warnLoss` with a
+            // leading `%1$@` read the folder name as the count and always rendered the plural -- "1 archivos"
+            // with a table that had a perfectly good singular in it. Only formatting shows that.
+            //
+            // Every pluralised key here takes the count first and at most one string after it, which is what
+            // makes one call shape enough.
+            //
+            // Teeth: swap the two arguments at the `folders.warnLoss` call site back and this reads the
+            // plural for a count of one.
+            let rendered = String(format: Strings.string(key), 1, "X" as NSString)
+            let expected = forms.format
+                .replacingOccurrences(of: "%#@n@", with: forms.one)
+                .replacingOccurrences(of: "%2$@", with: "X")
+            try expect(
+                rendered == expected,
+                "\(key) at one renders \"\(rendered)\", wanted \"\(expected)\""
             )
         }
         if let strings = Strings.table(localization: "es") {
@@ -340,6 +361,28 @@ enum SelfTest {
                 "\(duplicated.joined(separator: ", ")) are in both the plural table and .strings"
             )
         }
+        // **The prune sheet, through the call the alert makes.**
+        //
+        // The assertions above read the table; this reads the sentence the window would show, which is the
+        // only place the argument order is decided. One session prunable and one kept has to say "1 sesión"
+        // twice, and none kept has to say nothing about the ones left alone rather than "0 sesiones".
+        //
+        // Teeth: swap `prunable` and the byte string in `pruneBody` and this renders the plural for one.
+        let oneAndOne = AppDelegate.pruneBody(prunable: 1, bytes: 2048, kept: 1)
+        try expect(
+            oneAndOne.contains("1 sesión tiene") && oneAndOne.contains("1 sesión todavía tiene"),
+            "the prune sheet at one and one reads \"\(oneAndOne)\""
+        )
+        let manyAndNone = AppDelegate.pruneBody(prunable: 3, bytes: 2048, kept: 0)
+        try expect(
+            manyAndNone.contains("3 sesiones tienen"),
+            "the prune sheet at three reads \"\(manyAndNone)\""
+        )
+        try expect(
+            !manyAndNone.contains("todavía"),
+            "the prune sheet talks about sessions left alone when there are none: \"\(manyAndNone)\""
+        )
+
         print("  Localizable.stringsdict: \(basePlurals.count) pluralised keys in both")
 
         try checkKeysUsedInCode(alsoDeclared: Set(basePlurals.keys))

@@ -203,10 +203,9 @@
 "history.undo.body" = "%1$d files would be moved out of the Trash and back where they were, %2$@ in all. A file whose original place is now taken by something else is left alone rather than overwritten.";
 "history.undo.confirm" = "Put Back";
 "sessions.prune.title" = "Delete the record of sessions already put back?";
-"sessions.prune.body" = "%1$d sessions have had every file put back, so their journals have nothing left to offer. Deleting them frees %2$@. %3$d sessions still hold files that were never restored and are left alone.";
 "sessions.prune.confirm" = "Delete";
 "sessions.prune.nothing.title" = "Nothing to clean up";
-"sessions.prune.nothing.body" = "No session has had all of its files put back. %1$d sessions still hold files that could be restored, and their journals are the only record of where those files went.";
+"sessions.prune.nothing.body" = "No session has had all of its files put back.";
 "sessions.prune.done.title" = "Cleaned up";
 "sessions.prune.done.body" = "%1$d session journals were deleted.";
 "undo.noSessions.title" = "Nothing has been applied yet";

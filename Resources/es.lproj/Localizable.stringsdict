@@ -66,6 +66,54 @@
 			<string>Mover %2$@ perdería %1$d archivos que tiene y la otra no.</string>
 		</dict>
 	</dict>
+	<key>sessions.prune.body.kept</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 sesión todavía tiene archivos que nunca se restauraron y se deja en paz.</string>
+			<key>other</key>
+			<string>%d sesiones todavía tienen archivos que nunca se restauraron y se dejan en paz.</string>
+		</dict>
+	</dict>
+	<key>sessions.prune.body.prunable</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 sesión tiene todos sus archivos de vuelta, así que su journal ya no ofrece nada. Borrarlo libera %2$@.</string>
+			<key>other</key>
+			<string>%1$d sesiones tienen todos sus archivos de vuelta, así que sus journals ya no ofrecen nada. Borrarlos libera %2$@.</string>
+		</dict>
+	</dict>
+	<key>sessions.prune.nothing.kept</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 sesión todavía tiene archivos que se podrían restaurar, y su journal es el único registro de dónde quedaron.</string>
+			<key>other</key>
+			<string>%d sesiones todavía tienen archivos que se podrían restaurar, y sus journals son el único registro de dónde quedaron.</string>
+		</dict>
+	</dict>
 	<key>undo.alreadyRestored</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

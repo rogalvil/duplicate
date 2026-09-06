@@ -191,6 +191,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     ///
     /// Confirmed with the counts on screen, because deleting a record silently is the same shape of mistake as
     /// deleting a file silently.
+    /// The prune sheet's body, as two sentences that each agree with their own count.
+    ///
+    /// **One string with three numbers in it could not be pluralised without four near-identical
+    /// paragraphs**, and it printed "1 sesiones todavía tienen" -- reported from real use. Split, each half
+    /// takes one count and a `.stringsdict` handles it.
+    ///
+    /// **And the second half is dropped when there is nothing to say.** With every session prunable the old
+    /// sentence still printed "0 sesiones todavía tienen archivos que nunca se restauraron", a clause about
+    /// an empty set.
+    ///
+    /// Separate from the alert so the harness can read it: the argument order matters more than it looks --
+    /// Foundation picks a plural variant from the argument at the variable's own position -- and an
+    /// assertion against the table alone never touches this call.
+    static func pruneBody(prunable: Int, bytes: Int64, kept: Int) -> String {
+        var parts = [
+            String(
+                format: Strings.string("sessions.prune.body.prunable"),
+                prunable, ByteSize.format(bytes))
+        ]
+        if kept > 0 {
+            parts.append(String(format: Strings.string("sessions.prune.body.kept"), kept))
+        }
+        return parts.joined(separator: " ")
+    }
+
     @objc func pruneUndoneSessions(_ sender: Any?) {
         let state = StateDirectory.current()
         let plan = JournalPruner.plan(in: state)
@@ -198,21 +223,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard !plan.isEmpty else {
             alert.alertStyle = .informational
             alert.messageText = Strings.string("sessions.prune.nothing.title")
-            alert.informativeText = String(
-                format: Strings.string("sessions.prune.nothing.body"),
-                plan.stillUndoable.count
-            )
+            // **Two sentences, each agreeing with its own count.** One string with three numbers in it
+            // could not be pluralised without four near-identical paragraphs, and it printed "1 sesiones
+            // todavía tienen" -- reported from real use.
+            alert.informativeText = [
+                Strings.string("sessions.prune.nothing.body"),
+                String(
+                    format: Strings.string("sessions.prune.nothing.kept"),
+                    plan.stillUndoable.count),
+            ].joined(separator: " ")
             alert.addButton(withTitle: Strings.string("button.close"))
             alert.runModal()
             return
         }
         alert.alertStyle = .warning
         alert.messageText = Strings.string("sessions.prune.title")
-        alert.informativeText = String(
-            format: Strings.string("sessions.prune.body"),
-            plan.prunable.count, ByteSize.format(plan.reclaimableBytes),
-            plan.stillUndoable.count
-        )
+        alert.informativeText = Self.pruneBody(
+            prunable: plan.prunable.count, bytes: plan.reclaimableBytes,
+            kept: plan.stillUndoable.count)
         alert.addButton(withTitle: Strings.string("sessions.prune.confirm"))
         alert.addButton(withTitle: Strings.string("button.cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
