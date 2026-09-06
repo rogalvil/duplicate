@@ -2,6 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>apply.done.failed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo se dejó en paz</string>
+			<key>other</key>
+			<string>%d archivos se dejaron en paz</string>
+		</dict>
+	</dict>
 	<key>apply.done.headline</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -32,6 +48,22 @@
 			<string>Se movería 1 archivo</string>
 			<key>other</key>
 			<string>Se moverían %1$d archivos</string>
+		</dict>
+	</dict>
+	<key>folders.apply.collapsed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 ya está dentro de una carpeta de esta lista</string>
+			<key>other</key>
+			<string>%d ya están dentro de una carpeta de esta lista</string>
 		</dict>
 	</dict>
 	<key>folders.apply.headline</key>
@@ -112,6 +144,22 @@
 			<string>1 sesión todavía tiene archivos que se podrían restaurar, y su journal es el único registro de dónde quedaron.</string>
 			<key>other</key>
 			<string>%d sesiones todavía tienen archivos que se podrían restaurar, y sus journals son el único registro de dónde quedaron.</string>
+		</dict>
+	</dict>
+	<key>similar.ambiguousKey.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ El CLI leería esas claves como otro par, así que revísalos antes de correr un movimiento: %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 de los pares que decidiste trae "||" en una ruta, que es el separador de este formato.</string>
+			<key>other</key>
+			<string>%1$d de los pares que decidiste traen "||" en una ruta, que es el separador de este formato.</string>
 		</dict>
 	</dict>
 	<key>undo.alreadyRestored</key>
