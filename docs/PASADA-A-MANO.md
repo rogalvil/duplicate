@@ -29,9 +29,21 @@ python3 scripts/make-demo-tree.py ~/demo-duplicate
 
 | detector | resultado |
 |---|---|
-| exactos | **7 grupos** sobre 19 archivos |
-| parecidos | **1 par de imagen y 1 par de video**, 4 archivos hasheados |
+| exactos | **7 grupos** sobre 23 archivos |
+| parecidos | **2 pares de imagen y 2 de video**, 8 archivos hasheados |
 | carpetas | **2 pares** sobre 7 directorios: `copia-a ↔ copia-b` al 90.9% y `notas ↔ notas` al 100% |
+
+**Cuatro de esos archivos existen para forzar casos que no salen solos**, y ninguno cambia el 7: son parecidos
+entre sí y ninguno es byte-idéntico a otro.
+
+| fixture | para qué |
+|---|---|
+| `clip-corto.mp4` y su recodificado, de 0.5 s | el encabezado de pocos cuadros: a medio segundo sólo **4 de 8** marcas caen dentro |
+| `foto\|\|rara.jpg` y su reescalada | el aviso de clave ambigua: `SimilarPairKey` guarda `a\|\|b` sin escapes |
+
+La primera versión del fixture de `||` guardaba la **misma** imagen del paisaje a la misma calidad, salía
+byte-idéntica, y agregaba dos grupos exactos: el detector pasó de 7 a 9 y lo destapó. Por eso es un dibujo
+distinto.
 
 Los 7 grupos exactos sorprenden si esperabas 2: los dos pares que el árbol declara, **más los cinco archivos que
 `copia-a` y `copia-b` comparten**. Es correcto, y es un buen primer recordatorio de que el detector exacto no
@@ -191,7 +203,7 @@ lo distingue es leer el pie después de **cada** acción.
 
 ## 4. El visor de parecidos: el panel angosto (5 min)
 
-Abre el escaneo perceptual. Verás el par de imagen y el de video.
+Abre el escaneo perceptual. Verás **cuatro** pares: dos de imagen y dos de video.
 
 1. **Los dos lados deben mostrar fotos distintas.** *Está mal si* se ven idénticas: sería la clave de miniatura
    compartida, y haría que todos los pares parecieran iguales.
@@ -199,10 +211,18 @@ Abre el escaneo perceptual. Verás el par de imagen y el de video.
    `tamaño · fecha · resolución · codec · duración`; debe truncarse por el **medio**, no empujar la ventana.
    Esto es lo que no se pudo verificar desde código.
 3. **El encabezado del par de video** dice qué fracción de cuadros coincide, **no** "difieren N de 64 bits" —
-   ese número no existe para un video. Y si el clip fuera corto diría "juzgado con 4 de 8 cuadros".
-4. **⌘Y con un par seleccionado** debe abrir Quick Look con **los dos** lados, y las flechas del panel deben
+   ese número no existe para un video.
+4. **Y el par de `clip-corto.mp4` lo dice completo.** Sus dos clips duran medio segundo, así que con
+   `interval = max(dur/9, 0.1)` las marcas van de 0.1 a 0.8 y sólo cuatro caen dentro: el encabezado tiene que
+   terminar en **"juzgado con 4 de 8 cuadros"**. El par largo no lo dice porque sus ocho marcas sí caben.
+5. **El aviso de clave ambigua.** Decide el par de `foto||rara.jpg` —cualquier decisión sirve— y **cierra la
+   ventana**. Debe salir una hoja diciendo que una decisión se guardó con una clave que no se puede volver a
+   leer, porque `SimilarPairKey` guarda `a||b` sin escapes. *Está mal si* no aparece: la clave se escribiría de
+   todos modos y el CLI la leería como otro par. Un par **sin decidir** no escribe clave, así que no avisa —
+   eso es correcto.
+6. **⌘Y con un par seleccionado** debe abrir Quick Look con **los dos** lados, y las flechas del panel deben
    caminar entre ellos. Esa es la comparación a tamaño real, y la razón por la que esta app existe en vez del CLI.
-5. **⌘R** debe revelar **los dos** archivos en Finder a la vez.
+7. **⌘R** debe revelar **los dos** archivos en Finder a la vez.
 
 ### Lo que salió, medido — cuatro de cinco
 
@@ -210,8 +230,11 @@ Abre el escaneo perceptual. Verás el par de imagen y el de video.
 |---|---|---|
 | 1 | miniaturas distintas por lado | las dos del par de video muestran **cuadros distintos**: una tiene un `8` en el contador y la otra un `4` |
 | 3 | encabezado por fracción de cuadros | "100.00% de los cuadros muestreados coinciden", no una distancia de bits |
-| 4 | ⌘Y con los dos lados | Vista rápida abrió con flechas activas y caminó de `clip-original.mp4` a `clip-recodificado.mp4` |
-| 5 | ⌘R con los dos archivos | Finder abrió con "2 de 4 seleccionados" |
+| 6 | ⌘Y con los dos lados | Vista rápida abrió con flechas activas y caminó de `clip-original.mp4` a `clip-recodificado.mp4` |
+| 7 | ⌘R con los dos archivos | Finder abrió con "2 de 4 seleccionados" |
+
+Los puntos **4 y 5** —el encabezado de pocos cuadros y el aviso de clave ambigua— son nuevos: sus fixtures no
+existían cuando se corrió esta pasada, y por eso están sin medir.
 
 Los cuadros distintos del punto 1 son evidencia más fuerte que la que pedía el guion: si la clave de miniatura
 estuviera compartida, los dos lados dibujarían el mismo bitmap.
@@ -385,10 +408,54 @@ Los dos resultados quedan escritos por separado de todos modos, que es la regla.
 
 ---
 
+## 9. Un fallo a propósito (3 min)
+
+Los pasos anteriores nunca fallan: todos los archivos del árbol existen y están intactos. Esta es la única
+forma de leer las frases de rehúsa, que son lo que alguien tiene que entender **después** de borrar algo.
+
+1. Escanea `~/demo-duplicate` con **Archivos idénticos**.
+2. Decide el **Grupo 1** y presiona **Confirmar y siguiente**.
+3. **Sin cerrar la ventana**, en la terminal:
+
+```bash
+echo "cambiado" >> ~/demo-duplicate/exactos/foto\ 2.raw
+```
+
+4. Presiona **Simular y aplicar...** y luego **Mover al basurero**.
+
+El archivo se re-hashea justo antes de moverse, así que la app debe **rehusarlo** y dejarlo donde está.
+
+**Qué mirar**: que la rehúsa se lea como una frase — algo como *"lo que está ahí ya no es lo que el escaneo
+vio"*.
+
+❌ **Está mal si** sale `contentChanged(path: "…")`. Eso es un caso de enum crudo, y ya pasó una vez.
+
+## 10. La barra con etapa (3 min)
+
+Necesita su propio árbol: con dos archivos el apply termina antes del primer tick del timer de 10 Hz.
+
+```bash
+python3 scripts/make-demo-tree.py ~/demo-grande --carpeta-grande
+```
+
+1. Escanea `~/demo-grande` con **Carpetas parecidas**.
+2. Abre el escaneo, selecciona el par `original ↔ respaldo` y presiona **Conservar la primera**.
+3. **Simular y aplicar...** y luego el botón azul.
+
+**Qué mirar**, mientras corre:
+
+- la línea dice **verificando** y después **moviendo**, con el archivo nombrado
+- el **botón de detener sigue vivo**
+- cerrar la hoja a media corrida **detiene sin cerrar**
+
+Son 4,000 archivos por lado, así que verificar toma alrededor de un segundo — diez ticks de la barra.
+
+4. Deshaz la sesión desde **Sesiones › Historial de sesiones…**
+
 ## Al terminar
 
 ```bash
-rm -rf ~/demo-duplicate
+rm -rf ~/demo-duplicate ~/demo-grande
 ```
 
 Y si algún paso falló, lo útil no es "no funciona" sino **qué esperabas y qué viste** — es lo que convierte una
