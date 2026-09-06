@@ -105,15 +105,39 @@ de un escaneo siempre sale del panel del sistema o de recientes, así que nunca 
 que la app llegue sin que alguien la haya señalado — que es exactamente por lo que nunca necesita pedir Acceso
 Total al Disco.
 
-### Lo único que queda expuesto, y sigue sin probarse
+### Lo único que quedaba expuesto, corrido por fin
 
 Elegir una carpeta **que contenga** una protegida: escanear `~` hace que la app descienda a `~/Desktop`,
 `~/Documents` y `~/Downloads` **sin** que nadie las haya señalado. Ahí TCC sí puede negar, y ahí es donde el
 `errorHandler` del walker importa — si se comporta mal, el escaneo devuelve menos archivos y reporta "no
 encontré duplicados", indistinguible del éxito.
 
-**Lo que hay que ver**: que al terminar aparezca el banner contando los directorios que no pudo leer. Es un
-escaneo largo (cientos de GB), así que va suelto cuando la máquina esté libre.
+**Salió la rama buena.** De las cuatro de la tabla de arriba, la última:
+
+> **Algunas carpetas no se pudieron leer**
+>
+> Se saltaron **142 carpetas** porque macOS no dio acceso. Nada de lo que hay dentro se escaneó, así que este
+> resultado está incompleto. Un permiso otorgado ahora no aplica a una app que ya está corriendo: hay que
+> relanzarla.
+
+El conteo llegó, el texto dice que el resultado está incompleto, y advierte lo del proceso corriendo. La cadena
+—walker cuenta, conteo llega, banner lo dice— quedó verificada de punta a punta.
+
+Los números, para que el siguiente sepa qué esperar:
+
+```
+1,332,341 archivos enumerados
+1,266,472 de 1,277,648 hasheados
+91.3 GB leídos · 1,050 s de hasheo · 142 carpetas saltadas
+```
+
+**Y encontró dos bugs.** `~/Library` no se excluye pese a que dos documentos lo afirman (#127), que es por lo
+que se leyeron 91 GB de cachés de navegador y por lo que salieron cinco diálogos de TCC sin explicación. Y el
+panel dice "Terminado" mientras todavía persiste la caché y escribe el documento (#128).
+
+**Ocho diálogos de permiso, no tres.** Sólo Escritorio, Documentos y Descargas salen con la explicación de la
+app; iCloud Drive, Google Drive, datos de otras apps, fototeca y biblioteca multimedia salen sin una palabra,
+porque `Info.plist` no declara su clave.
 
 ## 2. Que la biblioteca liste los tres tipos (1 min)
 
