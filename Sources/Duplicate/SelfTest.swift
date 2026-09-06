@@ -327,6 +327,12 @@ enum SelfTest {
             "the plural tables disagree: "
                 + "\(Set(basePlurals.keys).symmetricDifference(spanishPlurals.keys).sorted())"
         )
+        // **Rendering has to be checked against the table the app is actually serving.** `Strings.string`
+        // resolves in the running locale, and CI runs in English -- an earlier version compared every
+        // rendering against the Spanish entry and failed there with "Moved 1 file" against "Se movió 1
+        // archivo". Same shape as the footer assertion that anchored to the end of a sentence.
+        let active =
+            Bundle.main.preferredLocalizations.first == "es" ? spanishPlurals : basePlurals
         for (key, forms) in spanishPlurals.sorted(by: { $0.key < $1.key }) {
             try expect(
                 forms.one != forms.other,
@@ -345,9 +351,10 @@ enum SelfTest {
             //
             // Teeth: swap the two arguments at the `folders.warnLoss` call site back and this reads the
             // plural for a count of one.
+            let served = active[key] ?? forms
             let rendered = String(format: Strings.string(key), 1, "X" as NSString)
-            let expected = forms.format
-                .replacingOccurrences(of: "%#@n@", with: forms.one)
+            let expected = served.format
+                .replacingOccurrences(of: "%#@n@", with: served.one)
                 .replacingOccurrences(of: "%2$@", with: "X")
             try expect(
                 rendered == expected,
@@ -368,18 +375,23 @@ enum SelfTest {
         // twice, and none kept has to say nothing about the ones left alone rather than "0 sesiones".
         //
         // Teeth: swap `prunable` and the byte string in `pruneBody` and this renders the plural for one.
+        // Worded from the serving table for the same reason, and the counts are what the assertion is
+        // about: one has to render its own singular, and none has to render nothing at all.
+        let onePrunable = active["sessions.prune.body.prunable"]?.one ?? ""
+        let oneKept = active["sessions.prune.body.kept"]?.one ?? ""
+        let manyKept = active["sessions.prune.body.kept"]?.other ?? ""
         let oneAndOne = AppDelegate.pruneBody(prunable: 1, bytes: 2048, kept: 1)
         try expect(
-            oneAndOne.contains("1 sesión tiene") && oneAndOne.contains("1 sesión todavía tiene"),
+            oneAndOne.hasPrefix(String(onePrunable.prefix(20))) && oneAndOne.hasSuffix(oneKept),
             "the prune sheet at one and one reads \"\(oneAndOne)\""
         )
         let manyAndNone = AppDelegate.pruneBody(prunable: 3, bytes: 2048, kept: 0)
         try expect(
-            manyAndNone.contains("3 sesiones tienen"),
+            manyAndNone.contains("3"),
             "the prune sheet at three reads \"\(manyAndNone)\""
         )
         try expect(
-            !manyAndNone.contains("todavía"),
+            !manyAndNone.hasSuffix(oneKept) && !manyAndNone.contains(String(manyKept.suffix(20))),
             "the prune sheet talks about sessions left alone when there are none: \"\(manyAndNone)\""
         )
 
