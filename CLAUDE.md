@@ -222,6 +222,15 @@ No re-descubrirlas:
 - **Una aserción que renderiza texto localizado tiene que leer la tabla que el proceso está sirviendo.** Dos
   veces CI atrapó lo mismo: una aserción que anclaba al final de la frase (el español termina con la cifra, el
   inglés no) y otra que comparaba todo contra la entrada en español mientras CI corre en inglés.
+- **Enumerar los casos restantes buscando una *forma* encuentra la forma, no el problema.** La lista de cadenas
+  con plural pendiente se armó buscando un número seguido de un sustantivo, y dejó fuera las tres que el uso
+  real destapó después: en ellas lo que discrepa es el **verbo**, y en dos el sustantivo ni siquiera está pegado
+  al número — "1 de los pares … **traen**", "1 **ya están** dentro". Segunda vez en el proyecto que una
+  enumeración por patrón omite justo lo que una corrida encuentra.
+- **Un fixture "parecido" puede salir byte-idéntico y cambiar el conteo exacto.** El par con `||` en el nombre
+  guardaba la misma imagen a la misma calidad, así que el detector exacto pasó de 7 a 9 grupos y rompió los
+  pasos que dependen de un escaneo chico. Un fixture nuevo se mide contra los tres detectores, no solo contra el
+  que se quería ejercitar.
 - **Un `defaults write` sobre `AppleLanguages` cambia la preferencia real del sistema del usuario.** Lo hice a
   mano "para simular inglés" y le cambié el idioma a su máquina. Es la misma trampa que ya está escrita para el
   arnés, cometida fuera del arnés: el locale de un proceso no se simula desde afuera, y para probar la otra
