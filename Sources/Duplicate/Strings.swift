@@ -24,20 +24,25 @@ enum Strings {
     /// **`NSLocalizedString` already consults `Localizable.stringsdict`**, so nothing at runtime needed
     /// changing to get plurals -- only the audit did, because it reads the `.strings` files directly and
     /// would otherwise call every pluralised key missing.
-    static func plurals(localization: String) -> [String: (one: String, other: String)]? {
+    static func plurals(
+        localization: String
+    )
+        -> [String: (format: String, one: String, other: String)]?
+    {
         guard
             let url = Bundle.main.url(
                 forResource: "Localizable", withExtension: "stringsdict",
                 subdirectory: nil, localization: localization),
             let root = NSDictionary(contentsOf: url) as? [String: [String: Any]]
         else { return nil }
-        var result: [String: (one: String, other: String)] = [:]
+        var result: [String: (format: String, one: String, other: String)] = [:]
         for (key, entry) in root {
             guard
+                let format = entry["NSStringLocalizedFormatKey"] as? String,
                 let variable = entry.values.compactMap({ $0 as? [String: Any] }).first,
                 let one = variable["one"] as? String, let other = variable["other"] as? String
             else { continue }
-            result[key] = (one, other)
+            result[key] = (format, one, other)
         }
         return result
     }
