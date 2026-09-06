@@ -150,7 +150,9 @@ public struct DuplicateFinder: Sendable {
 
         progress.setPhase(.grouping)
         let groups = GroupBuilder.groups(from: cached + hashed.digests)
-        progress.setPhase(.finished)
+        // **Not `.finished` here.** Finding is over; the scan is not. `ScanSession` still has to persist the
+        // cache and write the document, and on a large tree that is minutes. A caller driving this type
+        // directly ends at `.grouping`, which is the truth for what it does.
 
         return Outcome(
             scan: GroupBuilder.scan(root: root, instant: instant, groups: groups),

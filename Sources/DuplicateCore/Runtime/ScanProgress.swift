@@ -11,13 +11,21 @@ public enum ScanPhase: Int, Sendable, CaseIterable {
     case probing
     case hashing
     case grouping
+    /// Persisting the hash cache and writing the scan document.
+    ///
+    /// **The phase that did not exist, and the panel said "finished" through it.** Measured on a home
+    /// directory: 1.3 million files, and after the last group was built there were still 1.27 million cache
+    /// rows to append and a document to encode. Minutes with the word "Terminado" on screen and a Cancel
+    /// button past the last cancellation point -- the stalled-bar lesson from apply, in a phase that had no
+    /// bar, and worse because the label was not ambiguous but wrong.
+    case saving
     case finished
     case cancelled
 
     /// Whether this phase can report a meaningful total.
     public var isDeterminate: Bool {
         switch self {
-        case .idle, .indexing, .finished, .cancelled: false
+        case .idle, .indexing, .saving, .finished, .cancelled: false
         case .probing, .hashing, .grouping: true
         }
     }

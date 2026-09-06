@@ -108,15 +108,20 @@ public struct ScanSession: Sendable {
             configuration: configuration,
             progress: progress
         )
+        // **Both of these are the scan still working, and both used to run under "finished".**
+        progress.setPhase(.saving)
         // Persisted before the document is saved, and a failure here is swallowed on purpose: the cache is
         // derived data that `~/Library/Caches` may purge anyway, and losing it must not cost a finished
         // scan.
         if let cache { _ = try? await cache.persist() }
 
+        defer { progress.setPhase(.finished) }
         do {
             let path = try store.save(outcome.scan)
             return Result(outcome: outcome, savedPath: path, saveFailure: nil)
         } catch {
+            // Finished either way: the scan ran, and a save failure is reported rather than thrown so the
+            // caller can still review what it found.
             return Result(
                 outcome: outcome, savedPath: nil, saveFailure: String(describing: error))
         }

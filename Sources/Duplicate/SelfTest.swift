@@ -1099,7 +1099,10 @@ enum SelfTest {
             let progress = ProgressCounters()
             let outcome = try await finder.find(root: root, instant: instant, progress: progress)
             let snapshot = progress.snapshot()
-            try expect(snapshot.phase == .finished, "phase ended at \(snapshot.phase)")
+            // **`.grouping`, not `.finished`, and the difference is the point.** Finding is over here; the
+            // scan is not. Persisting the cache and writing the document belong to `ScanSession`, and they
+            // used to run with the panel reading "finished" -- minutes of it on a home directory.
+            try expect(snapshot.phase == .grouping, "phase ended at \(snapshot.phase)")
             for group in outcome.scan.groups {
                 try expect(
                     group.files.count > 1,
@@ -1169,15 +1172,30 @@ enum SelfTest {
         // Every width must produce the same bytes.
         var documents: Set<Data> = []
         var last: DuplicateFinder.Outcome?
+        let widthProgress = ProgressCounters()
         for width in [1, 2, 4, 8] {
             let outcome = try await finder.find(
                 root: scratch,
                 instant: instant,
-                configuration: .init(concurrency: width)
+                configuration: .init(concurrency: width),
+                progress: widthProgress
             )
             documents.insert(try JSONWriter.document(DuplicateScanCodec.encode(outcome.scan)))
             last = outcome
         }
+        // **Finding ends at `.grouping`, not `.finished`, and the difference is minutes on a real tree.**
+        //
+        // `DuplicateFinder` used to claim the scan was over as soon as the last group was built. After that
+        // `ScanSession` still persists the cache and writes the document -- measured on a home directory,
+        // 1.27 million cache rows and a document to encode, with the panel reading "Terminado" the whole
+        // time and a Cancel button past the last cancellation point.
+        //
+        // Teeth: put `progress.setPhase(.finished)` back after the group build and this reads finished.
+        try expect(
+            widthProgress.snapshot().phase == .grouping,
+            "finding ended at \(widthProgress.snapshot().phase), which claims the scan is over"
+        )
+
         try expect(
             documents.count == 1,
             "the document changed with the concurrency width (\(documents.count) variants)"
