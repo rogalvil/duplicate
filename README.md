@@ -100,7 +100,8 @@ Al escanear una carpeta protegida, macOS pide permiso una vez por carpeta (Escri
 Descargas, discos externos). **No pide, ni pedirá, Acceso Total al Disco**: no hay API para solicitarlo
 —solo un interruptor manual— los duplicados dentro de `~/Library` son casi siempre cachés donde quitar
 un "duplicado" rompe una app, y una app que pide Acceso Total al Disco para ordenar Descargas es
-indistinguible de malware para un usuario cuidadoso. `~/Library` se excluye por default.
+indistinguible de malware para un usuario cuidadoso. `~/Library` se excluye por default — salvo que la raíz que elijas esté dentro de ella, porque entonces
+la señalaste a propósito.
 
 ### Desinstalar
 

@@ -201,10 +201,16 @@ No re-descubrirlas:
   de TCC, y sólo tres —Escritorio, Documentos, Descargas— son los que `Info.plist` declara y salen con su
   explicación. Los otros cinco salen **sin una palabra**: iCloud Drive, Google Drive, datos de otras apps,
   fototeca y biblioteca multimedia. Los tres primeros viven bajo `~/Library`.
-- **Y la causa de fondo es que `~/Library` no se excluye, aunque este archivo y el README lo afirmen los dos.**
-  No hay una línea de código que lo haga: `ExclusionSet.forScan` resuelve la Papelera, la cuarentena y cuatro
-  nombres de raíz de volumen, y nada más. Por eso el escaneo leyó 91 GB de cachés de navegador y por eso
-  aparecieron esos cinco diálogos. Una capacidad afirmada en dos documentos y ausente del código.
+- **Y la causa de fondo era que `~/Library` no se excluía, aunque este archivo y el README lo afirmaran los
+  dos.** No había una línea de código que lo hiciera: `ExclusionSet.forScan` resolvía la Papelera, la cuarentena
+  y cuatro nombres de raíz de volumen, y nada más. Por eso el escaneo leyó 91 GB de cachés de navegador y por eso
+  aparecieron cinco de esos diálogos. Una capacidad afirmada en dos documentos y ausente del código, encontrada
+  por la única corrida que podía encontrarla.
+- **Ya se excluye, y con una excepción: cuando la raíz está dentro de `~/Library`.** Ahí alguien la señaló a
+  propósito, y excluirla sería un escaneo que no escanea nada. La igualdad cuenta —elegir `~/Library` misma es
+  tan deliberado como elegir algo adentro—. Va como ruta y no como poda posterior, para que pase por la misma
+  resolución a identidad que la Papelera: una `~/Library` alcanzada por firmlink o symlink es el mismo
+  directorio y se poda bajo cualquier nombre que llegue a ella.
 - **TCC atribuye el permiso al proceso responsable, no al binario.** Lanzada desde la terminal, la
   app hereda los permisos de la terminal; lanzada por Launch Services es su propio responsable.
   Consecuencia: **un selftest verde no dice nada sobre el estado de TCC de la app.** Reportar los dos
