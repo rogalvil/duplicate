@@ -191,9 +191,20 @@ No re-descubrirlas:
   no la terminal—, así que no está heredando permisos de nadie.
 - **En uso normal la superficie de TCC de esta app es casi inalcanzable, y es de diseño.** La raíz siempre sale
   del panel o de recientes, así que nunca hay una carpeta protegida a la que se llegue sin que alguien la haya
-  señalado. Lo único que queda expuesto es elegir una carpeta **que contenga** una protegida —escanear `~`, que
-  desciende a Escritorio y Documentos sin que nadie los señale—, y eso sigue sin probarse porque son cientos de
-  GB.
+  señalado. Lo único que queda expuesto es elegir una carpeta **que contenga** una protegida.
+- **Y eso se corrió por fin, sobre `~` completo: 1,332,341 archivos, 91.3 GB, 1,050 s de hasheo.** El resultado
+  es el bueno — **142 carpetas saltadas y el banner diciéndolo**, con su conteo y con la advertencia de que un
+  permiso otorgado ahora no aplica al proceso corriendo. El fallo de mayor consecuencia, "0 archivos y ningún
+  aviso", **no ocurrió**: el `errorHandler` cuenta, el conteo llega, y el texto dice que el resultado está
+  incompleto.
+- **Pero "casi inalcanzable" no aguantó la medición.** Escanear la carpeta de inicio disparó **ocho** diálogos
+  de TCC, y sólo tres —Escritorio, Documentos, Descargas— son los que `Info.plist` declara y salen con su
+  explicación. Los otros cinco salen **sin una palabra**: iCloud Drive, Google Drive, datos de otras apps,
+  fototeca y biblioteca multimedia. Los tres primeros viven bajo `~/Library`.
+- **Y la causa de fondo es que `~/Library` no se excluye, aunque este archivo y el README lo afirmen los dos.**
+  No hay una línea de código que lo haga: `ExclusionSet.forScan` resuelve la Papelera, la cuarentena y cuatro
+  nombres de raíz de volumen, y nada más. Por eso el escaneo leyó 91 GB de cachés de navegador y por eso
+  aparecieron esos cinco diálogos. Una capacidad afirmada en dos documentos y ausente del código.
 - **TCC atribuye el permiso al proceso responsable, no al binario.** Lanzada desde la terminal, la
   app hereda los permisos de la terminal; lanzada por Launch Services es su propio responsable.
   Consecuencia: **un selftest verde no dice nada sobre el estado de TCC de la app.** Reportar los dos
@@ -231,6 +242,16 @@ No re-descubrirlas:
   guardaba la misma imagen a la misma calidad, así que el detector exacto pasó de 7 a 9 grupos y rompió los
   pasos que dependen de un escaneo chico. Un fixture nuevo se mide contra los tres detectores, no solo contra el
   que se quería ejercitar.
+- **La fase `.finished` se marca antes de que el escaneo termine de trabajar.** `DuplicateFinder` la pone tras
+  agrupar, y después `ScanSession` todavía persiste la caché y escribe el documento — sobre 1.3 millones de
+  archivos, minutos con la palabra "Terminado" en pantalla y un botón de Cancelar que ya no cancela nada. Es la
+  lección de la barra quieta del apply, en una fase que ni siquiera tiene barra, y peor: la etiqueta no es
+  ambigua, **afirma** que acabó.
+- **Un diálogo de permisos que no dice el nombre de la app puede no ser de esta app.** Salió uno atribuido a
+  "2.1.263" a media corrida y parecía que el bundle se identificaba con un número de versión; el `Info.plist`
+  armado declara `CFBundleName` y `CFBundleDisplayName` como `Duplicate`, y el diálogo del Escritorio que sí era
+  nuestro salió con su nombre y su explicación. Era otra app. Antes de escribir el issue, leer el plist del
+  bundle.
 - **Un `defaults write` sobre `AppleLanguages` cambia la preferencia real del sistema del usuario.** Lo hice a
   mano "para simular inglés" y le cambié el idioma a su máquina. Es la misma trampa que ya está escrita para el
   arnés, cometida fuera del arnés: el locale de un proceso no se simula desde afuera, y para probar la otra
