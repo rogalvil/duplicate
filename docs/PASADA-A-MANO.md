@@ -224,17 +224,26 @@ Abre el escaneo perceptual. Verás **cuatro** pares: dos de imagen y dos de vide
    caminar entre ellos. Esa es la comparación a tamaño real, y la razón por la que esta app existe en vez del CLI.
 7. **⌘R** debe revelar **los dos** archivos en Finder a la vez.
 
-### Lo que salió, medido — cuatro de cinco
+### Lo que salió, medido — seis de siete
 
 | # | qué | qué se vio |
 |---|---|---|
 | 1 | miniaturas distintas por lado | las dos del par de video muestran **cuadros distintos**: una tiene un `8` en el contador y la otra un `4` |
 | 3 | encabezado por fracción de cuadros | "100.00% de los cuadros muestreados coinciden", no una distancia de bits |
+| 4 | encabezado de pocos cuadros | **"100.00% de los cuadros muestreados coinciden — juzgado con 4 de 8 cuadros"** |
+| 5 | aviso de clave ambigua | la hoja salió al cerrar, con la clave impresa: `…/foto\|\|rara-chica.jpg\|\|…/foto\|\|rara.jpg` |
 | 6 | ⌘Y con los dos lados | Vista rápida abrió con flechas activas y caminó de `clip-original.mp4` a `clip-recodificado.mp4` |
 | 7 | ⌘R con los dos archivos | Finder abrió con "2 de 4 seleccionados" |
 
-Los puntos **4 y 5** —el encabezado de pocos cuadros y el aviso de clave ambigua— son nuevos: sus fixtures no
-existían cuando se corrió esta pasada, y por eso están sin medir.
+El **4 de 8** es el número que la aritmética predecía: a 0.5 s el intervalo se clampea a 0.1, las marcas van de
+0.1 a 0.8, y `usableCount` cuenta las que cumplen `< duration`. Y la clave del punto 5 trae **cuatro** `||`, que
+es exactamente lo que no se puede volver a partir.
+
+**El punto 2 no se cierra, y se deja así a propósito.** Con #106 la ventana ya baja a **727 pt** —contra el piso
+viejo de 1000— y a ese ancho el layout aguanta: las celdas de la tabla truncan por el medio (`clip-c....mp4`,
+`paisaj...p.jpg`). Pero la línea de metadata **todavía cabe**, así que su truncado sigue sin verse. Verlo pediría
+rutas más largas que las que el árbol genera, y eso es fabricar un caso para mirarlo, no una falla que alguien
+haya encontrado.
 
 Los cuadros distintos del punto 1 son evidencia más fuerte que la que pedía el guion: si la clave de miniatura
 estuviera compartida, los dos lados dibujarían el mismo bitmap.
@@ -430,6 +439,24 @@ vio"*.
 
 ❌ **Está mal si** sale `contentChanged(path: "…")`. Eso es un caso de enum crudo, y ya pasó una vez.
 
+### Lo que salió, medido
+
+```
+Se movieron 0 archivos, liberando 0 B
+1 archivo se dejó en paz.
+
+/Users/roger/demo-duplicate/exactos/foto 2.raw  —  foto 2.raw cambió desde el escaneo,
+así que se dejó en paz
+```
+
+Rehusó, no movió nada, y la razón es una frase. El re-hasheo justo antes de mover hace lo que promete.
+
+**Y de aquí salió un plural**, el *"1 archivos se dejaron en paz"* que la línea de arriba ya muestra corregido.
+
+**Un falso hallazgo, anotado porque volvería a pasar**: la línea de la rehúsa parecía venir sin acentos.
+Ampliada al triple, están todas —"cambió", "así", "dejó"—; era el tamaño en una fuente monoespaciada. Medir
+antes de escribir el issue.
+
 ## 10. La barra con etapa (3 min)
 
 Necesita su propio árbol: con dos archivos el apply termina antes del primer tick del timer de 10 Hz.
@@ -451,6 +478,32 @@ python3 scripts/make-demo-tree.py ~/demo-grande --carpeta-grande
 Son 4,000 archivos por lado, así que verificar toma alrededor de un segundo — diez ticks de la barra.
 
 4. Deshaz la sesión desde **Sesiones › Historial de sesiones…**
+
+### Lo que salió, medido
+
+```
+Moviendo archivos...
+Cada carpeta se revisa al moverla: una que tenga un archivo que la conservada no tiene se salta.
+1 ya está dentro de una carpeta de esta lista.
+
+/Users/roger/demo-grande/respaldo   (4000 archivos)
+[▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+Verificando 1 de 1: /Users/roger/demo-grande/respaldo
+[Detener]  [Mover al basurero]
+```
+
+- la barra apareció con su **etapa** y el ítem nombrado
+- **Detener** siguió vivo mientras corría, y el botón de aplicar quedó en gris
+- **las carpetas colapsadas se nombran**: el par anidado `original/sub ↔ respaldo/sub` está dentro del padre,
+  y la hoja lo dice en vez de omitirlo en silencio
+
+Ese último renglón también rindió un plural: *"1 ya están dentro"*, ya corregido.
+
+**Falta ver la etiqueta pasar a "Moviendo", y se deja así.** Las dos capturas cayeron en la fase de verificar,
+que sobre 4,000 archivos por lado dura cerca de un segundo. Perseguirlo pide grabar la pantalla o inflar el
+árbol hasta que el apply dure diez segundos — y no hay nada que sugiera que esté roto: el renderizador de las
+tres frases y el orden de las etapas están afirmados desde código, y lo que faltaba era ver que la línea
+existiera en pantalla. Existe.
 
 ## Al terminar
 
