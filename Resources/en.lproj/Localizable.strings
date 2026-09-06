@@ -143,6 +143,7 @@
 "scan.phase.probing" = "Comparing candidates";
 "scan.phase.hashing" = "Reading contents";
 "scan.phase.grouping" = "Grouping";
+"scan.phase.saving" = "Saving";
 "scan.phase.finished" = "Done";
 /* %d files seen. */
 "scan.counts.files" = "%d files";
