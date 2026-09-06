@@ -2,6 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>apply.done.failed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file was left alone</string>
+			<key>other</key>
+			<string>%d files were left alone</string>
+		</dict>
+	</dict>
 	<key>apply.done.headline</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -32,6 +48,22 @@
 			<string>1 file</string>
 			<key>other</key>
 			<string>%1$d files</string>
+		</dict>
+	</dict>
+	<key>folders.apply.collapsed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 is already inside a folder on this list</string>
+			<key>other</key>
+			<string>%d are already inside a folder on this list</string>
 		</dict>
 	</dict>
 	<key>folders.apply.headline</key>
@@ -112,6 +144,22 @@
 			<string>1 session still holds files that could be restored, and its journal is the only record of where those files went.</string>
 			<key>other</key>
 			<string>%d sessions still hold files that could be restored, and their journals are the only record of where those files went.</string>
+		</dict>
+	</dict>
+	<key>similar.ambiguousKey.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ The CLI would read those keys as a different pair, so check them before running a move: %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 of the pairs you decided contains "||" in a path, which is the separator this format uses.</string>
+			<key>other</key>
+			<string>%1$d of the pairs you decided contain "||" in a path, which is the separator this format uses.</string>
 		</dict>
 	</dict>
 	<key>undo.alreadyRestored</key>

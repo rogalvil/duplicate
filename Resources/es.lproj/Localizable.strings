@@ -171,7 +171,6 @@
 /* %d archivos que fueron a cuarentena. */
 "apply.done.quarantined" = "%d no pudieron ir al basurero y se movieron a la carpeta de cuarentena.";
 /* %d archivos que fallaron. */
-"apply.done.failed" = "%d archivos se dejaron en paz.";
 "apply.done.stoppedEarly" = "La corrida se detuvo temprano porque las fallas siguieron llegando: hay algo mal más allá de un archivo suelto.";
 "apply.failed.title" = "No se pudo aplicar";
 "apply.refused.title" = "Este plan está vencido";
@@ -342,7 +341,6 @@
 "similar.contradiction.title" = "Un archivo lo conserva un par y lo descarta otro";
 "similar.contradiction.body" = "Hay %1$d archivos en esa situación, entre ellos %2$@. Actuar sobre todas las decisiones borraría un archivo que elegiste conservar en otro par. Vuelve a decidir esos pares antes de aplicar.";
 "similar.ambiguousKey.title" = "Una decisión se guardó con una clave que no se puede volver a leer";
-"similar.ambiguousKey.body" = "%1$d de los pares que decidiste traen \"||\" en una ruta, que es el separador de este formato. El CLI leería esas claves como otro par, así que revísalos antes de correr un movimiento: %2$@";
 "similar.saved" = "Decisiones guardadas";
 "similar.apply.headline" = "%1$d archivos de %2$d pares irían al basurero";
 "similar.apply.verifyNote" = "Cada par se vuelve a puntuar en el momento de moverlo. Uno que ya no se parezca se salta.";
@@ -356,7 +354,6 @@
 "similar.review.apply" = "Simular y aplicar…";
 "folders.apply.verifyNote" = "Cada carpeta se revisa al moverla: una que tenga un archivo que la conservada no tiene se salta.";
 "folders.apply.excluded" = "%d carpetas quedan fuera: otra decisión las conserva, o conserva algo adentro.";
-"folders.apply.collapsed" = "%d ya están dentro de una carpeta de esta lista.";
 "folders.apply.nothing" = "Nada que mover.";
 "folders.apply.done" = "Se movieron %1$d carpetas - %2$@";
 "folders.apply.item" = "%1$@  (%2$d archivos)";

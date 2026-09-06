@@ -172,7 +172,6 @@
 /* %d files that went to quarantine instead. */
 "apply.done.quarantined" = "%d could not go to the Trash and were moved to the quarantine folder instead.";
 /* %d files that failed. */
-"apply.done.failed" = "%d files were left alone.";
 "apply.done.stoppedEarly" = "The run stopped early because failures kept coming: something is wrong beyond a single file.";
 "apply.failed.title" = "The apply could not run";
 "apply.refused.title" = "This plan is out of date";
@@ -343,7 +342,6 @@
 "similar.contradiction.title" = "One file is kept by one pair and discarded by another";
 "similar.contradiction.body" = "%1$d files are in that position, %2$@ among them. Acting on every decision would delete a file you chose to keep elsewhere. Decide those pairs again before applying.";
 "similar.ambiguousKey.title" = "A decision was saved under a key that cannot be read back";
-"similar.ambiguousKey.body" = "%1$d of the pairs you decided contain \"||\" in a path, which is the separator this format uses. The CLI would read those keys as a different pair, so check them before running a move: %2$@";
 "similar.saved" = "Decisions saved";
 "similar.apply.headline" = "%1$d files from %2$d pairs would go to the Trash";
 "similar.apply.verifyNote" = "Each pair is scored again at the moment it is moved. One that no longer looks alike is skipped.";
@@ -357,7 +355,6 @@
 "similar.review.apply" = "Simulate and apply...";
 "folders.apply.verifyNote" = "Each folder is checked when it moves: one holding a file the kept folder does not have is skipped.";
 "folders.apply.excluded" = "%d folders are left out: another decision keeps them, or keeps something inside them.";
-"folders.apply.collapsed" = "%d are already inside a folder on this list.";
 "folders.apply.nothing" = "Nothing to move.";
 "folders.apply.done" = "Moved %1$d folders - %2$@";
 "folders.apply.item" = "%1$@  (%2$d files)";
