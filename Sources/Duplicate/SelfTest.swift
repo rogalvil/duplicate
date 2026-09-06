@@ -894,6 +894,34 @@ enum SelfTest {
             result.entries.allSatisfy { $0.path.hasPrefix(scratch + "/") },
             "a path escaped the requested root prefix"
         )
+
+        // **And the count has to reach a human, which is the leg that was never asserted.**
+        //
+        // The walk counting the directory is half of it. The other half is that an unreadable subtree
+        // produces "no duplicates found", which looks exactly like success -- so the number is the only thing
+        // the app can honestly report, and until now nothing checked that it got reported. `reportUnreadable`
+        // built an `NSAlert` and called `runModal()` inline, and a mode that reached that code would hang
+        // instead of failing.
+        //
+        // Teeth: return `nil` unconditionally from `unreadableWarning(count:)` and the second assertion
+        // fails; drop the `count > 0` guard and the first one does.
+        try expect(
+            ScanPanelController.unreadableWarning(count: 0) == nil,
+            "a scan that entered every directory still warns about unreadable ones"
+        )
+        let warning = try expectSome(
+            ScanPanelController.unreadableWarning(count: result.inaccessiblePaths.count),
+            "one unreadable directory produced no warning at all"
+        )
+        try expect(
+            !warning.contains("scan.inaccessible"),
+            "the warning shows a key literal: \(warning)"
+        )
+        try expect(
+            warning.contains("\(result.inaccessiblePaths.count)"),
+            "the warning does not say how many directories were skipped: \(warning)"
+        )
+
         print("  walked past 1 unreadable directory; \(result.entries.count) files kept")
     }
 

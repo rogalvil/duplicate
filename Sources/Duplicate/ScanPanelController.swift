@@ -570,18 +570,29 @@ final class ScanPanelController: NSWindowController {
         }
     }
 
+    /// The sentence for directories the walk could not enter, or `nil` when it entered them all.
+    ///
+    /// **Separate from the alert because an alert cannot be asserted.** `runModal()` blocks, so a mode that
+    /// reached this code would hang instead of reporting -- which left the last leg of the highest-consequence
+    /// path in the app unverified. The walk counting an unreadable directory is asserted; that the count
+    /// reaches a human was not, and the whole reason the count exists is that an unreadable subtree produces
+    /// "no duplicates found", which looks exactly like success.
+    static func unreadableWarning(count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return String(format: Strings.string("scan.inaccessible.body"), count)
+    }
+
     /// Tells the user about directories the walk could not enter.
     ///
     /// **The failure that must not ship silently.** An unreadable subtree produces "no duplicates found",
     /// which looks exactly like success. The count is the only thing the app can honestly report.
     private func reportUnreadable(_ result: ScanSession.Result) {
-        let count = result.outcome.walk.inaccessiblePaths.count
-        guard count > 0 else { return }
+        guard let body = Self.unreadableWarning(count: result.outcome.walk.inaccessiblePaths.count)
+        else { return }
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = Strings.string("scan.inaccessible.title")
-        alert.informativeText = String(
-            format: Strings.string("scan.inaccessible.body"), count)
+        alert.informativeText = body
         alert.addButton(withTitle: Strings.string("button.ok"))
         alert.addButton(withTitle: Strings.string("scan.inaccessible.openSettings"))
         if alert.runModal() == .alertSecondButtonReturn {
