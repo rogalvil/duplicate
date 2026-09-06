@@ -204,22 +204,28 @@ Abre el escaneo perceptual. Verás el par de imagen y el de video.
    caminar entre ellos. Esa es la comparación a tamaño real, y la razón por la que esta app existe en vez del CLI.
 5. **⌘R** debe revelar **los dos** archivos en Finder a la vez.
 
-### Lo que salió, medido — dos de cinco
+### Lo que salió, medido — cuatro de cinco
 
-Observado al abrir el escaneo perceptual del árbol de demo, sin correr el paso completo:
+| # | qué | qué se vio |
+|---|---|---|
+| 1 | miniaturas distintas por lado | las dos del par de video muestran **cuadros distintos**: una tiene un `8` en el contador y la otra un `4` |
+| 3 | encabezado por fracción de cuadros | "100.00% de los cuadros muestreados coinciden", no una distancia de bits |
+| 4 | ⌘Y con los dos lados | Vista rápida abrió con flechas activas y caminó de `clip-original.mp4` a `clip-recodificado.mp4` |
+| 5 | ⌘R con los dos archivos | Finder abrió con "2 de 4 seleccionados" |
 
-- **Los dos lados muestran miniaturas distintas.** El punto 1 pasa, así que la clave de miniatura está
-  separando los pares como debe.
-- **El encabezado del par de video dice "100.00% de los cuadros muestreados coinciden"**, no una distancia de
-  bits. El punto 3 pasa.
+Los cuadros distintos del punto 1 son evidencia más fuerte que la que pedía el guion: si la clave de miniatura
+estuviera compartida, los dos lados dibujarían el mismo bitmap.
 
-Los puntos 2, 4 y 5 —la línea de metadata en angosto, ⌘Y con los dos lados, ⌘R con los dos— siguen pendientes.
+**El punto 2 no se pudo correr, y ese fue el hallazgo #106.** La ventana no bajaba de 1000 pt mientras su
+`minSize` declaraba 720, así que no existía el ancho donde esa prueba significa algo. El piso eran los siete
+botones del pie en una sola fila —664 pt de decisiones más 314 de acciones—, no la tabla ni las etiquetas, que
+ya cedían. Partida en dos filas el piso bajó a **678**, y el mínimo declarado pasó a ser el límite real. Sigue
+sin correrse **a ese ancho**.
 
-**Y aquí vive #97.** El consejo del par de video dice *"Conservar el segundo — mayor bitrate (232 kbps contra
+**Y aquí vivió #97.** El consejo del par de video decía *"Conservar el segundo — mayor bitrate (232 kbps contra
 49 kbps), **mayor resolución (320 x 240 contra 640 x 480)**"*. 320×240 no es mayor que 640×480: la guarda que
-emite esa razón es `!=` —*difieren*— mientras el caso se llama `higherResolution` y la cadena dice "mayor".
-`higherBitrate`, dos líneas arriba, tiene la misma forma y en este par acertó por casualidad. Es la frase que
-decide cuál de los dos archivos se manda a la Papelera.
+emite esa razón es `!=` —*difieren*— mientras el caso se llamaba `higherResolution`. Arreglado; verificado en
+pantalla después: ahora dice **"menor resolución (320 x 240 contra 640 x 480)"**.
 
 ## 5. El visor de carpetas (3 min)
 
@@ -231,6 +237,24 @@ se colapsa dentro del padre al aplicar, no al escanear.
 2. Al elegir conservar `copia-a`, la ventana debe **avisar antes de aplicar** que mover la otra perdería ese
    archivo. *Está mal si* solo te enteras después, en la lista de rehúsas.
 3. La línea de metadata da nombre, conteo y **fecha** de cada lado. No da tamaño, a propósito.
+
+### Lo que salió, medido
+
+Los tres puntos pasaron. El detalle nombró **`solo-aqui.txt`** bajo "Solo en …/copia-b", y al elegir conservar
+`copia-a` la ventana avisó en naranja, **antes de aplicar**:
+
+> Mover copia-b perdería 1 archivos que tiene y la otra no.
+
+Con eso queda verificada por primera vez la capacidad que `CLAUDE.md` nombra como la diferencia entre esta app
+y el CLI: *lo que el escaneo ya sabe se dice al decidir, no al aplicar*. Y no se habría podido correr sin #99,
+que es lo que hizo existir ese par.
+
+**El aviso destapó dos cosas.** El *"1 archivos"* es #108 —en español el verbo también concuerda, así que
+`apply.headline` decía "Se moverían 1 archivo"— y ya está arreglado. Y presionar el botón dejó la ventana en
+blanco: sin selección, sin detalle, sin aviso y sin conteo, o sea sin una sola señal de que la decisión se
+registró. Ese es #107: `mutate` recarga la tabla, `reloadData()` borra la selección, y sólo se restauraba
+cuando había fila siguiente — en el último par no la hay, y en un escaneo de un solo par el único par siempre
+es el último.
 
 ## 6. Aplicar y deshacer, que es lo que borra archivos (8 min)
 
@@ -250,6 +274,47 @@ Sobre el escaneo **exacto**, decide dos grupos y presiona **Simular y aplicar**.
 **Está mal si**: un fallo aparece como `contentChanged(path: "…")`. Eso es un enum crudo; debe leerse como una
 frase.
 
+### Lo que salió, medido
+
+La cadena completa corrió: dos archivos decididos, simulados, movidos, uno devuelto desde Finder, la sesión
+deshecha desde el historial y el registro podado.
+
+| # | qué se vio |
+|---|---|
+| 1 | la hoja listó **exactamente** `foto 2.raw` y `subcarpeta/informe copia.pdf`, ninguno de los conservados |
+| 2 | **no se pudo observar**: dos archivos se mueven en menos de un tick del timer de 10 Hz |
+| 3 | tampoco, por lo mismo |
+| 4 | los dos estaban en el basurero; el "Sacar del basurero" de Finder devolvió uno |
+| 5 | el deshacer dijo *"1 ya estaban de vuelta, byte por byte"* y restauró el otro |
+| 6 | la hoja de poda apareció con sus conteos |
+
+Los puntos 2 y 3 **no son alcanzables con este árbol** y eso no es una omisión: la etiqueta la escribe un
+`Timer` a 10 Hz y dos archivos terminan antes del primer tick. Verlos pide un apply de carpeta con cientos de
+archivos, que este árbol no tiene.
+
+**Tres hallazgos salieron de aquí.**
+
+**#100** — con las dos casillas de un grupo marcadas, la ventana anunciaba que liberaría 14.9 KB. No se movía
+nada: `removalPlan` filtraba lo conservado y devolvía cero candidatos, mientras `plannedReclaimBytes` sumaba
+`distinctCopies - 1` sin mirar el conjunto conservado. Tres lugares llevaban una copia de la misma regla y una
+de esas respuestas mueve archivos. Verificado en pantalla después del arreglo: `se liberarían 0 B`.
+
+**#113** — el archivo devuelto con Finder quedaba contado como no devuelto **para siempre**, aunque el propio
+deshacer hubiera verificado que estaba en su lugar byte por byte. Sólo lo que el runner *movía* recibía su
+`undone_at`, y la poda exige `restoredCount >= movedCount`, así que **Limpiar** se quedaba en gris. Lo irónico
+es que la hoja de aplicar es la que invita a usar Finder.
+
+**#111** — confirmar un grupo no tenía botón. Es la acción más usada de la app —una por grupo, 880 veces en un
+escaneo real— y sólo existía como ítem de menú y atajo. Y sin confirmar no se mueve nada, así que se pueden
+recorrer los 880 grupos aprobando sugerencias y llegar a un aplicar vacío. Lo reportó el uso real, con la frase
+*"si no sirven los cmd return no se debería poner mejor un botón"*.
+
+**Y una falsa alarma que vale anotar**: se reportó que ⌘↩ no funcionaba. No era cierto — se estaba presionando
+⌘ con **retroceso** en vez de con **entrar**, porque la instrucción decía "⌘Return" en un teclado rotulado en
+español. Llegué a abrir el issue afirmando que el atajo estaba roto, y a aportar como evidencia un
+`performKeyEquivalent` sintetizado del arnés que "aceptaba la tecla sin correr la acción" — un artefacto de que
+el arnés no es un entorno de eventos fiel. Corregido en el issue.
+
 ## 7. Los dos idiomas (5 min)
 
 Ajustes del sistema → General → Idioma y región → pon el otro idioma primero → **relanza la app**.
@@ -260,6 +325,40 @@ llamada, pero **las claves interpoladas se enumeran a mano**, así que un renomb
 
 **Y los tamaños de bytes deben verse igual en los dos idiomas**: `512 B`, `1.0 KB`, `3.5 MB`, con **punto**. Eso
 es interop con el CLI, no una preferencia regional.
+
+### Lo que salió, medido
+
+**Ninguna clave cruda en ninguno de los dos idiomas**, y los tamaños con punto en los dos: `14.9 KB`, `8.6 KB`,
+`8 B`.
+
+La hoja de aplicar, con un solo grupo decidido, en los dos idiomas:
+
+```
+Se movería 1 archivo al basurero, liberando 14.9 KB
+… El "Sacar del basurero" de Finder funciona con todo lo que se mueve así …
+[Cancelar]  [Mover al basurero]
+
+1 file would move to the Trash, freeing 14.9 KB
+… Finder's Put Back works on everything moved this way …
+[Cancel]  [Move to Trash]
+```
+
+Ese par de frases es lo que cierra dos arreglos a la vez, y el caso singular salió porque se decidió **un solo**
+grupo.
+
+**#108** — el plural. Y era peor que el sustantivo: en español el verbo también concuerda, así que el titular
+decía *"Se **moverían** 1 archivo"* y el de carpetas *"1 carpeta **irían** al basurero"*. Seis claves pasaron a
+`Localizable.stringsdict` con la cláusula entera dentro de cada variante.
+
+**#114** — la app decía **Papelera** y **Devolver**, que es español peninsular, mientras este macOS corre en
+`es_MX` y su Finder dice **"Sacar del basurero"**. Trece cadenas más cinco descripciones de TCC —las que macOS
+imprime dentro de sus propios diálogos de permisos— nombraban un lugar y un comando que no existen para quien
+usa la app. Se descubrió porque la instrucción decía *"clic derecho → Devolver"* y la respuesta fue *"no veo la
+opción devolver"*.
+
+**#119** — la hoja de poda decía *"1 sesiones todavía tienen"*, y con todas las sesiones podables imprimía *"0
+sesiones todavía tienen"*, una cláusula sobre un conjunto vacío. Se partió en dos oraciones, cada una con su
+conteo, y la segunda ahora desaparece cuando no tiene nada que decir.
 
 ## 8. Los dos caminos de lanzamiento (2 min)
 
@@ -272,6 +371,17 @@ Repite el paso 1 **desde la terminal**:
 Si escanea algo que por Launch Services te pidió permiso, esa diferencia **es** el efecto de TCC: la app lanzada
 desde la terminal hereda los permisos de la terminal. Los dos resultados no significan lo mismo, y hay que
 reportarlos por separado.
+
+### Lo que salió, medido
+
+**Sin diálogo y 7 grupos**, o sea idéntico al camino por Launch Services.
+
+Que coincidan **no prueba que los permisos sean iguales**: prueba que esta carpeta no necesita ninguno. El
+árbol de demo vive en `~`, que no es un directorio protegido, así que ninguno de los dos caminos tiene nada que
+pedir. La diferencia que este paso existe para exponer sólo aparecería sobre una carpeta protegida, y eso
+sigue sin correrse por la misma razón que el paso 1: es el escaneo de `~` completo, cientos de GB.
+
+Los dos resultados quedan escritos por separado de todos modos, que es la regla.
 
 ---
 

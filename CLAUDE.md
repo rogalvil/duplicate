@@ -198,6 +198,34 @@ No re-descubrirlas:
   app hereda los permisos de la terminal; lanzada por Launch Services es su propio responsable.
   Consecuencia: **un selftest verde no dice nada sobre el estado de TCC de la app.** Reportar los dos
   caminos por separado.
+- **Y corridos los dos, dieron lo mismo — lo cual no prueba lo que parece.** El árbol de demo vive en `~`, que
+  no es un directorio protegido, así que ninguno de los dos caminos tiene permiso que pedir: 7 grupos y ningún
+  diálogo por Launch Services y desde la terminal. La diferencia que la comparación existe para exponer sólo
+  aparece sobre una carpeta protegida. Un experimento cuyos dos brazos no pueden diferir no falsa nada.
+- **En español el número concuerda con el verbo, no sólo con el sustantivo.** "1 archivos" era la mitad del
+  problema; la otra era "Se **moverían** 1 archivo" y "1 carpeta **irían** al basurero". Por eso las variantes
+  de `Localizable.stringsdict` llevan la cláusula entera y no sólo el sustantivo. `NSLocalizedString` ya
+  consulta el `.stringsdict`, así que el runtime no necesitó nada; el que sí necesitó enterarse fue el modo
+  `l10n`, que lee los `.strings` directo y llamaría ausente a toda clave pluralizada.
+- **Foundation elige la variante de plural leyendo el argumento en la posición de la variable, y equivocarse
+  corrompe memoria.** Con un `%1$@` delante de `%#@n@`, `folders.warnLoss` leía el nombre de la carpeta como el
+  conteo: siempre plural, y el nombre saliendo como `copÁèﬁ‚`. Probando el diente con una tabla así, el proceso
+  **truena con SIGSEGV** — o sea que el "1 archivos" original era varargs desalineados, no texto mal escrito.
+  El conteo va primero en el call site.
+- **Este macOS corre en `es_MX` y su Finder dice "Sacar del basurero", no "Devolver".** La tabla en español
+  estaba escrita en peninsular —"Papelera"— así que la app nombraba un lugar y un comando que no existen para
+  quien la usa; `apply.detail`, que es el texto que se lee justo antes de mover archivos y cuyo trabajo es decir
+  cómo recuperarlos, citaba un comando inexistente. Hay un solo `es.lproj` y macOS se lo sirve también a
+  `es-MX`: se eligió cambiarlo en vez de agregar `es-419.lproj`, que duplicaría la localización para siempre por
+  un usuario de España que este proyecto no tiene. El modo `l10n` rechaza cualquier valor en español que diga
+  "Papelera".
+- **Una aserción que renderiza texto localizado tiene que leer la tabla que el proceso está sirviendo.** Dos
+  veces CI atrapó lo mismo: una aserción que anclaba al final de la frase (el español termina con la cifra, el
+  inglés no) y otra que comparaba todo contra la entrada en español mientras CI corre en inglés.
+- **Un `defaults write` sobre `AppleLanguages` cambia la preferencia real del sistema del usuario.** Lo hice a
+  mano "para simular inglés" y le cambié el idioma a su máquina. Es la misma trampa que ya está escrita para el
+  arnés, cometida fuera del arnés: el locale de un proceso no se simula desde afuera, y para probar la otra
+  tabla se lee la tabla, no se cambia el sistema.
 
 ## Cómo verificar lo que los tests no alcanzan
 
