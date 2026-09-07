@@ -179,6 +179,28 @@ make selftest MODE=l10n
 # FAILED: l10n: Localizable: missing from es.lproj: menu.app.quit
 ```
 
+## Si vienes de fuera
+
+Los PR de fuera se leen y se agradecen. Este repo es público a propósito. Pero el listón es el mismo que se
+aplica el autor, y conviene saberlo antes de escribir código:
+
+- **Las cinco secciones de la plantilla de PR son obligatorias**, incluida *"Lo que no se pudo verificar"*. Un
+  PR que reclama más de lo que comprobó es peor que uno que admite el hueco: el hueco se envía en los dos casos
+  y solo una versión avisa.
+- **La sección de verificación se llena con salida real de comandos**, pegada. No casillas marcadas de oficio.
+- **Un modo de selftest nuevo tiene que probarse fallando** contra la versión rota, y decir en un comentario
+  cuál es el cambio que lo hace fallar. Un arnés que pasa contra código roto no sirve de nada.
+- **Código y comentarios en inglés; documentación y cuerpo del PR en español.** Nunca mezclados dentro de un
+  mismo archivo.
+- **Sin trailers de atribución** —`Co-Authored-By` incluido— y **sin firma GPG**.
+- **Cero dependencias externas.** Es requisito del proyecto, no una preferencia.
+
+Y antes de abrir un issue proponiendo algo que falta, **búscalo**: ya pasó que se reportara ausente una
+capacidad que sí estaba, dentro de otra frase.
+
+**CI no corre solo en un PR desde un fork.** Hace falta que el dueño lo apruebe, cada vez. No es desconfianza
+en particular: un workflow aprobado ejecuta el código del PR.
+
 ## Git
 
 Todo pasa por PR; `main` está protegido del lado del servidor y no hay bypass. Se exige PR, CI verde

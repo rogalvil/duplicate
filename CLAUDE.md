@@ -1135,9 +1135,16 @@ publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`
 - **Los selftests van antes del paso de cobertura en CI.** `swift test --enable-code-coverage`
   recompila el debug con instrumentación, así que correrlos después paga un tercer build completo. Y
   van con `CONFIG=debug`: `make selftest` depende de `make all`, que compilaría en release.
-- **CI corre solo en pull requests**, nunca en push, por costo: los runners de macOS facturan 10× y
-  el repo es privado. Cubre bases `main`, `feat/**` y `fix/**`, y el tipo de evento `edited`, porque
-  sin eso un PR apilado no reporta checks y puede llegar a `main` sin haberse probado nunca.
+- **CI corre solo en pull requests**, nunca en push. La razón original fue el costo —los runners de macOS
+  facturan 10×— cuando el repo era privado; **ya es público**, así que el minuto es gratis y lo que queda es
+  que un push no aporta señal que el PR no dé. Cubre bases `main`, `feat/**` y `fix/**`, y el tipo de evento
+  `edited`, porque sin eso un PR apilado no reporta checks y puede llegar a `main` sin haberse probado nunca.
+- **Público no significa que alguien más pueda aterrizar un cambio.** Nadie externo tiene permiso de escritura,
+  así que un PR de fuera se puede abrir pero no mergear: el botón es del dueño. Lo que sí hacía falta cerrar era
+  el CI — la política de aprobación estaba en `first_time_contributors`, o sea que el **segundo** PR de alguien
+  corría workflows solo. Ahora es `all_external_contributors`. Y no se piden aprobaciones de revisión en el
+  ruleset a propósito: exigirlas no agrega nada contra quien no puede mergear, y bloquearía al dueño, que no
+  puede aprobar sus propios PR.
 - **No pedir Full Disk Access.** No hay API para pedirlo, solo un toggle manual, así que "pedirlo"
   significa molestar. Los duplicados dentro de `~/Library` son abrumadoramente cachés donde quitar un
   "duplicado" rompe una app. Y una app que pide Acceso Total al Disco para ordenar Descargas es
