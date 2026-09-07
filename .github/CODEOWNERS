@@ -1,0 +1,6 @@
+# Todo el repo es de una persona, y este archivo lo hace explícito.
+#
+# No bloquea nada: el ruleset de `main` pide cero aprobaciones, así que el dueño sigue mergeando sus
+# propios PR sin esperar a nadie. Lo que sí hace es que cualquier PR de fuera pida su revisión sola, en
+# vez de depender de que alguien se acuerde de pedirla.
+*       @rogalvil
