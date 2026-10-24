@@ -2761,6 +2761,18 @@ enum SelfTest {
             "the review demands \(Int(required.width)) points of width and advertises "
                 + "\(Int(advertisedReview.width))"
         )
+        // **At that smallest size the file columns fit the list they sit in.** A table grows with its scroll
+        // view and never shrinks with it, so the columns kept 718 points behind a 300-point view and a long name
+        // was cut by the preview with no ellipsis. `make ui` found it from a render.
+        // Teeth: drop the frame observer that calls `sizeToFit` in `ReviewWindowController` and this times out.
+        // The autosave name goes first: resizing a window that has one would write the user's own frame.
+        controller.window?.setFrameAutosaveName("")
+        controller.window?.setFrame(NSRect(origin: .zero, size: advertisedReview), display: false)
+        try await waitOnMainActor(
+            until: { controller.fileColumnsFitForSelftest },
+            what:
+                "the file columns to fit a list \(Int(controller.fileListWidthForSelftest)) points wide"
+        )
 
         try expect(controller.groupRowCount == 3, "\(controller.groupRowCount) groups listed")
         try expect(controller.fileRowCount == 2, "\(controller.fileRowCount) files in group 1")
