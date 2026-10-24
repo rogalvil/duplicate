@@ -1,274 +1,529 @@
-# Capacidades de Duplicate
+# Mapa de Duplicate
 
-Inventario de lo que la app **hace hoy**, con detalle suficiente para decidir qué agregar, qué quitar y qué
-está duplicado. No es un plan ni una lista de deseos: cada entrada describe algo que existe y dice cómo se
-verifica.
+Contesta tres preguntas, en este orden: **qué hace la app hoy**, **qué no hace** —a propósito o porque está
+pendiente— y **qué sobra**: lo redundante, lo inalcanzable y lo muy especializado.
 
-> **Se actualiza en cada PR**, junto con `README.md` y `docs/SELFTEST.md`. Una capacidad que cambia de forma
-> o desaparece se edita aquí en el mismo cambio, o este archivo se convierte en la peor clase de
-> documentación: la que suena autorizada y miente.
+Todo lo de aquí se sacó leyendo el código, no documentos anteriores. La versión previa de este archivo se
+contradecía a sí misma (dos conteos de tests distintos, "sin poda de cachés" junto a "poda de cachés"), y es la
+razón de la regla de abajo.
 
-Última actualización: PR del saneo y el guion a mano. 44 modos de selftest, 776 tests, 94.76% de cobertura
-sobre `DuplicateCore`.
+> **Se actualiza en el mismo PR que cambia la funcionalidad.** Una capacidad que cambia de forma o desaparece
+> se edita aquí en ese cambio. Y **no lleva números que cambian en cada PR** —tests, modos, cobertura—: esos se
+> piden al código (ver [Cómo mantener este mapa](#cómo-mantener-este-mapa)).
 
-## Resumen en una tabla
+## En una página
 
-| | Escanear | Revisar | Decidir | Aplicar | Deshacer |
+Tres detectores, y los tres cierran el ciclo completo desde la app, sin el CLI, sobre los mismos documentos JSON
+que el CLI lee y escribe:
+
+| | Escanear | Revisar | Decidir | Simular y aplicar | Deshacer |
 |---|---|---|---|---|---|
 | **Exactos** (SHA-256) | sí | sí | sí | sí | sí |
 | **Carpetas** (Dice) | sí | sí | sí | sí | sí |
-| **Imágenes** (pHash) | sí | sí | sí | sí | sí |
-| **Video** (frames) | sí | sí | sí | sí | sí |
+| **Parecidos: imágenes** (pHash) | sí | sí | sí | sí | sí |
+| **Parecidos: video** (cuadros) | sí | sí | sí | sí | sí |
 
-Los tres detectores cierran el ciclo completo desde la app, sin el CLI, y sobre los mismos documentos JSON
-que el CLI lee y escribe.
+El recorrido de quien la usa:
 
----
-
-## 1. Detección de duplicados exactos
-
-**Qué hace.** Recorre una raíz, agrupa por tamaño, y sobre cada grupo de candidatos calcula SHA-256 para
-confirmar identidad byte a byte. El documento resultante es el mismo que escribe `rav duplicate scan`.
-
-| Capacidad | Detalle | Dónde |
-|---|---|---|
-| Recorrido con reglas de skip | Oculto/paquete/cruce de volumen configurables; **no cruza puntos de montaje por default**, divergencia deliberada de `os.walk` | `Walk/DirectoryWalker.swift`, `Scan/ScanPolicy.swift` |
-| Exclusión de Papelera **por identidad** | Cubre `~/.Trash` y las tres cuarentenas del CLI de una sola vez, incluso alcanzadas por symlink. Arregla un bug vivo del CLI | `Support/ExclusionSet.swift` |
-| Agrupación por tamaño y luego digest | Ordenar-y-detectar-runs en vez de `defaultdict(list)`: cero allocation por bucket | `Scan/DuplicateFinder.swift` |
-| Etapa de prefijo | Sonda cabeza+cola+tamaño antes del hash completo, **solo arriba de 8 MiB** (recalibrado midiendo: a 256 KiB cobraba 54% del tiempo y ahorraba 1 MB de 1.5 GB). Sobre el caso que existe para atender —80 archivos de 64 MiB del mismo tamaño con colas distintas— **58×: 0.03 s contra 1.75 s, y 5.0 GB de lecturas que no ocurren** | `Hash/ContentHasher.swift` |
-| `F_NOCACHE` arriba de 1 MiB | Medido: 4× menos page cache (+0.10 GB contra +0.40 GB) al mismo tiempo de reloj | `Hash/ChunkedReader.swift` |
-| Concurrencia acotada por volumen | NVMe interno `min(max(cpus-2,2),8)`; externo/rotacional 2; red 2. Ventana deslizante, no 800k tareas. **Medido con mejor de tres: la curva es plana de c=1 a c=16**, así que el tope no deja nada en la mesa — y un solo worker ya satura a 3.0 GB/s, lo que falsa la predicción del plan | `Runtime/IOConcurrencyPolicy.swift` |
-| Clases de almacenamiento | Hardlinks y clones APFS se cuentan como **ya deduplicado**, no como duplicado ni se ocultan. El conjunto de acción nunca es `files[1:]` | `Model/StoragePartition.swift` |
-| Progreso a 10 Hz por *pull* | Contadores atómicos leídos por un `Timer`, no 800k pushes | `Runtime/ProgressCounters.swift` |
-| Cancelación | Por lote del recorrido, por archivo, **y entre chunks dentro de un archivo** | `Scan/DuplicateFinder.swift`, `Hash/ContentHasher.swift` |
-| Caché de digests | Clave `(volumen, inodo, tamaño, mtime, generation)`, filas de 80 bytes con CRC-32C, `flock`, reparación de cola truncada, y **poda de filas cuyo archivo se borró** — medido: 55.8% de la caché real era eso | `Hash/HashCache.swift` |
-
-**Cómo se verifica.** Modos `scan`, `cache`, `storage`, `digest`, `walk-permissions`, `trash-exclusion`,
-`realroot`, `cancel`, `fdlimit`, `volumes`. El modo `digest` compara contra `shasum -a 256` en el tamaño de
-chunk de producción.
-
-## 2. Detección de carpetas duplicadas
-
-**Qué hace.** Compara carpetas por coeficiente de Dice sobre el conjunto `{ruta relativa → digest}` de sus
-archivos, y encuentra pares que son la misma colección con otro nombre.
-
-| Capacidad | Detalle | Dónde |
-|---|---|---|
-| Un solo hasheo del árbol | El CLI hashea cada archivo una vez **por nivel de profundidad**; aquí es una pasada | `Folders/FolderSimilarity.swift` |
-| Intervalos de Euler | Ancestro en O(1) entero, en vez de `relative_to` con try/except | `Folders/DirectoryTree.swift` |
-| Candidatos por `(digest, basename)` | Con prueba de completitud: ningún par sobre umbral positivo se pierde | `Folders/FolderSimilarity.swift` |
-| Poda por tamaño | De Dice ≥ t sale `|B|/|A| ≤ (2−t)/t`; a t=0.9 descarta todo par que difiera >22% en conteo | `Folders/DiceBounds` |
-| Orientación por bytes | `folder_a` es la ruta menor. **No es cosmético**: `folders-move` del CLI borra `folder_b`. Medido contra el CLI: mismo conjunto de 42 pares, los 42 al revés antes del arreglo | `Folders/FolderSimilarity.swift` |
-| Diferencias materializadas | `only_in_a`, `only_in_b`, `changed` solo para los pares que sobreviven | `Folders/FolderSimilarity.swift` |
-| Canonicalización de rutas | Parte por `/` los dos lados; nada de case folding, Unicode ni symlinks | `Folders/DirectoryTree.canonical` |
-
-**Cómo se verifica.** Test diferencial contra fuerza bruta sobre árboles aleatorios (conjuntos, conteos y
-floats idénticos), más el CLI real como oráculo sobre un árbol real. Modos `folder-window`, `folder-apply`.
-
-## 3. Detección perceptual: imágenes
-
-**Qué hace.** Encuentra imágenes que se **parecen** aunque no sean idénticas: recomprimidas, escaladas,
-recortadas de más.
-
-| Capacidad | Detalle | Dónde |
-|---|---|---|
-| pHash de 64 bits | Grises estilo Pillow (**redondeado**, medido) → Lanczos-3 a mano → cuantizar a `UInt8` → DCT de Accelerate → recorte 8×8 con DC → mediana → `>` estricto | `Media/PerceptualHash.swift` y vecinos |
-| DCT que cancela exacto | Solo `vDSP.DCT` lo hace; con matriz de la base una imagen plana prende **32 bits en vez de 1** | `Media/CosineTransform.swift` |
-| Decode a 256 px | Barrido de 128 a 4096: los pares encontrados no se mueven (0.1% de rango). Pedir 32 px a ImageIO es un desastre (10.9% de coincidencia) | `Media/ImageHasher.swift` |
-| Orientación EXIF aplicada | Divergencia deliberada contra Pillow: una copia que solo cambia el flag **debe** coincidir con su original | `Media/ImageHasher.swift` |
-| Índice LSH multi-banda | `T+1` bandas por palomar (6 de 11,11,11,11,10,10 a T=5); colapso de hashes idénticos en clases (2,779 fotos → 1,630 clases) | `Media/MultiIndexLSH.swift` |
-| Caché perceptual | Filas de 112 bytes, salt **derivada de los parámetros del pipeline**, CRC, `flock`, reparación, y poda de filas cuyo archivo se borró — medida hoy en **0% de desperdicio**, así que la poda es por el límite y no por el reclamo. **177 s → 0.5 s** medido | `Media/PerceptualCache.swift` |
-
-**Coincidencia con `imagehash`.** Medida sobre las 2,779 fotos reales del usuario: **90.9% de hashes
-idénticos** entre las 2,761 sin rotación, peor caso **4 bits**, **96.7% de Jaccard** entre los conjuntos de
-pares, y **cero pares** que una implementación llame casi idénticos y la otra ajenos.
-
-**Cómo se verifica.** Modos `phash`, `phash-differential` (con referencia generada por
-`scripts/phash-reference.py`), `similar-window`, `similar-apply`.
-
-## 4. Detección perceptual: video
-
-| Capacidad | Detalle | Dónde |
-|---|---|---|
-| Ocho cuadros por video | `interval = max(dur/(n+1), 0.1)`, cuadros en `interval·(i+1)` — **aritmética preservada exacta** porque el umbral 0.70 se calibró contra ella | `Media/VideoFrameSampler.swift` |
-| Sin `ffmpeg` | `AVAssetImageGenerator` con `requestedTimeTolerance`, que **es** la rama de fast-seek del CLI, y `.forceSDR` para que un HDR no hashee distinto. Medido contra los dos comandos del CLI: costo **plano en ~0.62 s** de 10 MB a 1 GB, contra 1.49 s (rama rápida, dominada por ocho procesos) y 33.6 s (rama lenta, que escala con la duración) | `Media/VideoHasher.swift` |
-| Marcas pasadas del final filtradas | Medido: con tolerancia de 1 s un clip de 0.4 s devolvía **ocho** hashes con el último cuadro repetido cuatro veces | `Media/VideoFrameSampler.swift` |
-| Similitud asimétrica y codiciosa preservada | Con la orientación fijada por bytes, o el mismo par cae de los dos lados del umbral entre corridas | `Media/VideoSimilarity.swift` |
-| Cuatro decodes a la vez | Medido, no elegido: 60 videos reales dieron 213 ms en serie, 151 ms con cuatro, **151 ms con ocho** | `Media/SimilarScanSession.swift` |
-| Comparación por pares, sin LSH | El LSH indexa hashes sueltos; el video compara *listas*. 617 videos = 190,036 pares de popcounts, barato | `Media/SimilarScanSession.swift` |
-
-## 5. Revisión y decisiones
-
-| Capacidad | Detalle |
-|---|---|
-| Tri-estado | Un grupo sin revisar **no se escribe** en el archivo de decisiones. El CLI escribe los 50 al salir en el grupo 1; la ausencia de la clave es el contrato |
-| Heurística de keeper | Gana el archivo **más profundo** que no parece copia. Batch e interactivo eligen el mismo |
-| Regex de nombres-copia | Portado del CLI con su falso positivo sobre `IMG_1234` preservado a propósito, y con el espacio escrito `\x20` porque ICU lo borra dentro de una clase |
-| ⌘Z real | Snapshot del estado completo, `groupsByEvent = false`, agrupamiento explícito, y `windowWillReturnUndoManager` para que el menú Edición lo alcance. En las **tres** revisiones |
-| Filtros y decisión en lote | Se filtra, y se acepta **exactamente lo que está en pantalla**, con conteo de archivos y bytes dicho antes. No existe un botón que decida todo |
-| Contradicciones reportadas | Con (a,b) `keep_a` y (b,c) `keep_a`, el primero borra `b` y el segundo lo conserva. Se reporta al cerrar, no se resuelve |
-| Consejo de media | Tráiler antes que calidad (un tráiler HEVC de 30 s **le gana en puntuación** a la película de dos horas), codec desconocido vale 1.0 **y se marca** |
-| Avisos al decidir, no al aplicar | Un par de carpetas dice "mover la segunda perdería 5 archivos" *mientras eliges* |
-| Presencia de archivos | El panel distingue "el archivo ya no está" de "la miniatura no llega". Se refresca también al deshacer |
-| Miniaturas | Clave por digest en grupos exactos (ocho archivos idénticos = **una** miniatura) y **por ruta** en pares perceptuales, donde son fotos distintas |
-| Metadata del archivo bajo la vista previa | Tamaño y fecha de inmediato, y al responder la sonda la resolución, el codec y la duración: `3.9 KB · 22 ago 2026, 12:26 p.m. · 320×240 · h264 · 0:06`. En los dos visores de archivos, con **Ver > Mostrar metadata del archivo** (⌘⌥I) para ocultarla |
-| Metadata del par de carpetas | Nombre, conteo de archivos y **fecha** de cada lado, que es lo que decide "conservar la más nueva". El **tamaño no está**: una carpeta no tiene uno propio, así que producirlo es recorrerla —el apply paga ese recorrido una vez para el manifiesto y cuesta decenas de segundos en un árbol real— y pagarlo en cada tecla de flecha para dibujar un número que nadie decide es el trueque equivocado. Misma preferencia, así que el ítem de menú gobierna los **tres** visores |
-| El bitrate se muestra donde decide | Dentro de la frase del consejo, y solo cuando los dos son conocidos y distintos. No como campo permanente de un panel angosto |
-| Cuántos cuadros sostienen un veredicto de video | El encabezado dice "juzgado con 4 de 8 cuadros" cuando el clip es tan corto que algunas marcas caen pasado su final |
-| Claves impartibles avisadas | Un par decidido cuya clave `a||b` no se puede volver a partir se reporta al cerrar. Medido: ninguna ruta del corpus lo tiene, y por eso se avisa en vez de confiar |
-
-## 6. Acción destructiva y deshacer
-
-| Capacidad | Detalle |
-|---|---|
-| Papelera real | `trashItem` da el "Devolver" de Finder gratis. Medido: funciona en los tres volúmenes de esta máquina, y también en FAT32 |
-| Cuarentena como fallback | Para montajes de red, **y por fin probado en uno**: en `smbfs` la Papelera falla con `NSCocoaErrorDomain` 3328 —no hay Papelera en un volumen SMB— y el fallback mueve a una cuarentena local, la journaliza como `.quarantine` y el deshacer devuelve el archivo al share byte-idéntico. **Medido: no rescata un volumen de solo lectura**, porque mover fuera de uno tiene que borrar el origen |
-| Verificar antes de actuar | Exactos: se re-hashea contra el digest del escaneo. Perceptual: se **re-puntúa el par** (un escaneo perceptual no guarda digests). Carpetas: **contención**, no similitud — cada archivo necesita gemelo byte-idéntico en la misma ruta relativa |
-| Compuerta de dry-run | Aplicar exige una simulación **vigente**: editar una decisión invalida la aprobación, comparada por huella FNV-1a (no el `Hasher` de Swift, que está sembrado por proceso) |
-| Journal JSON Lines | Lotes de 32 durante el apply, no al final. Un `undone_at` se **agrega**, no reescribe |
-| Deshacer sesión | Ocupante byte-idéntico cuenta como ya restaurado; cualquier otro **bloquea**, nunca sobrescribe. Se re-chequea justo antes de mover. Los manifiestos de carpeta se precalculan contra la caché, no en el hilo que llama: la diferencia medida es **33.8 s de ventana congelada** en una carpeta de 10,506 fotos |
-| Las razones de un bloqueo se leen | "otro archivo ocupa el lugar al que volvería, y no se sobrescribió", no `originalPathOccupied`. Y un digest que no se pudo calcular dice **eso**, no que el contenido cambió |
-| Historial de sesiones | Lista cada apply con su fecha, cuántos archivos movió, cuántos volvieron y de qué escaneo salieron, y **deshace cualquiera, no solo la última** |
-| Limpiar journals ya deshechos | Solo sesiones con **todos** sus archivos de vuelta, probado por sus propios `undone_at`, con los conteos antes de confirmar. Una sesión ilegible o vacía **no** es podable: borrarla no gana nada y destruye la única evidencia |
-| Colapso de pares anidados | `Pole ↔ Pole` y `Pole/videos ↔ Pole/videos` son pares separados en el corpus real; mover el padre se lleva al hijo |
-| Cancelar devuelve reporte | No lanza: lanzar se saltaba el flush y dejaba hasta 31 archivos movidos **sin entrada en el journal** |
-| Detener sigue vivo durante el apply | Cerrar la hoja mientras corre **detiene y no cierra** |
-| Etapa en el progreso | `verifying(filesChecked:)` / `moving` / `done`, porque verificar un par de carpetas digiere miles de archivos antes de mover nada |
-| Veinte fallas seguidas detienen | Una sola no: un archivo bloqueado no aborta los otros 3,997 |
-| Los fallos se leen | Cada razón dice qué pasó y si el archivo sigue en su lugar, no el nombre de un caso de enum. Una sola función para las tres hojas: un fallo significa lo mismo venga del detector que venga |
-| Cancelación no acusa | Una cancelación nunca se reporta como archivo ilegible, ni como carpeta ilegible, ni como "estas dos carpetas difieren" |
-
-## 7. Biblioteca, ventanas y sistema
-
-| Capacidad | Detalle |
-|---|---|
-| Biblioteca de escaneos | Los cuatro tipos, con badge de origen (CLI o app), orden y filtro, y **watcher por directorio** de los cuatro |
-| Carga en segundo plano | `summaries()` decodifica 21,594 grupos en 0.34 s; va fuera del hilo principal con contador de generación |
-| Escaneo con progreso | Panel con fase, conteos de dígitos monoespaciados, raíces recientes y cancelación |
-| Miniaturas por Quick Look | Con plazo de 2 s: `quicklookd` es XPC y puede colgarse; se cae al icono del archivo |
-| Vista rápida de tamaño completo | ⌘Y abre `QLPreviewPanel` en los tres visores. En un par parecido entran **los dos** lados, así que las flechas del panel son la comparación a tamaño real |
-| Mostrar en Finder | En los tres visores. En un par revela los dos archivos a la vez |
-| Menús | Atajos sin colisiones (verificado por el modo `menu`), Sesiones de primer nivel, deshacer de apply **sin atajo de teclado** |
-| `RLIMIT_NOFILE` | Launch Services arranca con 256 blando; se sube a 4096 antes de abrir nada |
-| Directorios inaccesibles | Se cuentan y se reportan; nunca se lee "no encontré duplicados" cuando fue "no pude entrar" |
-| Ciclo de vida | Cerrar la última ventana cierra la app; un clic en el Dock o un `open` traen la biblioteca de vuelta |
-
-## 8. Interop con el CLI
-
-| Capacidad | Detalle |
-|---|---|
-| JSON byte-idéntico | `\uXXXX` para no-ASCII, `1.0` para doubles enteros, indent 2, orden de inserción, `\n` final. Encoder a mano porque Foundation falla en las cinco cosas |
-| Seis formatos | `scans`, `decisions`, `folder-scans`, `folder-decisions`, `similar-scans`, `similar-decisions` — **tres formas distintas de documento de decisiones**, no una |
-| Orden por bytes UTF-8 | `PathOrder`. El `String ==` de Swift considera iguales NFC y NFD y el de Python no; el corpus real tiene 38 rutas solo-NFD y 10 solo-NFC |
-| Escrituras atómicas | Mejora estricta sobre el `write_text` del CLI, sin impacto de formato |
-| Round-trip verificado | Modos `json-roundtrip` (crudo) y `scans` (por el modelo tipado), contra los 226 documentos reales |
-
-**Divergencias declaradas**: la app manda a la Papelera y journaliza, el CLI mueve a cuarentena. La app
-encuentra *menos* grupos (salta ocultos, no cruza volúmenes, separa clases de almacenamiento) y elige otros
-sobrevivientes que `rav duplicate move`.
-
-## 9. Verificación
-
-| Mecanismo | Alcance |
-|---|---|
-| 762 tests unitarios | Solo `DuplicateCore`, piso de cobertura 80%, hoy 94.60% |
-| 39 modos de selftest | Contra el bundle armado y firmado. Cada uno **afirma** y cada uno lleva escrita la rotura que lo hace fallar |
-| CI | Todos los modos en cada PR, con `CONFIG=debug`, antes del paso de cobertura |
-| Oráculos externos | `shasum` para digests, el CLI real para carpetas, `imagehash` para el pHash |
+```
+Biblioteca ──⌘N──► Nuevo escaneo ──► Biblioteca (fila nueva)
+    │
+    └─ doble clic ─► Visor del detector ──► Simular y aplicar (hoja) ──► Papelera + journal
+                       exacto / carpetas / parecidos                          │
+                                                                              ▼
+                                                     Sesiones: deshacer, historial, limpiar
+```
 
 ---
 
-## Solapamientos y candidatos a revisión
+## 1. Qué hace, flujo por flujo
 
-Sin actuar sobre ellos: es la lista para decidir después.
+Lo que alguien puede alcanzar en pantalla, con el nombre que tiene en la UI en inglés. Los nombres de archivo
+son de `Sources/Duplicate/` salvo que digan otra cosa.
 
-**Código escrito para reportar algo que nadie reporta — resuelto.** Las cuatro piezas que este documento
-encontró en su primera versión ya se decidieron una por una: dos reportan y dos se fueron. La regla que salió
-de ahí: una pieza que calcula un dato para "que alguien lo reporte" es peor que código muerto, porque tiene
-test y comentario y por lo tanto **parece una capacidad**.
+### 1.1 Arranque y ciclo de vida
 
-| Pieza | Qué calculaba | Resolución |
+| Qué | Cómo se llega | Qué hace |
 |---|---|---|
-| `SimilarPairKey.isAmbiguous` | Si una ruta contiene `||` y rompería la clave | **Cableado.** `SimilarReviewState.ambiguousKeys` lista los pares *decididos* con clave impartible, y el visor avisa al cerrar, junto a las contradicciones. Un par sin decidir no escribe clave, así que no cuenta |
-| `VideoFrameSampler.usableCount` | Cuántas de las ocho marcas caen dentro del video | **Cableado.** El encabezado de un par de video dice "juzgado con 4 de 8 cuadros" cuando son menos de ocho: "83% de los cuadros coinciden" sobre tres cuadros es una afirmación mucho más débil que sobre ocho |
-| `HashCache.verify(_:against:)` | Si un digest guardado sigue coincidiendo con el disco | **Borrado.** `VerifyingDisposer` re-lee el archivo él mismo, justo antes de mover y con la caché puenteada. Dos caminos de verificación para un chequeo destructivo es peor que uno: quien lee no puede saber cuál corre |
-| `VideoSimilarity.directionsDisagree` | Pares que cambian de lado del umbral al invertir la comparación | **Borrado.** La orientación se fija por bytes, así que el número es informativo y costaba una segunda pasada sobre 190,036 pares. Los dos tests que lo usaban ahora afirman la propiedad con los dos números, que se lee mejor |
+| Biblioteca | lanzar la app | Es la ventana inicial ("Scans") |
+| La biblioteca vuelve | cerrar la última ventana que no es la biblioteca | La reabre. Las hojas y los paneles no cuentan como ventana |
+| Salir al cerrar | cerrar la biblioteca sin otra ventana abierta | La app termina |
+| Reabrir | clic en el Dock, o `open` | Trae la biblioteca |
+| ⌘Q durante un apply | ⌘Q | Espera a que el apply termine. **Solo mira la revisión exacta** (ver pendientes) |
+| Límite de descriptores | invisible | Sube `RLIMIT_NOFILE` de 256 a 4096 antes de abrir nada |
+| About | Duplicate > About Duplicate | Versión, número de build, commit, y aviso si el árbol estaba sucio al compilar |
 
-**Otros puntos a decidir:**
+No hay arrastrar y soltar, ni ventana de preferencias, ni menú de ayuda.
 
-- **`folder-decisions/` no tiene lector externo.** El CLI tiene el slot y nunca escribió uno, así que su
-  round-trip se prueba contra un documento sintetizado. La app lo escribe y lo lee.
-- **`PerceptualHash(hex:)` y `hexString` solo existen para el diferencial** y los tests: ningún hash
-  perceptual aparece en el JSON compartido. Es deuda barata y deliberada (hace depurable un desacuerdo
-  contra Python), pero es superficie pública que producción no usa.
-- **`FolderManifest.buildSynchronously` tiene un solo llamador** (el planificador de deshacer) y una
-  semántica distinta de la versión async: sin checkpoint de cancelación. Dos funciones que se ven iguales y
-  no lo son.
-- **Dos ramas del disposer no son alcanzables** con un `FileManager` real y están marcadas como tal.
-- **El montaje de red es el único caso que la cuarentena rescata de verdad**, y es el camino menos probado
-  del código destructivo. No se puede fabricar aquí sin servidor.
-- **La metadata en el visor de carpetas sigue pendiente.** Ahí el detalle es la lista de archivos del par, y
-  el tamaño de una carpeta exige recorrerla — otra decisión, no la misma línea.
+### 1.2 Menús y atajos
 
-## Qué falta
+| Menú > ítem | Atajo | Dónde funciona |
+|---|---|---|
+| File > New Scan… | ⌘N | En todas partes |
+| File > Save Decisions | ⌘S | Solo revisión exacta. Los otros dos visores guardan solos |
+| File > Close | ⌘W | En la exacta pregunta si guardar |
+| Edit > Undo / Redo | ⌘Z / ⇧⌘Z | Deshacer de **revisión**, nunca de un apply. Un `UndoManager` por visor |
+| View > Quick Look | ⌘Y | Los tres visores |
+| View > Show File Metadata | ⌥⌘I | Preferencia global, los tres visores |
+| Group > Confirm and Next | ⌘↩ | Solo exacta |
+| Group > Skip This Group | ⇧⌘K | Solo exacta |
+| Group > Clear the Decision | — | Solo exacta |
+| Group > Accept the Suggestion for Selected Groups… | — | Solo exacta, con confirmación |
+| Group > Keep Every File | — | Solo exacta |
+| Group > Discard the Whole Group… | — | Solo exacta, con confirmación |
+| Group > Previous / Next Group | ⌘[ / ⌘] | Solo exacta |
+| Group > Show in Finder | ⌘R | Exacta: el archivo. Parecidos: **los dos**. Carpetas: abre las dos |
+| Group > Simulate Applying… | ⇧⌘D | Solo exacta. Los otros dos tienen botón y no atajo |
+| Sessions > Undo the Last Session… | — | Sin atajo a propósito: deshacer cuatro mil archivos no es ⌘Z |
+| Sessions > Session History… | — | Abre el historial |
+| Sessions > Clean Up Undone Sessions… | — | Borra journals de sesiones ya devueltas, con confirmación |
 
-**Los pendientes viven en los issues del repo, no aquí.** Este documento describe lo que la app *hace*; mantener
-además una lista de lo que no hace garantiza que una de las dos quede vieja. Cada issue carga su propio *por qué*,
-que es la parte que cuesta reconstruir.
+El menú Group siempre está en la barra; fuera de la revisión exacta todo sale gris salvo Show in Finder.
+
+### 1.3 Biblioteca
+
+| Qué | Cómo se llega | Qué hace |
+|---|---|---|
+| Detector | segmentado Files / Folders / Images | Cambia columnas y fuente de la tabla |
+| New Scan | botón (+) | Abre el panel de escaneo; uno a la vez |
+| Review | botón, o doble clic en la fila | Abre el visor del detector; uno por escaneo, y si ya está abierto lo trae al frente |
+| Refresh | botón | Relee el disco |
+| Ordenar | Newest / Oldest / Most groups / Most reclaimable | **Solo pestaña Files** |
+| Filtrar | por carpeta o scan id, sin distinguir mayúsculas ni acentos | **Solo pestaña Files** |
+| Menú contextual | clic derecho | Review, Open Scanned Folder, Show Scan File in Finder, Copy Scan ID, Delete This Scan… — **solo funciona en Files** |
+| Delete This Scan… | menú contextual | Borra el documento del escaneo y sus decisiones, no los archivos |
+| Columnas Files | — | carpeta, fecha, grupos, archivos, recuperable (`≤ X` cuando es cota), estado (Reviewed / Relative paths) |
+| Columnas Folders | — | carpeta, fecha, umbral %, pares, carpetas, estado |
+| Columnas Images | — | carpeta, fecha, pares de imagen, pares de video, archivos, umbral en bits, estado |
+| Se actualiza sola | — | Vigila `scans/`, `decisions/`, `folder-scans/` y `similar-scans/`: un escaneo del CLI aparece sin tocar nada |
+| Origen | — | Lista escaneos de la app y del CLI por igual |
+
+### 1.4 Nuevo escaneo
+
+Opciones, con su default. Ninguna se recuerda entre aperturas salvo las carpetas recientes:
+
+| Opción | Default | Aplica a |
+|---|---|---|
+| Look for: Identical files / Similar folders / Similar images | Identical files | — |
+| Umbral de carpetas: 95 / 90 / 80 / 70 % | **90 %** | carpetas |
+| Umbral de imágenes: 0 / 2 / 5 / 10 bits | **5 bits** | parecidos |
+| Include videos (slower) | sí | parecidos |
+| Recent… | hasta 10 carpetas que todavía existen | todos |
+| Choose Folder… | sin carpeta; Start gris hasta elegir | todos |
+| Include hidden files | no | todos |
+| Look inside packages | no | todos |
+| Use the hash cache | sí | exactos y carpetas — **en parecidos no tiene efecto** |
+| Ignore files smaller than | 1 B (el default del CLI) | todos |
+
+Fijo y sin control en pantalla: umbral de video 0.70; **no cruza volúmenes**; se excluyen la Papelera, las
+cuarentenas y `~/Library` (salvo que la raíz esté dentro); extensiones de parecidos `jpg jpeg png webp gif` y
+`mp4 mov avi mkv m4v`.
+
+Durante el escaneo: fase (Listing files, Comparing candidates, Reading contents, Grouping, **Saving**, Done),
+contadores a 10 Hz y la ruta actual. Cancelar no deja documento; cerrar la ventana también cancela.
+
+Al terminar:
+
+| Detector | Qué pasa | Aviso de carpetas que no se pudieron leer |
+|---|---|---|
+| Exactos | Selecciona el escaneo nuevo, sin cambiar de pestaña | **sí**, con conteo y botón a Ajustes |
+| Carpetas | Cambia a la pestaña Folders, sin seleccionar | **no** — el dato existe y nadie lo muestra |
+| Parecidos | Cambia a Images, sin seleccionar; avisa imágenes ilegibles | **no** — igual |
+
+### 1.5 Revisión exacta
+
+| Qué | Cómo se llega | Qué hace |
+|---|---|---|
+| Lista de grupos | barra lateral, selección múltiple | Estado de cada grupo (✓ decidido / ✗ saltado / → actual), tamaño y conteo |
+| Encabezado | — | Carpeta común y "Group i of N — frees X / up to X" |
+| Aviso | — | Por prioridad: ya no es duplicado, cambió desde el escaneo, nada conservado, almacenamiento compartido, nada decidido aún, último grupo |
+| Tabla de archivos | — | Keep (casilla), File (truncado al medio) y Note (gone, changed, unreadable, same storage as the keeper, looks like a copy) |
+| Conservar / descartar | espacio, o clic en la casilla | Pita si dejaría el grupo sin nada |
+| Confirmar | botón Confirm and Next, ⏎ con la lista enfocada, o ⌘↩ | Graba y avanza |
+| Vista previa | — | Miniatura, nombre, ruta completa, tamaño y fecha |
+| Filtros | barra lateral | Tamaño mínimo, "Not decided yet", "Still on disk" |
+| Check the disk | botón (Cancel mientras corre) | Hace `stat` de todo el escaneo en segundo plano y guarda el resultado con su fecha |
+| Decisiones importadas | al abrir, si un archivo del CLI decide todos los grupos | Keep Them / Start Over; Start Over se puede deshacer |
+| Pie | — | Simulate and Apply…, y "N decididos · N saltados · N sin mirar · X se liberarían" |
+| Guardar | ⌘S, al simular, o al cerrar | Escribe **solo** los grupos decididos |
+
+La sugerencia del heurístico sale preseleccionada: gana el archivo **más profundo** que no parece copia.
+Confirmar es lo que la vuelve decisión.
+
+### 1.6 Visor de carpetas
+
+| Qué | Cómo se llega | Qué hace |
+|---|---|---|
+| Tabla de pares | — | % parecido, carpeta, contra cuál, archivos iguales, diferencias, decisión |
+| Encabezado | — | "N % alike — N files identical — N against N files" |
+| Metadata | ⌥⌘I | Nombre, conteo y fecha por lado. El tamaño no está: una carpeta no tiene uno propio |
+| Detalle | — | Solo en A, solo en B, mismo nombre con otro contenido |
+| Aviso de pérdida | — | "Mover la segunda perdería N archivos que la primera no tiene", mientras eliges |
+| Decidir | botones Keep the first / Keep the second / Keep both / Skip | Graba, guarda y avanza |
+| Simular | botón Simulate and apply… | Abre la hoja de aplicar |
+| Abrir carpetas | doble clic (A), menú contextual (A o B), ⌘R (las dos) | Finder |
+
+### 1.7 Visor de parecidos
+
+| Qué | Cómo se llega | Qué hace |
+|---|---|---|
+| Filtros | arriba | % mínimo (any / 90 / 95 / identical), tipo (imágenes, videos, ambos), "Not decided yet" |
+| Accept the N shown | botón | Acepta la sugerencia de **exactamente** lo que está en pantalla, diciendo antes archivos y bytes |
+| Tabla | — | % parecido, tipo, decisión, archivo, contra cuál |
+| Encabezado | — | Imagen: bits que difieren de 64. Video: % de cuadros que coinciden, y "judged on N of 8 frames" si son menos |
+| Dos lados | — | Miniatura, nombre, ruta, metadata (tamaño, fecha, resolución, codec, duración) y "this file is no longer there" |
+| Sugerencia | — | "Suggested: … — razón" (tráiler, codec, bitrate, profundidad); el botón sugerido es el default |
+| Decidir | botones Keep the first / Keep the second / Keep both / Discard both (rojo) / Skip | Graba, guarda y avanza |
+| Al cerrar | — | Avisa contradicciones entre pares y claves `a\|\|b` que no se pueden volver a partir |
+
+### 1.8 Simular y aplicar
+
+Una hoja por detector, con la misma forma:
+
+| | Exactos | Carpetas | Parecidos |
+|---|---|---|---|
+| Qué dice la simulación | archivos y **bytes** que se liberarían | carpetas que se moverían | archivos y de cuántos pares |
+| Qué verifica antes de mover | re-hash contra el digest del escaneo | **contención**: cada archivo con gemelo byte-idéntico en la misma ruta relativa | **re-puntúa** el par contra el umbral |
+| Qué excluye y nombra | — | pares anidados colapsados, contradicciones | contradicciones |
+| Durante | Verifying / Moving N of N, Stop | igual, más archivos revisados | igual |
+| Después | movidos, fallas, rehúsas, aviso de cuarentena | igual, sin aviso de cuarentena | igual, sin aviso de cuarentena |
+| Deshacer desde la hoja | Undo This Session | igual | igual |
+
+En los tres: aplicar exige una simulación **vigente** (editar una decisión la invalida); va a la Papelera real,
+con cuarentena local si el volumen no tiene Papelera (montajes de red); el journal se escribe en lotes de 32;
+veinte fallas seguidas detienen; cancelar devuelve reporte de lo que sí se movió.
+
+### 1.9 Deshacer, historial y limpieza
+
+| Qué | Cómo se llega | Qué hace |
+|---|---|---|
+| Undo the Last Session… | menú Sessions | Restaura la sesión con id más alto — **aunque ya esté devuelta** |
+| Session History… | menú Sessions | Una fila por apply: fecha, archivos, tamaño, estado (moved / all put back / N of M put back), escaneo |
+| Undo This Session… | botón en el historial | Deshace **cualquier** sesión, no solo la última |
+| Clean Up… / Clean Up Undone Sessions… | botón o menú | Borra journals cuyos archivos ya volvieron **todos**; nunca uno ilegible o vacío |
+
+Deshacer nunca sobrescribe: una ruta ocupada por contenido idéntico cuenta como ya devuelta, y cualquier otra
+cosa se bloquea y se dice por qué.
+
+### 1.10 Lo que la app recuerda
+
+| Qué | Dónde |
+|---|---|
+| Mostrar metadata (única preferencia) | `UserDefaults`, encendida por default |
+| Carpetas recientes (hasta 10) | `~/Library/Application Support/com.rogalvil.duplicate/` |
+| Tamaño de ventana | biblioteca, revisión exacta y carpetas; **el visor de parecidos no** |
+| Resultado del chequeo de disco | `~/Library/Caches`, por clave de grupo |
+| Cachés de digests y de hashes perceptuales | `~/Library/Caches` |
+| Escaneos, decisiones y journals | `~/.local/state/rav/`, compartido con el CLI |
+
+---
+
+## 2. Los tres visores, lado a lado
+
+Hacen lo mismo —revisar, decidir, simular— con controles distintos. Esta tabla es la que conviene leer antes de
+tocar cualquiera de los tres.
+
+| Capacidad | Exacto | Carpetas | Parecidos |
+|---|---|---|---|
+| Cómo se decide | casillas + Confirm (menú y atajos) | botones | botones |
+| Filtros | tamaño, sin decidir, sigue en disco | **ninguno** | %, tipo, sin decidir |
+| Aceptar en lote | menú, sobre grupos seleccionados | **no** | botón, sobre lo visible |
+| ⌘Z | todo | todo | **solo Skip y el lote** |
+| Saltar | solo ⇧⌘K | botón | botón |
+| Borrar la decisión | menú | **no** | **no** |
+| Anterior / siguiente | ⌘[ ⌘] | flechas de la tabla | flechas de la tabla |
+| ⏎ | confirma | nada | acepta la sugerencia |
+| Doble clic | revela el archivo | abre A | revela **solo A** (⌘R revela los dos) |
+| Guardar | ⌘S, al simular, al cerrar; **sin decisiones no escribe**, así que el archivo anterior sobrevive | automático, escribe vacío a propósito, **una falla no se ve** | automático, la falla sale en el pie |
+| Agrupa el deshacer a mano | **no** (por evento) | sí | sí |
+| Avisa decisiones importadas del CLI | sí | no | **no** — y 17 de 18 `similar-decisions` reales vienen completas del CLI |
+| Pregunta al cerrar | sí | no | no (sí avisa contradicciones) |
+| Simular | botón y ⇧⌘D | botón | botón |
+| ⌘Q protegido durante el apply | sí | **no** | **no** |
+| Nota de cuarentena tras el apply | sí | **no** | **no** |
+| Biblioteca: ordenar, filtrar, menú contextual, badge "Reviewed" | sí | **no** | **no** |
+| Aviso de carpetas sin permiso al escanear | sí | **no** | **no** |
+| "Terminado" solo después de guardar | sí | **no** | **no** |
+
+Casi todos los **no** de esta tabla no son decisiones: son la misma pieza escrita tres veces, arreglada en una.
+La sección 5 cuenta cuántas líneas cuesta eso.
+
+---
+
+## 3. Cómo funciona por dentro
+
+El detalle técnico de lo de arriba, con lo que se midió para decidirlo. El *por qué* largo vive en
+[`ARCHITECTURE.md`](ARCHITECTURE.md); las trampas de cada área, en `.claude/rules/`.
+
+### 3.1 Duplicados exactos
+
+| Mecanismo | Detalle | Dónde (`Sources/DuplicateCore/`) |
+|---|---|---|
+| Recorrido con reglas de skip | Oculto, paquete y cruce de volumen configurables; **no cruza puntos de montaje por default**, divergencia deliberada de `os.walk` | `Walk/DirectoryWalker.swift`, `Walk/ScanPolicy.swift` |
+| Exclusiones por identidad | Papelera, las tres cuarentenas del CLI y `~/Library`, incluso alcanzadas por symlink o firmlink | `Walk/ExclusionSet.swift` |
+| Directorios inaccesibles | Se cuentan; nunca se lee "no encontré duplicados" cuando fue "no pude entrar" | `Walk/DirectoryWalker.swift` |
+| Agrupar por tamaño y luego digest | Ordenar y detectar runs, sin allocation por bucket | `Scan/DuplicateFinder.swift` |
+| Etapa de prefijo | Sonda cabeza + cola **solo arriba de 8 MiB**. Sobre 80 archivos de 64 MiB del mismo tamaño: 0.03 s contra 1.75 s | `Hash/ContentHasher.swift` |
+| `F_NOCACHE` arriba de 1 MiB | 4× menos page cache al mismo tiempo de reloj | `Hash/ChunkedReader.swift` |
+| Concurrencia por volumen | Interno `min(max(cpus-2,2),8)`, externo y red 2. La curva medida es plana de c=1 a c=16 | `Runtime/IOConcurrencyPolicy.swift` |
+| Clases de almacenamiento | Hardlinks y clones APFS cuentan como **ya deduplicado**. El conjunto de acción nunca es `files[1:]` | `Model/StoragePartition.swift` |
+| Cancelación | Por lote del recorrido, por archivo y entre chunks de 1 MiB | `Scan/DuplicateFinder.swift`, `Hash/ContentHasher.swift` |
+| Caché de digests | Clave `(volumen, inodo, tamaño, mtime, generation)`, CRC, `flock`, reparación de cola truncada y poda de filas cuyo archivo ya no existe | `Hash/HashCache.swift` |
+| Fases honestas | `.finished` se marca después de guardar, no antes | `Scan/ScanSession.swift` |
+
+### 3.2 Carpetas
+
+| Mecanismo | Detalle | Dónde |
+|---|---|---|
+| Un solo hasheo del árbol | El CLI hashea cada archivo una vez **por nivel**; aquí es una pasada | `Folders/FolderSimilarity.swift` |
+| Intervalos de Euler | Ancestro en O(1) | `Folders/DirectoryTree.swift` |
+| Candidatos por `(digest, basename)` | Con prueba de completitud | `Folders/FolderSimilarity.swift` |
+| Poda por tamaño | A t=0.9 descarta todo par que difiera más de 22% en conteo | `Folders/FolderSimilarity.swift` |
+| Orientación por bytes | `folder_a` es la ruta menor: el CLI borra `folder_b` | `Folders/FolderSimilarity.swift` |
+| Clase patológica truncada | 10,000 archivos idénticos con el mismo nombre se cortan y se nombran | `Folders/FolderSimilarity.swift` |
+
+### 3.3 Parecidos: imágenes
+
+| Mecanismo | Detalle | Dónde |
+|---|---|---|
+| pHash de 64 bits | Grises estilo Pillow (redondeado) → Lanczos-3 → `UInt8` → DCT de Accelerate → 8×8 → mediana | `Media/PerceptualHash.swift` y vecinos |
+| Decode a 256 px | El barrido de 128 a 4096 no mueve los pares encontrados | `Media/ImageHasher.swift` |
+| Orientación EXIF aplicada | Divergencia deliberada contra Pillow | `Media/ImageHasher.swift` |
+| Índice LSH | `T+1` bandas por palomar; hashes idénticos colapsados en clases | `Media/MultiIndexLSH.swift` |
+| Caché perceptual | Salt derivada de los parámetros del pipeline, CRC, `flock`, poda. 177 s → 0.5 s | `Media/PerceptualCache.swift` |
+
+Contra `imagehash`, sobre 2,779 fotos reales: 90.9% de hashes idénticos, peor caso 4 bits, y ningún par que una
+implementación llame casi idéntico y la otra ajeno. Lo vuelve a medir el modo `phash-differential`.
+
+### 3.4 Parecidos: video
+
+| Mecanismo | Detalle | Dónde |
+|---|---|---|
+| Ocho cuadros | `interval = max(dur/(n+1), 0.1)`; aritmética del CLI preservada porque el umbral 0.70 se calibró contra ella | `Media/VideoFrameSampler.swift` |
+| Sin `ffmpeg` | `AVAssetImageGenerator` con tolerancia: ~0.62 s por video de 10 MB a 1 GB | `Media/VideoHasher.swift` |
+| Similitud asimétrica preservada | Con la orientación fijada por bytes | `Media/VideoSimilarity.swift` |
+| Comparación por pares, sin LSH | Popcounts sobre listas de cuadros | `Media/SimilarScanSession.swift` |
+
+### 3.5 Acción destructiva
+
+| Mecanismo | Detalle |
+|---|---|
+| Papelera real | `trashItem`, que da el "Sacar del basurero" de Finder. Medido en APFS, FAT32 y los externos |
+| Cuarentena como fallback | Probada en un montaje `smbfs` real; no rescata un volumen de solo lectura |
+| Verificar antes de actuar | Exactos re-hashean, parecidos re-puntúan, carpetas exigen contención |
+| Compuerta de simulación | Huella FNV-1a del plan; editar una decisión invalida la aprobación |
+| Journal JSON Lines | Lotes de 32; un `undone_at` se agrega, nunca reescribe |
+| Cancelar | Devuelve reporte y hace el flush; una cancelación nunca se reporta como archivo ilegible |
+
+### 3.6 Interop con el CLI
+
+| Mecanismo | Detalle |
+|---|---|
+| JSON byte-idéntico | Encoder a mano: `\uXXXX`, `1.0` para doubles enteros, indent 2, orden de inserción |
+| Seis formatos | `scans`, `decisions`, `folder-scans`, `folder-decisions`, `similar-scans`, `similar-decisions` — tres formas distintas de documento de decisiones |
+| Orden por bytes UTF-8 | `PathOrder`: NFC y NFD son rutas distintas |
+| Escrituras atómicas | Mejora sobre el `write_text` del CLI, sin cambio de formato |
+
+Detalle completo en [`INTEROP.md`](INTEROP.md).
+
+---
+
+## 4. Qué no hace
+
+### 4.1 A propósito
+
+Decisiones tomadas con evidencia. No son pendientes; están aquí porque cada una se volvió a discutir al menos
+una vez.
+
+| No hace | Por qué |
+|---|---|
+| Borrar definitivamente | El CLI tiene `delete`, `folders-delete` y `similar-delete`. Aquí todo va a la Papelera y se journaliza, porque deshacer es la razón de la app |
+| Mover sin decisiones | `rav duplicate move` y `folders-move` actúan sobre todo lo no revisado; aquí un grupo sin decidir no se toca |
+| Cruzar volúmenes por default | Divergencia deliberada de `os.walk` |
+| Escanear `~/Library` | Son cachés donde quitar un "duplicado" rompe una app. Excepción: la raíz elegida está dentro |
+| Pedir Full Disk Access | No hay API para pedirlo, y una app que lo pide para ordenar Descargas parece malware |
+| Sandbox | `~/.local/state/rav/` está fuera del contenedor, y compartir estado con el CLI es el punto |
+| Bookmarks security-scoped | Sin sandbox, un permiso de TCC persiste por bundle id |
+| Cortar la cancelación dentro de un chunk | El límite es una lectura de 1 MiB |
+| `folder-decisions/` contra un archivo real | El CLI tiene el slot y nunca escribió uno; el round-trip se prueba contra uno sintetizado |
+| Usar `PerceptualHash(hex:)` en producción | Existe para que el diferencial contra Python sea depurable lado a lado |
+
+### 4.2 Lo que el CLI tiene y la app no
+
+| Subcomando | En la app |
+|---|---|
+| `report` (texto o JSON en la terminal) | No hay exportar. La biblioteca y los visores lo cubren en pantalla |
+| `open`, `reveal` | Quick Look ⌘Y y Show in Finder ⌘R |
+| `interactive`, `review` | Los tres visores |
+| `delete`, `move`, `folders-delete`, `folders-move`, `similar-delete`, `similar-move` | Ausentes a propósito (4.1) |
+
+### 4.3 Pendiente
+
+**Los pendientes viven en los issues**, no aquí; esta tabla es el índice que los ordena. Todo lo de abajo se
+confirmó leyendo el código.
+
+| Prioridad | Qué |
+|---|---|
+| p1 | ⌘Q no protege el apply de carpetas ni el de parecidos: salir a media corrida puede dejar hasta 31 archivos en la Papelera sin entrada en el journal |
+| p2 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
+| p2 | En el visor de parecidos ⌘Z no deshace una decisión, y deshacer un Skip borra las decisiones tomadas después |
+| p2 | En la revisión exacta con filtro, Previous Group se atasca y confirmar puede saltar al primer grupo visible |
+| p2 | La biblioteca deja de actualizarse sola si se cierra y se reabre con otra ventana abierta |
+| p2 | El menú contextual de la biblioteca no hace nada en Folders ni en Images: no hay forma de borrar esos escaneos desde la app |
+| p2 | Quitar todas las decisiones de una revisión exacta no reescribe el archivo: el anterior sobrevive, y el CLI o una reapertura actúan sobre decisiones retiradas |
+| p2 | En carpetas, una falla al guardar decisiones se traga con `try?` |
+| p2 | Si guardar un escaneo falla, el resultado en memoria se pierde, aunque el comentario dice que se puede revisar |
+| p3 | Carpetas y parecidos marcan "Terminado" antes de guardar: el arreglo de #131 solo llegó al exacto |
+| p3 | El aviso de decisiones importadas y la nota de cuarentena solo existen en el exacto |
+| p3 | Undo the Last Session elige la sesión más nueva aunque ya esté devuelta |
+| p3 | Lógica de Core que solo prueba el selftest, contra la regla de que todo Core lleva su test: la exclusión de `~/Library`, la fase `.grouping`, `loadAndRepair`, las etapas del apply de carpetas, la cancelación a media corrida |
+| p3 | Use the hash cache no tiene efecto en parecidos |
+| p3 | Los tamaños del filtro salen como "97.7 KB / 976.6 KB": umbrales decimales impresos en unidades binarias |
+| p3 | Textos viejos: el pie de carpetas dice que solo el CLI puede actuar, y el estado vacío de la biblioteca manda a `rav duplicate scan` |
+| p4 | Memoria: el objetivo de < 400 MB extrapola a ~570 MB a 800,000 archivos, y la corrida sobre `~` (1.3 millones) no registró el pico |
+| p4 | `ScanStore.summaries()` decodifica cada grupo de cada escaneo para sacar conteos |
+| a decidir | El botón del aviso de permisos abre el panel de **Full Disk Access**, contra la decisión de no pedirlo (4.1) |
 
 ```bash
 gh issue list --label priority:p1     # cerca de los datos del usuario
 gh issue list --label bloqueado       # y por qué está bloqueado
 ```
 
-Y lo que ningún issue puede cerrar solo: [`docs/PASADA-A-MANO.md`](PASADA-A-MANO.md), el guion de la
-verificación a mano, con un árbol de prueba de respuestas medidas.
+Lo que ningún issue cierra solo: [`PASADA-A-MANO.md`](PASADA-A-MANO.md), el guion de verificación a mano.
 
-| Nivel | Qué significa | Abiertos |
+---
+
+## 5. Qué sobra
+
+Resultado de una auditoría del código completo, con cada hallazgo confirmado por grep. **Nada de esto se ha
+quitado todavía**: es la lista para decidir, con una recomendación en cada caso.
+
+### 5.1 La duplicación entre detectores, en una línea
+
+Los tres detectores repiten la misma tubería —sesión de escaneo, estado de revisión, ventana, hoja de aplicar,
+runner— y en cada capa la copia **ya divergió**: la tabla de la sección 2 son esas divergencias vistas desde
+afuera, y una está en el camino destructivo (⌘Q). El costo no es el tamaño; es que un arreglo hecho en una copia
+no llega a las otras dos, como pasó con #131.
+
+Lo que **sí** es una sola pieza y conviene que siga así: el deshacer (`UndoPlanner`, `UndoCoordinator`,
+`MoveJournal`), las frases de falla y de progreso, Quick Look, los contadores y el heurístico de profundidad.
+
+### 5.2 Implementaciones paralelas
+
+| Familia | Dónde | Lo repetido | Lo que difiere y es forzado | Ahorro estimado |
+|---|---|---|---|---|
+| Runners de aplicar | `Action/ApplyRunner`, `FolderApplyRunner`, `SimilarApplyRunner` (719 líneas) | flush, lote de 32, corte a las 20 fallas, id de sesión, tres structs de reporte | la verificación: re-hash, contención, re-puntuación | 180–250 líneas |
+| Hojas de aplicar | `ApplySheetController`, `FolderApplySheetController`, `SimilarApplySheetController` (1,237) | carpetas contra parecidos difieren en 78 líneas normalizadas | el titular y la lista | ~600 |
+| Estados de revisión | `ExactReviewState`, `SimilarReviewState`, `FolderReviewState` | tri-estado, `tally` idéntico ×3, dos `ConfirmOutcome` homónimos, guardado y rehidratación | el tipo de la decisión, el cursor, las sugerencias | 80–100 |
+| Ventanas de revisión | las tres | `mutate`, simular→hoja, la extensión de Quick Look **idéntica** ×3 | el contenido | 250–300 |
+| Paneles de vista previa | `PreviewPane` contra `SimilarSidePane` | mismos campos, mismo formateador de fecha, dos chequeos de presencia distintos | — | ~120 |
+| Sesiones de escaneo | `ScanSession`, `FolderScanSession`, `SimilarScanSession` | bucle de identificador ×3 (mientras `ScanIdentifier.nextAvailable` solo lo usan tests), cola de guardado ×3 | qué se hashea | ~60 |
+| Despacho del panel de escaneo | `ScanPanelController` | tres `Task` y tres `finish*` | — | ~60 |
+| Cachés | `HashCache` contra `PerceptualCache` | ~160 líneas: carga, reparación, poda, compactación, `flock` | el formato de fila en disco | 150–200 |
+| `ScanStore` | seis pares save/load | idénticos salvo slot y codec | — | ~70 |
+| Enums de detector | `ScanKind` (solo tests), `ScanPanelController.Detector`, `LibraryWindowController.LibraryKind` | tres nombres para lo mismo | — | ~30 |
+
+**No es redundancia** y se queda: los seis codecs JSON. Las tres formas de documento de decisiones, y que un
+umbral sea entero en un formato y float en otro, los dicta el CLI.
+
+### 5.3 Código que producción no usa
+
+**Muerto** — sin referencias fuera de su propia declaración o de los tests de sí mismo. Unas 100 líneas:
+`ScanPhase.cancelled` (nunca se asigna), `ScanKind`, `QuickLookCoordinator.present(paths:)` y sus dos accesores,
+`HashCacheKey.invalid`, `JSONWriter.line`, `StateDirectory.init(environment:home:)`,
+`DirectoryTree.relativePath(ofFile:under:)`, `MediaAdvice.Side.other`, `FolderReviewState.currentPair`,
+`Log.scan`, `Log.action`, `AccessProbe.unreadable(among:)`, los tres campos de `DescriptorLimit` que se escriben
+y no se leen, y ~30 hooks de selftest que nadie llama.
+
+**Inalcanzable desde la UI:**
+
+| Pieza | Qué pasa |
+|---|---|
+| Menú contextual de la biblioteca en Folders e Images | Lee la lista de escaneos exactos, vacía en esas pestañas: no hace nada, en silencio |
+| `clearDecision` de carpetas y de parecidos | En Core, ningún visor lo llama |
+| `RecentRoots.forget`, `PresenceCache.forget` | No hay forma de quitar una carpeta reciente, y borrar un escaneo no borra su chequeo de disco |
+| `previousGroup`, `retreat`, `actionableCount`, `confirmEffective` | Las ventanas navegan por su cuenta |
+| `ReviewFlow` completo | Es la máquina del menú del CLI, cuatro pasos por ocho acciones; producción usa cuatro métodos. El invariante real —"la simulación sigue vigente"— cabe en ~20 líneas |
+| Protocolo `DirectoryEnumerating` | Un solo conforme y ningún fake: era la costura para `AttrListWalker`, que se rechazó con medición |
+
+**Calculado y nunca mostrado** — la regla del proyecto dice que esto es peor que código muerto, porque tiene
+test y parece una capacidad. Se cablea o se borra:
+
+| Dato | Lo calcula | Recomendación |
 |---|---|---|
-| `priority:p1` | El usuario lo nota, o hay datos en juego | *(vacío)* |
-| `priority:p2` | Deuda de corrección que hoy no muerde | lo que solo una pantalla puede verificar (#81, bloqueado) |
-| `priority:p3` | Funcionalidad agregable | *(vacío)* |
-| `priority:p4` | Medición pendiente | *(vacío)* |
-| — | Las decisiones tomadas con evidencia viven **en este documento**, no en un issue: uno abierto para siempre se lee como trabajo sin hacer | ver abajo |
+| Directorios sin permiso | escaneo de carpetas y de parecidos | **cablear** (pendiente p2) |
+| `hasDecisions` de carpetas y parecidos | la biblioteca | cablear: es el badge "Reviewed" que el exacto sí tiene |
+| `HashingError.isSkippable` | el lector de chunks | borrar o aplicar: `DuplicateFinder` trata todo error como ilegible |
+| Conteos de caché, clases, pares examinados, `scannedKinds`, `videoPairsCompared` | los escaneos | borrar, o mostrarlos en el resumen del escaneo |
+| `CacheLiveness.measure` y `Report` | — | moverlo al selftest: es un diagnóstico, no producción |
 
-**Lo que ya se cerró desde que existe esta sección**: el historial de sesiones (#72), Quick Look de tamaño
-completo y Mostrar en Finder en los tres visores, los fallos de apply localizados, la poda de journals de sesiones
-deshechas, la metadata bajo la vista previa, la cancelación dentro de un archivo grande, y los cuatro reportadores
-silenciosos que este documento encontró en su primera pasada.
+**Solo para tests, y está bien**: `PerceptualHash(hex:)`, `CosineTransform.basis`, `Lanczos3.sum` (oráculos
+contra Python), `SyntheticImage` y `SyntheticMovie` (fixtures), y una veintena de accesores de introspección.
 
-## Decisiones tomadas, para no volver a derivar la objeción
+### 5.4 Muy especializado
 
-Ninguna es un pendiente. Están aquí porque cada una se volvió a discutir al menos una vez.
+Funciones que atienden un caso medido como raro o inexistente. Ninguna está mal; la pregunta es si su superficie
+vale lo que cuesta.
 
-- **Dos ramas del disposer no son alcanzables con un `FileManager` real**, y están marcadas en el código: que
-  `trashItem` **no lance y tampoco reporte destino**, y el default de `Application Support` cuando
-  `urls(for:in:)` devuelve vacío. Las dos se conservan porque su alternativa es prometer algo que el journal no
-  puede cumplir. `Disposer.swift` está en 93% y las 10 líneas que faltan son estas.
-- **`folder-decisions/` no tiene lector externo.** El CLI tiene el slot y nunca escribió uno, así que su
-  round-trip se prueba contra un documento sintetizado. Nada que arreglar; algo que recordar.
-- **`PerceptualHash(hex:)` y `hexString` solo los usan el diferencial y los tests.** Ningún hash perceptual
-  aparece en el JSON compartido, así que producción no los necesita — existen porque hacen depurable lado a lado
-  contra Python un desacuerdo del pipeline, que es justo lo que hace el modo `phash-differential`.
-- **La cancelación corta entre chunks de 1 MiB, no dentro de uno.** Es el límite, no un problema: bajarlo solo
-  tiene sentido si alguien mide un caso donde una lectura de 1 MiB tarda.
-- **Los bookmarks security-scoped del plan no hacen falta.** La app no está en sandbox, así que un permiso de
-  TCC concedido persiste por bundle id y los volúmenes externos no piden ninguno. Su ausencia no es deuda.
-- **No se pide Full Disk Access.** No hay API para pedirlo —solo un toggle manual—, los duplicados dentro de
-  `~/Library` son abrumadoramente cachés donde quitar uno rompe una app, y una app que pide Acceso Total al
-  Disco para ordenar Descargas es indistinguible de malware para alguien cuidadoso.
-- **No se sandboxea.** `~/.local/state/rav/` está fuera del contenedor, y el estado compartido con el CLI es el
-  punto de la app.
+| Función | Tamaño | Uso medido | Recomendación |
+|---|---|---|---|
+| Aviso de claves `a\|\|b` ambiguas al cerrar | ~50 líneas + textos, y una segunda implementación en el codec | **0 rutas reales**; las dos que existen son el fixture del árbol de demo. Carpetas usa la misma clave y no se revisa | conservar una implementación, quitar la del codec, y aplicarla también a carpetas |
+| "Discard both" (`keep_none`) | pequeño | 1 de 944 decisiones | conservar: el formato lo trae y el botón es barato |
+| Discard the Whole Group (exacto) | ~40 | 0 de 12,842 entradas en 59 archivos | **candidato a quitar** del menú; el codec debe seguir leyéndolo |
+| Cuarentena de respaldo | ~250 | 0 de 6 entradas reales; solo SMB | conservar: es seguridad, no uso |
+| Poda de la caché perceptual | ~25 | 0% de desperdicio medido | conservar: comparte el mecanismo con la de digests |
+| Historial de sesiones y limpieza | ~490 | 5 journals, 6 archivos movidos | conservar: el uso es bajo porque la app es nueva |
+| Chequeo de disco con foto en Caches | ~380 | justificado: 0.67% de rutas vivas en escaneos viejos | conservar; llevarlo a los otros dos visores o no, decidir |
+| `.mkv` y `.avi` en las extensiones de video | 1 línea | 0 en el corpus; AVFoundation no abre `.mkv` | **quitar `.mkv`**: solo infla el conteo de ilegibles |
+| Mostrar u ocultar metadata (⌥⌘I) | ~80 | sin medir | conservar |
+| Modos de diagnóstico del selftest (`phash-differential`, `video-timing`, `corpus`, `cache-liveness`, `volumes`, `realroot`) | ~630 | son benchmarks y oráculos, no regresiones | separarlos de los modos que CI corre |
 
-## Deuda conocida
+### 5.5 El selftest
 
-- **Sin poda de entradas de archivos borrados** en las dos cachés. Crecen una fila por cada (archivo,
-  versión) visto. Medido: 532 KB tras 119 escaneos, en un directorio que macOS puede purgar. Podar por
-  existencia se rechaza con número: el corpus vive en un disco externo y desmontado *todas* sus entradas se
-  verían muertas.
-- **Sin compactación ni poda del journal.** Un archivo por sesión, para siempre, en el directorio
-  compartido. Podarlo destruye la capacidad de deshacer, así que la regla tendría que ser explícita.
-- **Barrido de concurrencia en frío sin medir** (`sudo purge`, necesita root). El barrido caliente no tiene
-  codo hasta c=16, pero mide SHA-256, no disco, así que la política enviada **no se cambió**.
-- **`ContentHasher.fullDigest` corta entre chunks, no dentro de uno.** El límite es una lectura de 1 MiB.
-- **Los fallos de un apply se renderizan interpolando el enum**, no localizados.
+44 modos y 6,690 líneas. Tres problemas distintos:
+
+- **Modos que ya cubren los tests unitarios**: `state-dir`, `gate`, `keeper`, `format`, `trash`, `review` y
+  media `storage`. ~700 líneas.
+- **Lógica de Core que solo prueba el selftest** —y por lo tanto queda fuera del piso de cobertura—: la exclusión
+  de `~/Library`, la fase `.grouping`, `loadAndRepair`, las etapas del apply de carpetas, la cancelación a media
+  corrida. Va a `Tests/` (pendiente p3).
+- **Copia y pega**: seis round-trips con el mismo esqueleto (~357 líneas), la cadena Papelera→journal cinco veces,
+  y el contrato de visor tres veces. Y ningún modo aplica ni deshace a través de las hojas de carpetas o de
+  parecidos: sus hooks existen y nadie los llama.
+
+### 5.6 Por dónde empezar
+
+En orden, y con el riesgo dicho:
+
+1. **Barrido de lo muerto (5.3).** ~500 líneas, riesgo nulo, y quita afirmaciones falsas sobre capacidades que
+   no existen.
+2. **Los pendientes p1 y p2 de la sección 4.3, por separado**, antes de cualquier consolidación: son bugs con
+   nombre, y arreglarlos dentro de un refactor los esconde.
+3. **Selftest** (5.5): borrar lo cubierto, mover Core a `Tests/`, un round-trip genérico. ~1,700–2,200 líneas,
+   riesgo bajo para producción, y la cobertura sube.
+4. **Pipeline de escaneo y biblioteca**: una cola de sesión común, un despacho que muestre `inaccessible` en los
+   tres, `ScanStore` genérico, `ScanKind` adoptado, biblioteca igual en las tres pestañas. ~250–300 líneas, riesgo
+   bajo-medio, y cierra tres filas de la sección 2.
+5. **Revisión**: estado y soporte de ventana compartidos, un solo panel de vista previa. ~450–500 líneas, riesgo
+   medio: obliga a elegir **una** política de guardado, y esa decide sobre qué actúa el CLI.
+6. **Familia de aplicar**: un runner y una hoja con un adaptador por detector. ~850 líneas y el valor más alto,
+   porque es donde la deriva ya tocó seguridad. Riesgo **alto**: es el camino destructivo. La red existe
+   (~1,600 líneas de tests de apply), y el orden del journal, el flush al cancelar, el lote de 32 y el corte a
+   las 20 fallas tienen que salir idénticos.
+7. **Cachés**: un `AppendOnlyCache<Row>` genérico. ~150–200 líneas, riesgo bajo si el formato en disco sale
+   byte-idéntico.
+
+---
+
+## Cómo mantener este mapa
+
+- **Cada PR que agrega, quita o cambia algo visible edita la sección 1 o 2.** Si cambia cómo funciona por
+  dentro, la 3.
+- **Un pendiente nuevo es un issue**, y una línea en 4.3 en el mismo cambio.
+- **Los números que cambian en cada PR se piden al código**, no se copian aquí:
+
+```bash
+make coverage                          # tests y cobertura sobre DuplicateCore
+grep -rE '^\s*@Test' Tests | wc -l     # cuántos tests
+make selftest-all                      # todos los modos, y que pasen
+```

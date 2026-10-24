@@ -89,7 +89,7 @@ Importa porque el corpus del usuario tiene 119 escaneos que no se pueden perder.
 
 ## CI los corre, y cómo se pagó
 
-`.github/workflows/ci.yml` corre los 38 modos en cada pull request, después de compilar y **antes** del
+`.github/workflows/ci.yml` corre todos los modos en cada pull request, después de compilar y **antes** del
 paso de cobertura.
 
 El orden y la configuración son las dos razones por las que esto cuesta poco:
