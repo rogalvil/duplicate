@@ -36,8 +36,8 @@
 "library.toolbar.refresh" = "Actualizar";
 "library.toolbar.sort" = "Ordenar";
 "library.toolbar.search" = "Filtrar";
-/* %1$d escaneos, %2$d grupos, %3$d archivos, %4$@ un tamaño ya formateado. */
-"library.footer" = "%1$d escaneos - %2$d mostrados";
+/* %1$@ y %2$@ son conteos con su sustantivo, de Localizable.stringsdict: count.scans y count.shown. */
+"library.footer" = "%1$@ - %2$@";
 /* %@ es el directorio de donde se leen los escaneos. */
 "library.empty" = "Todavía no hay escaneos.\n\nCorre rav duplicate scan <carpeta> y aparecerá aquí.\n\n%@";
 "library.empty.filtered" = "Ningún escaneo coincide con el filtro.";
@@ -274,7 +274,7 @@
 "library.column.threshold" = "Umbral";
 "library.column.pairs" = "Pares";
 "library.column.folders" = "Carpetas";
-"library.footer.folders" = "%1$d escaneos de carpetas - %2$d pares";
+"library.footer.folders" = "%1$@ - %2$@";
 "library.empty.folders" = "Todavía no hay escaneos de carpetas.\n\nAprieta Comando-N y elige \"Carpetas parecidas\".";
 "folders.window.title" = "Carpetas parecidas - %@";
 "folders.column.similarity" = "Parecido";
@@ -283,7 +283,7 @@
 "folders.column.matching" = "Archivos iguales";
 "folders.column.difference" = "Diferencias";
 "folders.header" = "%1$d%% parecidas - %2$d archivos idénticos - %3$d contra %4$d archivos";
-"folders.footer" = "%1$d pares al %2$d%% o más";
+"folders.footer" = "%1$@ al %2$d%% o más";
 "folders.empty" = "Ningún par seleccionado";
 "folders.onlyIn" = "Solo en %@:";
 "folders.changedHeader" = "Mismo nombre, contenido distinto:";
@@ -298,7 +298,7 @@
 "similar.column.b" = "Comparado con";
 "similar.kind.image" = "Imagen";
 "similar.kind.video" = "Video";
-"similar.footer" = "%1$d pares de imagen a %2$d bits o menos - %3$d pares de video al %4$d%% de los cuadros";
+"similar.footer" = "%1$@ a %2$@ o menos - %3$@ al %4$d%% de los cuadros";
 "similar.empty" = "Ningún par seleccionado";
 "scan.detector.similar" = "Imágenes parecidas";
 "scan.threshold.bits" = "Hasta %d bits distintos";
@@ -309,7 +309,7 @@
 "scan.unreadableImages.title" = "Algunas imágenes no se pudieron leer";
 "scan.unreadableImages.body" = "Se saltaron %1$d. Se procesaron %2$d imágenes.";
 "library.similarThreshold.value" = "%d bits";
-"library.footer.similar" = "%1$d escaneos perceptuales - %2$d pares de imagen, %3$d de video";
+"library.footer.similar" = "%1$@ - %2$@, %3$@";
 "library.empty.similar" = "Todavía no hay escaneos perceptuales.\n\nAprieta Comando-N y elige \"Imágenes parecidas\".";
 "similar.header.image" = "%1$.2f%% parecidas - difieren %2$d de 64 bits";
 "similar.header.video" = "%1$.2f%% de los cuadros muestreados coinciden";

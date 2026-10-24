@@ -46,16 +46,19 @@ enum SelfTest {
             "format", "progress", "volumes", "realroot", "phash-differential", "history",
             "cache-liveness", "video-timing", "corpus", "network-fallback",
         ]
+        // Outside `all`, so CI never runs them: they are the check before opening a PR. See `checkUserInterface`.
+        let localModes = ["ui"]
 
         let modes: [String]
         switch mode {
         case "all":
             modes = allModes
-        case let name where !allModes.contains(name):
+        case let name where !allModes.contains(name) && !localModes.contains(name):
             // Naming the alternatives, because the usual way to get here is a typo and an error that
             // only says "unknown" makes the reader go read the source.
             print("FAILED: unknown selftest mode '\(name)'")
             print("  available: \(allModes.joined(separator: ", "))")
+            print("  local only: \(localModes.joined(separator: ", "))")
             return 1
         default: modes = [mode]
         }
@@ -107,6 +110,7 @@ enum SelfTest {
                 case "network-fallback": try await checkNetworkFallback(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
+                case "ui": try await checkUserInterface(arguments: arguments)
                 default:
                     print("FAILED: unknown selftest mode '\(name)'")
                     return 1
@@ -2627,7 +2631,7 @@ enum SelfTest {
     /// The watcher reports on its own queue and hops to the main actor, so the update cannot arrive while
     /// this function blocks the main thread -- `Task.sleep` yields, which is what lets the hop land.
     @MainActor
-    private static func waitOnMainActor(
+    static func waitOnMainActor(
         until condition: @MainActor () -> Bool,
         what: String,
         deadline: Duration = .seconds(5)
@@ -2756,6 +2760,18 @@ enum SelfTest {
             required.width <= advertisedReview.width,
             "the review demands \(Int(required.width)) points of width and advertises "
                 + "\(Int(advertisedReview.width))"
+        )
+        // **At that smallest size the file columns fit the list they sit in.** A table grows with its scroll
+        // view and never shrinks with it, so the columns kept 718 points behind a 300-point view and a long name
+        // was cut by the preview with no ellipsis. `make ui` found it from a render.
+        // Teeth: drop the frame observer that calls `sizeToFit` in `ReviewWindowController` and this times out.
+        // The autosave name goes first: resizing a window that has one would write the user's own frame.
+        controller.window?.setFrameAutosaveName("")
+        controller.window?.setFrame(NSRect(origin: .zero, size: advertisedReview), display: false)
+        try await waitOnMainActor(
+            until: { controller.fileColumnsFitForSelftest },
+            what:
+                "the file columns to fit a list \(Int(controller.fileListWidthForSelftest)) points wide"
         )
 
         try expect(controller.groupRowCount == 3, "\(controller.groupRowCount) groups listed")
@@ -4216,6 +4232,12 @@ enum SelfTest {
         viewer.selectPairForSelftest(0)
         try expect(!viewer.headerText.contains("folders.header"), "the header shows a key literal")
         try expect(!viewer.detailText.isEmpty, "the detail pane is empty for a real pair")
+        // **Text in the view is not text on screen.** The line above kept passing while the pane drew nothing: the
+        // text view kept the zero width it was made with, and `make ui` is what saw it, from a render.
+        // Teeth: drop `autoresizingMask = [.width]` from the detail view and this reads 0.
+        try expect(
+            viewer.detailWidth > 100,
+            "the detail pane holds its text in \(Int(viewer.detailWidth)) points of width")
         try expect(
             viewer.footerText.contains("60"),
             "the footer reads \(viewer.footerText), which does not mention the threshold"
@@ -6589,17 +6611,17 @@ enum SelfTest {
 
     // MARK: - helpers
 
-    private static func expect(_ condition: Bool, _ message: String) throws {
+    static func expect(_ condition: Bool, _ message: String) throws {
         guard condition else { throw SelfTestFailure(message) }
     }
 
     /// Unwraps or fails with a message, so a nil never turns into a silent skip.
-    private static func expectSome<T>(_ value: T?, _ message: String) throws -> T {
+    static func expectSome<T>(_ value: T?, _ message: String) throws -> T {
         guard let value else { throw SelfTestFailure(message) }
         return value
     }
 
-    private static func value(for flag: String, in arguments: [String]) -> String? {
+    static func value(for flag: String, in arguments: [String]) -> String? {
         guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else {
             return nil
         }
@@ -6684,7 +6706,7 @@ private final class StageLog: Sendable {
     var all: [ApplyProgress] { stored.withLock { $0 } }
 }
 
-private struct SelfTestFailure: Error, CustomStringConvertible {
+struct SelfTestFailure: Error, CustomStringConvertible {
     let description: String
     init(_ description: String) { self.description = description }
 }
