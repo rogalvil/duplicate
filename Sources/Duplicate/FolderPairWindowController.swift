@@ -112,6 +112,9 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
 
         headerLabel.font = .systemFont(ofSize: 12, weight: .medium)
         detailView.isEditable = false
+        // Follows the scroll view's width. `NSTextView()` starts at zero width and nothing else resizes it, so
+        // without this the pane holds the pair's differences and draws none of them.
+        detailView.autoresizingMask = [.width]
         detailView.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         detailView.drawsBackground = false
         let detailScroll = NSScrollView()
@@ -484,6 +487,10 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     var pairRowCount: Int { table.numberOfRows }
     var headerText: String { headerLabel.stringValue }
     var detailText: String { detailView.string }
+    var detailWidth: CGFloat {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return detailView.frame.width
+    }
     var metadataForSelftest: (text: String, hidden: Bool) {
         (metadataLabel.stringValue, metadataLabel.isHidden)
     }
