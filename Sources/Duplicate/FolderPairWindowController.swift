@@ -212,7 +212,9 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     /// read-only, so the CLI is the only thing that can act on a pair today -- which makes "which side gets
     /// destroyed" information the reader needs here, not a footnote for the docs.
     private func footerString() -> String {
-        String(format: Strings.string("folders.footer"), pairs.count, Int(scan.threshold * 100))
+        String(
+            format: Strings.string("folders.footer"), Strings.count("count.pairs", pairs.count),
+            Int(scan.threshold * 100))
             + "  ·  " + Strings.string("folders.orientation")
     }
 
