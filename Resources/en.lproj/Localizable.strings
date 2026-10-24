@@ -37,8 +37,8 @@
 "library.toolbar.refresh" = "Refresh";
 "library.toolbar.sort" = "Sort";
 "library.toolbar.search" = "Filter";
-/* %1$d scans, %2$d groups, %3$d files, %4$@ a formatted size. */
-"library.footer" = "%1$d scans - %2$d shown";
+/* %1$@ and %2$@ are counts with their noun, from Localizable.stringsdict: count.scans and count.shown. */
+"library.footer" = "%1$@ - %2$@";
 /* %@ is the directory scans are read from. */
 "library.empty" = "No scans yet.\n\nRun rav duplicate scan <folder> and it will appear here.\n\n%@";
 "library.empty.filtered" = "No scan matches this filter.";
@@ -275,7 +275,7 @@
 "library.column.threshold" = "Threshold";
 "library.column.pairs" = "Pairs";
 "library.column.folders" = "Folders";
-"library.footer.folders" = "%1$d folder scans - %2$d pairs";
+"library.footer.folders" = "%1$@ - %2$@";
 "library.empty.folders" = "No folder scans yet.\n\nPress Command-N and choose \"Similar folders\".";
 "folders.window.title" = "Similar folders - %@";
 "folders.column.similarity" = "Alike";
@@ -284,7 +284,7 @@
 "folders.column.matching" = "Same files";
 "folders.column.difference" = "Differences";
 "folders.header" = "%1$d%% alike - %2$d files identical - %3$d against %4$d files";
-"folders.footer" = "%1$d pairs at %2$d%% or more";
+"folders.footer" = "%1$@ at %2$d%% or more";
 "folders.empty" = "No pair selected";
 "folders.onlyIn" = "Only in %@:";
 "folders.changedHeader" = "Same name, different contents:";
@@ -299,7 +299,7 @@
 "similar.column.b" = "Compared with";
 "similar.kind.image" = "Image";
 "similar.kind.video" = "Video";
-"similar.footer" = "%1$d image pairs within %2$d bits - %3$d video pairs at %4$d%% of frames";
+"similar.footer" = "%1$@ within %2$@ - %3$@ at %4$d%% of frames";
 "similar.empty" = "No pair selected";
 "scan.detector.similar" = "Similar images";
 "scan.threshold.bits" = "Within %d bits";
@@ -310,7 +310,7 @@
 "scan.unreadableImages.title" = "Some images could not be read";
 "scan.unreadableImages.body" = "%1$d of them were skipped. %2$d images were hashed.";
 "library.similarThreshold.value" = "%d bits";
-"library.footer.similar" = "%1$d perceptual scans - %2$d image pairs, %3$d video pairs";
+"library.footer.similar" = "%1$@ - %2$@, %3$@";
 "library.empty.similar" = "No perceptual scans yet.\n\nPress Command-N and choose \"Similar images\".";
 "similar.header.image" = "%1$.2f%% alike - %2$d of 64 bits differ";
 "similar.header.video" = "%1$.2f%% of the sampled frames match";
