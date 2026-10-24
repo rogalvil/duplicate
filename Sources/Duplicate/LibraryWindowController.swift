@@ -958,9 +958,11 @@ extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
         let field = NSTextField(labelWithString: "")
         field.translatesAutoresizingMaskIntoConstraints = false
         field.lineBreakMode = .byTruncatingTail
+        // All three lists. This one read two, and the perceptual tab's own counts sat on the left: `files` and
+        // `threshold` only looked right because those identifiers happen to exist in the other lists.
         let numeric =
-            (Self.columns + Self.folderColumns).first { $0.identifier == identifier }?.isNumeric
-            ?? false
+            (Self.columns + Self.folderColumns + Self.similarColumns)
+            .first { $0.identifier == identifier }?.isNumeric ?? false
         if numeric {
             field.alignment = .right
             // Monospaced digits, because a proportional numeral in a column of counts makes the digits

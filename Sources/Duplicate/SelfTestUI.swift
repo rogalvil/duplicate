@@ -323,6 +323,12 @@ private struct UISweep {
             }
         }
 
+        if let table = view as? NSTableView {
+            for problem in Self.misalignedColumns(in: table) {
+                findings.append("\(place): \(problem)")
+            }
+        }
+
         for subview in view.subviews {
             inspect(subview, content: content, window: window, place: place)
         }
@@ -342,6 +348,24 @@ private struct UISweep {
 
     private func leakedKey(in text: String) -> String? {
         keys.first { text.contains($0) }.map { "shows the raw key '\($0)'" }
+    }
+
+    /// Columns whose cells line up differently from their header: a count sitting on the left under a
+    /// right-aligned header reads as belonging to the column beside it.
+    private static func misalignedColumns(in table: NSTableView) -> [String] {
+        func side(_ alignment: NSTextAlignment) -> NSTextAlignment {
+            alignment == .natural || alignment == .justified ? .left : alignment
+        }
+        return table.tableColumns.enumerated().compactMap { index, column in
+            guard !column.isHidden, table.numberOfRows > 0,
+                let field =
+                    (table.view(atColumn: index, row: 0, makeIfNecessary: false) as? NSTableCellView)?
+                    .textField,
+                side(field.alignment) != side(column.headerCell.alignment)
+            else { return nil }
+            return
+                "column '\(column.headerCell.stringValue)' aligns its header and its cells differently"
+        }
     }
 
     /// A count of one with a plural after it: "1 pares", "1 scans". The singular is a different string, and a call
