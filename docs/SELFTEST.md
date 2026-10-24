@@ -169,6 +169,7 @@ Sobre cada captura afirma:
 | Un `NSTextView` con texto y sin ancho | no dibuja nada, y cualquier test que lea su `string` pasa |
 | Una lista aplastada a menos de 60×40 | la mitad de la ventana vacía, que ya pasó con el panel de imagen |
 | Un control fuera de la ventana | uno que no se puede alcanzar |
+| Una columna con el encabezado alineado distinto que sus celdas | un número a la izquierda bajo un encabezado a la derecha parece de la columna de al lado |
 
 **El idioma se afirma, no se supone.** El target pasa `-AppleLanguages (es)` en la línea de comando, que solo
 afecta a ese proceso; un `defaults write` cambiaría el del sistema, y eso ya pasó una vez. Y el modo falla si
@@ -187,7 +188,9 @@ mira. Y lo que el barrido encuentra es un defecto que se ve, no un dato que se c
 | `rootLabel` del panel de escaneo con `.byClipping` | `is cut at the right: needs 763 points, has 334` |
 | `minSize` de la biblioteca a 90 de alto | `NSScrollView is squeezed to 720x30` |
 
-Las otras tres reglas no necesitaron rotura: en su primera corrida encontraron defectos reales. El detalle del
+La de alineación tampoco necesitó rotura: en su primera corrida encontró que la pestaña Imágenes de la biblioteca
+alineaba Pares y Video a la izquierda (#142). Las otras tres reglas tampoco: en su primera corrida encontraron
+defectos reales. El detalle del
 visor de carpetas no dibuja nada (#135), cuatro pies de ventana dicen "1 pares" (#136) y la revisión exacta
 corta nombres sin "…" a su tamaño mínimo (#137). Hasta que se arreglen, `make ui` falla en `main` con esos y
 solo esos.
