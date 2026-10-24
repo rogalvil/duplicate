@@ -398,6 +398,22 @@ Lo que ningún issue cierra solo: [`PASADA-A-MANO.md`](PASADA-A-MANO.md), el gui
 Resultado de una auditoría del código completo, con cada hallazgo confirmado por grep. **Nada de esto se ha
 quitado todavía**: es la lista para decidir, con una recomendación en cada caso.
 
+### 5.0 Funciones que hacen lo mismo
+
+Vistas desde quien usa la app, no desde el código: dos o más caminos para el mismo resultado.
+
+| Función | Los caminos | Recomendación |
+|---|---|---|
+| Deshacer un apply | Sessions > Undo the Last Session · Session History > Undo This Session · botón Undo This Session en la hoja de aplicar | **Quitar "Undo the Last Session"**: el historial hace lo mismo con más contexto, y el del menú elige la sesión más nueva aunque ya esté devuelta |
+| Limpiar sesiones devueltas | menú Sessions · botón Clean Up en el historial | conservar los dos: es la misma acción y el botón está junto a lo que limpia |
+| Guardar decisiones | ⌘S y al cerrar en la exacta · automático en carpetas y parecidos | **elegir uno**: dos modelos para lo mismo, y cada uno ya falla distinto (sección 2) |
+| Aceptar sugerencias en lote | menú sobre los grupos *seleccionados* en la exacta · botón sobre lo *visible* en parecidos · nada en carpetas | **elegir uno** y llevarlo a los tres; el de parecidos —lo visible, con el conteo dicho antes— es el que el diseño defiende |
+| Ver si un archivo sigue ahí | botón Check the disk y filtro "Still on disk" en la exacta · aviso automático "no longer there" en parecidos · fecha ilegible en carpetas | un solo mecanismo para los tres |
+| Vista previa de un archivo | un panel en la exacta · otro distinto, escrito aparte, en parecidos | un solo panel |
+| Actualizar la biblioteca | botón Refresh · actualización automática por vigilancia de directorios | conservar Refresh solo mientras la vigilancia tenga huecos (pendiente p2) |
+| Simular | botón y ⇧⌘D en la exacta · solo botón en las otras dos | igualar |
+| Revelar en Finder | doble clic (un archivo) · ⌘R (los dos, en parecidos) | igualar: que el doble clic haga lo mismo que ⌘R |
+
 ### 5.1 La duplicación entre detectores, en una línea
 
 Los tres detectores repiten la misma tubería —sesión de escaneo, estado de revisión, ventana, hoja de aplicar,
