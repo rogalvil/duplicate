@@ -293,6 +293,26 @@ lectura, y una falla es un diff con offset, no una discusión. Los tests unitari
 fixtures sintéticos, porque el corpus real tiene rutas privadas y un fixture commiteado es un archivo
 publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`.
 
+**Antes de abrir un PR, `make ui`.** Abre cada ventana en dos tamaños y dos idiomas, busca texto cortado,
+claves sin traducir y paneles aplastados, y deja capturas en `build/ui/`. **CI no lo corre, a propósito**: la
+mitad de su valor son las capturas, y en CI nadie las mira. Así que nada lo exige salvo esta regla: su salida
+va en la verificación del PR, y las capturas de las ventanas que el cambio toca se miran antes de abrirlo. Si
+falla por un problema que ya tiene issue, el PR lo dice con su número.
+
+**Lo que se puede verificar desde código no se pide a mano.** Si una duda no la contesta `make ui` (arrastrar la
+esquina, un caso que el árbol de prueba no arma, confirmar la causa de un bug), se escribe un **chequeo
+temporal**: código dentro del selftest que reproduce el caso y lo mide. Se corre, su salida y sus capturas van al
+issue o al PR, y **se borra antes del commit**. Si lo que verificó puede volver a romperse, no se borra sin más:
+se vuelve un assert permanente, en un modo de CI o en una regla de `make ui`, con su prueba de que falla contra
+la versión rota. A mano solo queda lo que ninguna herramienta puede simular sin cambiar lo que mide: los
+permisos de TCC, pasos 1 y 8 de la pasada.
+
+**Un cambio que se ve lleva capturas**, antes y después, de `build/ui/`, en el PR y en el issue. Se suben con
+`scripts/push-captures.sh` a la rama `ui-captures`, que nunca se mergea y no se borra, porque los PR las citan
+por URL. Solo capturas de `make ui`, nunca la pantalla del usuario: el repo es público. Las trampas técnicas
+de los chequeos temporales (eventos sintéticos, autosave, live resize) están en
+[`docs/SELFTEST.md`](docs/SELFTEST.md).
+
 ## Qué no tocar sin plantearlo
 
 - **No agregar dependencias externas.** Cero dependencias es requisito del proyecto. `libsqlite3`
