@@ -273,7 +273,8 @@ se actualiza mientras está abierta: un `rav duplicate scan` que termina en una 
 que nadie pida nada. Eso es el punto de compartir el formato — si hubiera que apretar Actualizar, las
 dos herramientas serían dos programas y no uno visto de dos maneras.
 
-Se hace con `DispatchSource.makeFileSystemObjectSource` sobre `scans/` y `decisions/`, no con un poll:
+Se hace con `DispatchSource.makeFileSystemObjectSource` sobre `scans/`, `decisions/`, `folder-scans/` y
+`similar-scans/`, no con un poll:
 un sondeo de un segundo sobre un directorio que nadie está mirando es un despertar por segundo para
 siempre, y uno de diez segundos hace que la app se sienta rota junto a la terminal que acaba de
 imprimir el `scan_id`.
@@ -722,9 +723,9 @@ reproducir.
 **Un archivo ilegible se salta y se nombra**, como el `None` de `phash_image`: un JPEG corrupto no puede perder
 los otros nueve mil.
 
-**Lo que todavía no hay es caché de hashes perceptuales.** Un re-escaneo vuelve a decodificar todo: medido, 2,779
-imágenes en 18 s. La caché de SHA-256 no sirve —es otra clave y otro valor— y la del pHash necesita la versión
-del pipeline estampada, o serviría números que significan otra cosa.
+**La caché de hashes perceptuales llegó después**, y tiene su propia sección más abajo. Sin ella un re-escaneo
+vuelve a decodificar todo: medido, 2,779 imágenes en 18 s. La caché de SHA-256 no sirve —es otra clave y otro
+valor— y la del pHash necesita la versión del pipeline estampada, o serviría números que significan otra cosa.
 
 ### El video: dos subprocesos menos y una rama que desaparece
 
@@ -959,6 +960,11 @@ prevista.
 El plan predijo el codo en 3-4 y contención pasando de 8. **No hay codo**: sigue mejorando hasta 16, y el tope de
 8 de la política deja ~13% sobre la mesa.
 
+**Corrección posterior: esa tabla es de una sola corrida por punto, y la conclusión era ruido.** Repetido con
+**mejor de tres** sobre 5 GB de archivos de 64 MiB, la curva es plana de c=1 a c=16 —±6% alrededor de 3,170 MB/s,
+sin tendencia—: un solo worker ya satura, y el tope de 8 no deja nada en la mesa. Se conserva la tabla porque es
+el ejemplo de por qué aquí se mide con mejor de tres.
+
 **Y la salvedad es la razón por la que la política no se cambia:** 2,350 MB/s está por encima de lo que muchos SSD
 leen, así que esta corrida la sirvió el page cache y mide throughput de SHA-256, no de disco. Un barrido en frío
 necesita `sudo purge`, que necesita root. Cambiar un default enviado sobre una medición con esa salvedad sería
@@ -966,8 +972,13 @@ exactamente el error que este documento lleva cincuenta PRs registrando.
 
 ### Memoria
 
-Pico de RSS entre **21.7 y 54.8 MB** en todas las corridas, contra el objetivo de < 400 MB del plan. Sobra un
-orden de magnitud.
+Pico de RSS entre **21.7 y 54.8 MB** en todas las corridas sobre el corpus real, contra el objetivo de < 400 MB
+del plan.
+
+**Pero el corpus real es chico, y a escala el objetivo no se cumple.** Sobre 200,000 archivos sintéticos el pico
+fue de 298 MB, y 172 MB después de drenar el `autoreleasepool` por lotes; extrapolado son ~570 MB a 800,000
+archivos. La corrida sobre `~` completo (1.3 millones de archivos) no registró el pico. Está en los pendientes de
+[`CAPACIDADES.md`](CAPACIDADES.md).
 
 ### Y la quinta: `AttrListWalker` queda formalmente rechazado
 

@@ -148,9 +148,9 @@ los que nunca abriste no aparecen, ni a favor ni en contra.
 archivos mandados a la Papelera no son el mismo acto; el deshacer de sesión tendrá su propio menú y no
 tendrá atajo.
 
-## Qué hará
+## Qué detecta
 
-Tres detectores, paridad con el CLI:
+Tres detectores, con los mismos criterios que el CLI:
 
 | Detector | Criterio |
 |---|---|
@@ -232,7 +232,7 @@ make help       # lista todos los targets
 ```
 
 Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.md). El catálogo de los
-38 modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
+modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fallar a cada uno:
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ## Si algo no funciona
@@ -252,9 +252,6 @@ Cómo trabajar en el repo y qué exige un PR: [`CONTRIBUTING.md`](CONTRIBUTING.m
   macOS atribuye el acceso a archivos a la terminal, y la app hereda los permisos de ella. Lanzada
   por Launch Services, la app es su propio proceso responsable. Los dos hechos son verdad y ninguno
   implica el otro.
-- **El "Devolver" de Finder no se ha probado a mano.** `trashItem` sí está verificado en los cuatro
-  volúmenes de esta máquina, y el journal permite deshacer desde la app; que Finder devuelva el
-  archivo a su sitio es lo que falta comprobar.
 - El pHash de imágenes **no** será bit-idéntico al de `imagehash.phash` del CLI. La forma del pipeline
   se reproduce, pero el resample de Pillow no es el de ImageIO, así que pares justo en el borde del
   umbral pueden aparecer en una herramienta y no en la otra. El formato compartido no guarda hashes,
@@ -296,10 +293,10 @@ decisiones y no aparece en ninguna ruta real. El grande va aparte porque 4,000 a
 
 ## Qué hace, capacidad por capacidad
 
-[`docs/CAPACIDADES.md`](docs/CAPACIDADES.md) es el inventario detallado de lo que la app hace hoy: los cuatro
-detectores, la revisión, la acción destructiva, el deshacer y la interoperabilidad, cada uno con cómo se
-verifica. Trae además una sección de **solapamientos y candidatos a revisión** — el código que calcula algo
-que ninguna ventana muestra — para que agregar o quitar funcionalidad se decida leyendo, no adivinando.
+[`docs/CAPACIDADES.md`](docs/CAPACIDADES.md) es el mapa de la app: **qué hace**, flujo por flujo y con cada
+menú, atajo y opción; **qué no hace**, a propósito o porque está pendiente; y **qué sobra** — lo duplicado
+entre los tres detectores, lo inalcanzable y lo muy especializado, con una recomendación para cada caso —
+para que agregar o quitar funcionalidad se decida leyendo, no adivinando.
 
 ## Licencia
 
