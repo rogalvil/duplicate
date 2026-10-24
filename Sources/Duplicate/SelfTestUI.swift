@@ -54,7 +54,11 @@ extension SelfTest {
             try? FileManager.default.removeItem(atPath: output + "/" + name)
         }
 
-        let root = NSTemporaryDirectory() + "duplicate-selftest-ui-\(UUID().uuidString)"
+        // A fixed path, not a per-run one: the path is on screen in half the renders, and a random one makes two
+        // runs differ where nothing changed, which is the opposite of what a before-and-after is for. And `/tmp`,
+        // not the per-user temporary directory, whose name identifies this machine in a capture someone posts.
+        let root = "/tmp/duplicate-ui"
+        try? FileManager.default.removeItem(atPath: root)
         defer { try? FileManager.default.removeItem(atPath: root) }
         let fixture = try await UIFixture.build(at: root)
 
