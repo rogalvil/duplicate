@@ -191,3 +191,36 @@ Las otras tres reglas no necesitaron rotura: en su primera corrida encontraron d
 visor de carpetas no dibuja nada (#135), cuatro pies de ventana dicen "1 pares" (#136) y la revisión exacta
 corta nombres sin "…" a su tamaño mínimo (#137). Hasta que se arreglen, `make ui` falla en `main` con esos y
 solo esos.
+
+## Chequeos temporales
+
+Para la duda que `make ui` no contesta: confirmar la causa de un bug, un caso que el árbol de prueba no arma, o
+un camino que el barrido no recorre. El cuándo y el qué hacer con el resultado están en `CLAUDE.md`. Aquí van
+las trampas, todas medidas al escribir los primeros:
+
+1. **Los eventos sintéticos necesitan `NSApplication.run()`.** El selftest corre en el `main` asíncrono de
+   Swift, y cuando algo detiene el run loop principal (procesar eventos lo hace),
+   `swift_task_asyncMainDrainQueue` llama a `exit(0)`. El proceso termina **con éxito** a mitad del modo y sin
+   imprimir nada, o sea que parece que pasó. El chequeo corre así, en `main.swift`:
+
+   ```swift
+   UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])
+   Task { @MainActor in exit(await SelfTest.run(arguments: CommandLine.arguments)) }
+   application.run()
+   ```
+
+   El `register` va porque, sin él, AppKit trata los argumentos del selftest como documentos a abrir. Y es
+   `register` y no `set`, porque `set` escribe en las preferencias reales.
+2. **Arrastrar la esquina se simula sin permisos.** Con `NSApp.postEvent` se mandan `leftMouseDown` en la
+   esquina (en coordenadas de la ventana, 2 pt hacia adentro), luego los `leftMouseDragged` y un `leftMouseUp`,
+   bajo el bucle de eventos. Es un *live resize* de verdad (`willStartLiveResize` llega) y no mueve el cursor
+   del usuario. Un `CGEvent` sí lo movería, y pide permiso de Accesibilidad.
+3. **Un *live resize* y un `setFrame` no son lo mismo.** `NSTableView` reacomoda sus columnas solo durante un
+   arrastre. Un cambio de tamaño desde código, incluido el que restaura el tamaño guardado al abrir, no las
+   reacomoda. #137 solo existía en el segundo camino: probar uno deja el otro sin ver.
+4. **Borrar el nombre de autosave antes de redimensionar** (`setFrameAutosaveName("")`). Si no, el chequeo
+   escribe el tamaño de la ventana real del usuario.
+5. **Renderizar fuera de pantalla da lo mismo que en pantalla**, medido: el detalle vacío de #135 salió igual
+   con `cacheDisplay` que con `screencapture -l` de la ventana mostrada. Por eso `make ui` no muestra ventanas.
+6. **`screencapture` solo con `-l <windowNumber>`**, la ventana de la app y nada más. Una captura de la pantalla
+   completa se llevó una pestaña del navegador del usuario.
