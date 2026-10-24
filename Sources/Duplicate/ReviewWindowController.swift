@@ -242,6 +242,13 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             column.width = width
             fileTable.addTableColumn(column)
         }
+        // The checkbox column keeps its width. The note gives way first, down to 40 points, and stops growing at
+        // 210; the file name takes the rest. Its middle truncation is what shows both ends of a name, and it only
+        // truncates when the column is no wider than what is on screen.
+        fileTable.tableColumns[0].resizingMask = .userResizingMask
+        fileTable.tableColumns[1].minWidth = 100
+        fileTable.tableColumns[2].minWidth = 40
+        fileTable.tableColumns[2].maxWidth = 210
 
         // **Multiple selection, because 880 groups cannot be decided one at a time** -- and the answer is
         // not a button that decides them all, which is the CLI's defect. Selecting a set and confirming it
@@ -313,7 +320,17 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             scroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             scroll.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
-        fileTable.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+        fileTable.columnAutoresizingStyle = .sequentialColumnAutoresizingStyle
+        // **A table grows with its scroll view and never shrinks with it.** At the window's smallest size the
+        // columns kept their 718 points behind a 300-point view, so the file name was cut by the preview pane
+        // with no ellipsis -- its own truncation works against the column's width, not against what is visible.
+        // Fitting on every change of the visible width is what makes the columns follow it down as well.
+        fileScroll.contentView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification, object: fileScroll.contentView, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.fileTable.sizeToFit() }
+        }
 
         headerLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         headerLabel.lineBreakMode = .byTruncatingHead
@@ -1183,6 +1200,12 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     }
 
     /// Waits for the presence check to land, so a selftest asserts on an answer rather than on a race.
+    var fileListWidthForSelftest: CGFloat { fileTable.enclosingScrollView?.contentSize.width ?? 0 }
+    var fileColumnsFitForSelftest: Bool {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return fileTable.frame.width <= fileListWidthForSelftest + 1
+    }
+
     func awaitPresenceForSelftest() async {
         for _ in 0..<200 where presence == nil {
             try? await Task.sleep(for: .milliseconds(25))
