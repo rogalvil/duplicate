@@ -12,6 +12,13 @@ desde la terminal, la app hereda los permisos de la terminal; lanzada por Launch
 responsable. Así que un selftest verde **no dice nada** sobre el estado de TCC de la app, y esta pasada solo
 vale hecha con la app abierta como la abre un usuario.
 
+**`make ui` ya mira parte de esto.** Abre cada ventana en su tamaño mínimo y en uno de laptop, en los dos
+idiomas, y busca texto que no cabe, claves sin traducir, plurales después de un uno y paneles aplastados;
+deja las capturas en `build/ui/` (ver [`SELFTEST.md`](SELFTEST.md)). Eso cubre lo de **mirar** de los pasos 3,
+4, 5 y 7: el barrido afirma lo que puede y las capturas dejan ver el resto. Lo que sigue siendo de esta pasada: los permisos (pasos 1 y 8), que ninguna herramienta puede
+simular sin cambiar lo que mide, y lo que se hace con las manos — aplicar, deshacer, el fallo a propósito y
+la barra con etapa.
+
 ```bash
 make            # compila, arma y firma build/Duplicate.app
 make run        # la abre por Launch Services (open), no desde la terminal

@@ -20,6 +20,10 @@
     make build CONFIG=debug
     make coverage        <- pegar el porcentaje
     make selftest-all    <- pegar la salida
+    make ui              <- local, CI no lo corre: pegar la salida y decir qué capturas se miraron
+
+  Si el cambio se ve: capturas antes y después, subidas con scripts/push-captures.sh.
+  Si se usó un chequeo temporal: qué midió y su salida. Su código no va en el PR.
 
   Si el cambio agrega un modo de selftest, decir también cómo se probó que FALLA contra la
   versión rota. Un arnés que pasa contra código roto no sirve de nada.

@@ -279,22 +279,25 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         if showingSimilar {
             footer.stringValue = String(
                 format: Strings.string("library.footer.similar"),
-                similarRows.count,
-                similarRows.reduce(0) { $0 + $1.imagePairCount },
-                similarRows.reduce(0) { $0 + $1.videoPairCount }
+                Strings.count("count.perceptualScans", similarRows.count),
+                Strings.count("count.imagePairs", similarRows.reduce(0) { $0 + $1.imagePairCount }),
+                Strings.count("count.videoPairs", similarRows.reduce(0) { $0 + $1.videoPairCount })
             )
             return
         }
         if showingFolders {
             footer.stringValue = String(
                 format: Strings.string("library.footer.folders"),
-                folderRows.count, folderRows.reduce(0) { $0 + $1.pairCount }
+                Strings.count("count.folderScans", folderRows.count),
+                Strings.count("count.pairs", folderRows.reduce(0) { $0 + $1.pairCount })
             )
             return
         }
         let totals = library.totals
         footer.stringValue = String(
-            format: Strings.string("library.footer"), totals.scanCount, rows.count)
+            format: Strings.string("library.footer"),
+            Strings.count("count.scans", totals.scanCount),
+            Strings.count("count.shown", rows.count))
     }
 
     private func updateEmptyState() {
@@ -955,9 +958,11 @@ extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
         let field = NSTextField(labelWithString: "")
         field.translatesAutoresizingMaskIntoConstraints = false
         field.lineBreakMode = .byTruncatingTail
+        // All three lists. This one read two, and the perceptual tab's own counts sat on the left: `files` and
+        // `threshold` only looked right because those identifiers happen to exist in the other lists.
         let numeric =
-            (Self.columns + Self.folderColumns).first { $0.identifier == identifier }?.isNumeric
-            ?? false
+            (Self.columns + Self.folderColumns + Self.similarColumns)
+            .first { $0.identifier == identifier }?.isNumeric ?? false
         if numeric {
             field.alignment = .right
             // Monospaced digits, because a proportional numeral in a column of counts makes the digits
