@@ -4232,6 +4232,12 @@ enum SelfTest {
         viewer.selectPairForSelftest(0)
         try expect(!viewer.headerText.contains("folders.header"), "the header shows a key literal")
         try expect(!viewer.detailText.isEmpty, "the detail pane is empty for a real pair")
+        // **Text in the view is not text on screen.** The line above kept passing while the pane drew nothing: the
+        // text view kept the zero width it was made with, and `make ui` is what saw it, from a render.
+        // Teeth: drop `autoresizingMask = [.width]` from the detail view and this reads 0.
+        try expect(
+            viewer.detailWidth > 100,
+            "the detail pane holds its text in \(Int(viewer.detailWidth)) points of width")
         try expect(
             viewer.footerText.contains("60"),
             "the footer reads \(viewer.footerText), which does not mention the threshold"

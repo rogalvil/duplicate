@@ -468,8 +468,10 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     private func footerString() -> String {
         var text = String(
             format: Strings.string("similar.footer"),
-            scan.pairCount(of: .image), scan.imageThreshold,
-            scan.pairCount(of: .video), Int(scan.videoThreshold * 100)
+            Strings.count("count.imagePairs", scan.pairCount(of: .image)),
+            Strings.count("count.bits", scan.imageThreshold),
+            Strings.count("count.videoPairs", scan.pairCount(of: .video)),
+            Int(scan.videoThreshold * 100)
         )
         if let saveFailure { return text + "  -  " + saveFailure }
         if savedCount > 0 { text += "  -  " + Strings.string("similar.saved") }

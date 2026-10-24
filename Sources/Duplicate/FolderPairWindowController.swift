@@ -112,6 +112,9 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
 
         headerLabel.font = .systemFont(ofSize: 12, weight: .medium)
         detailView.isEditable = false
+        // Follows the scroll view's width. `NSTextView()` starts at zero width and nothing else resizes it, so
+        // without this the pane holds the pair's differences and draws none of them.
+        detailView.autoresizingMask = [.width]
         detailView.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         detailView.drawsBackground = false
         let detailScroll = NSScrollView()
@@ -209,7 +212,9 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     /// read-only, so the CLI is the only thing that can act on a pair today -- which makes "which side gets
     /// destroyed" information the reader needs here, not a footnote for the docs.
     private func footerString() -> String {
-        String(format: Strings.string("folders.footer"), pairs.count, Int(scan.threshold * 100))
+        String(
+            format: Strings.string("folders.footer"), Strings.count("count.pairs", pairs.count),
+            Int(scan.threshold * 100))
             + "  ·  " + Strings.string("folders.orientation")
     }
 
@@ -482,6 +487,10 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     var pairRowCount: Int { table.numberOfRows }
     var headerText: String { headerLabel.stringValue }
     var detailText: String { detailView.string }
+    var detailWidth: CGFloat {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return detailView.frame.width
+    }
     var metadataForSelftest: (text: String, hidden: Bool) {
         (metadataLabel.stringValue, metadataLabel.isHidden)
     }
