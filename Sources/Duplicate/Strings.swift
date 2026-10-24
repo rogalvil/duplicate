@@ -15,6 +15,15 @@ enum Strings {
         NSLocalizedString(key, bundle: .main, comment: "")
     }
 
+    /// A count with its noun, from the plural table: "1 pair", "3 pairs".
+    ///
+    /// A sentence with several counts is a format of these, not one plural entry: an entry here carries a single
+    /// count, which is the shape the l10n audit checks, and a format string that put the number next to a fixed
+    /// plural noun is how four footers came to read "1 pairs".
+    static func count(_ key: String, _ value: Int) -> String {
+        String(format: string(key), value)
+    }
+
     /// Reads one raw `.strings` table for a specific localisation.
     ///
     /// Used by the l10n selftest to compare the tables against each other. Returns `nil` when the
