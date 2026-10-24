@@ -293,6 +293,12 @@ lectura, y una falla es un diff con offset, no una discusión. Los tests unitari
 fixtures sintéticos, porque el corpus real tiene rutas privadas y un fixture commiteado es un archivo
 publicado; los fixtures se regeneran con `python3 scripts/make-json-fixtures.py`.
 
+**Antes de abrir un PR, `make ui`.** Abre cada ventana en dos tamaños y dos idiomas, busca texto cortado,
+claves sin traducir y paneles aplastados, y deja capturas en `build/ui/`. **CI no lo corre, a propósito**: la
+mitad de su valor son las capturas, y en CI nadie las mira. Así que nada lo exige salvo esta regla: su salida
+va en la verificación del PR, y las capturas de las ventanas que el cambio toca se miran antes de abrirlo. Si
+falla por un problema que ya tiene issue, el PR lo dice con su número.
+
 ## Qué no tocar sin plantearlo
 
 - **No agregar dependencias externas.** Cero dependencias es requisito del proyecto. `libsqlite3`

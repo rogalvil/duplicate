@@ -142,3 +142,52 @@ Lo que sigue sin cubrirse en CI: el round-trip **tipado** contra documentos real
 —correctamente— fallan ante un documento que no es un escaneo. Los tests unitarios cubren el modelo
 tipado sobre esos mismos fixtures, así que el hueco real es solo "nadie verificó los 119 documentos de
 esta máquina en CI", que por definición solo se puede hacer aquí.
+
+## `make ui`: lo que antes se miraba a mano, y por qué CI no lo corre
+
+Un modo más, `ui`, **fuera de `--mode all`**. Es la revisión antes de abrir un PR, no un gate de CI.
+
+```bash
+make ui     # inglés y español; falla al final con todo lo que encontró
+```
+
+Arma un árbol con respuestas conocidas (dos pares exactos, un par de carpetas al 90.9%, un par de imágenes y
+uno de video), lo escanea con los tres detectores de verdad y abre cada ventana con lo que encontraron:
+biblioteca en sus tres pestañas, el panel de escaneo con cada detector, la revisión exacta, el visor de
+carpetas, el de parecidos con el par de imagen y el de video, y el historial. Cada una en dos tamaños, el
+mínimo que permite y uno de laptop (1280×800), y en los dos idiomas: **44 capturas por corrida** en
+`build/ui/en/` y `build/ui/es/`.
+
+Sobre cada captura afirma:
+
+| Qué busca | Por qué se mira |
+|---|---|
+| Una clave sin traducir (`review.warning.preview`) o un `%@` sin llenar | `l10n` compara tablas y sitios de llamada; esto mira lo que de verdad llegó a la pantalla |
+| "1 pares", "1 scans": plural después de un uno | la tabla tiene el singular, y el sitio de llamada no lo pide |
+| Texto que no cabe y no tiene puntos suspensivos | un truncado con "…" es diseño; uno sin "…" es texto perdido |
+| Texto cortado por el borde de su lista | la celda trunca a su ancho, no al pedazo que se ve |
+| Un `NSTextView` con texto y sin ancho | no dibuja nada, y cualquier test que lea su `string` pasa |
+| Una lista aplastada a menos de 60×40 | la mitad de la ventana vacía, que ya pasó con el panel de imagen |
+| Un control fuera de la ventana | uno que no se puede alcanzar |
+
+**El idioma se afirma, no se supone.** El target pasa `-AppleLanguages (es)` en la línea de comando, que solo
+afecta a ese proceso; un `defaults write` cambiaría el del sistema, y eso ya pasó una vez. Y el modo falla si
+la app dibuja en otro idioma del que se le pidió: una corrida que cree estar en español mientras dibuja en
+inglés afirma lo mismo dos veces.
+
+**Por qué solo local.** Las capturas son la mitad del valor y alguien tiene que mirarlas; en CI nadie las
+mira. Y lo que el barrido encuentra es un defecto que se ve, no un dato que se corrompe.
+
+**Cómo se probó que falla**, una rotura por regla, aplicada de verdad:
+
+| Rotura | Lo que reportó |
+|---|---|
+| Sin `-AppleLanguages`, pidiendo `en` en una máquina en español | `launched for 'en' and drawing 'es'` |
+| `review.warning.preview` mal escrita en su sitio de llamada | `shows the raw key 'review.warning.preview'` |
+| `rootLabel` del panel de escaneo con `.byClipping` | `is cut at the right: needs 763 points, has 334` |
+| `minSize` de la biblioteca a 90 de alto | `NSScrollView is squeezed to 720x30` |
+
+Las otras tres reglas no necesitaron rotura: en su primera corrida encontraron defectos reales. El detalle del
+visor de carpetas no dibuja nada (#135), cuatro pies de ventana dicen "1 pares" (#136) y la revisión exacta
+corta nombres sin "…" a su tamaño mínimo (#137). Hasta que se arreglen, `make ui` falla en `main` con esos y
+solo esos.

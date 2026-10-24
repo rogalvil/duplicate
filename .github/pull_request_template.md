@@ -20,6 +20,7 @@
     make build CONFIG=debug
     make coverage        <- pegar el porcentaje
     make selftest-all    <- pegar la salida
+    make ui              <- local, CI no lo corre: pegar la salida y decir qué capturas se miraron
 
   Si el cambio agrega un modo de selftest, decir también cómo se probó que FALLA contra la
   versión rota. Un arnés que pasa contra código roto no sirve de nada.

@@ -44,7 +44,7 @@ BUILD_DATE   := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 GIT_COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null)$(shell test -z "$$(git status --porcelain 2>/dev/null)" || echo +)
 
 .DEFAULT_GOAL := all
-.PHONY: all build bundle sign install uninstall run run-debug selftest selftest-all test \
+.PHONY: all build bundle sign install uninstall run run-debug selftest selftest-all ui test \
 	coverage fmt lint icon clean help
 
 ## all: build, assemble and sign the app bundle
@@ -119,6 +119,15 @@ selftest: all
 ## selftest-all: run every selftest mode, stopping at the first failure
 selftest-all: all
 	@"$(CONTENTS)/MacOS/$(APP_NAME)" --selftest --mode all
+
+## ui: render every window in English and Spanish, check them, save PNGs to build/ui/
+# Local only, CI does not run it: it is the check before opening a PR. Both languages run even when the
+# first fails, so one pass names every problem and leaves every render to look at.
+ui: all
+	@status=0; for lang in en es; do \
+		"$(CONTENTS)/MacOS/$(APP_NAME)" --selftest --mode ui --expect-language $$lang \
+			--output "$(BUILD_DIR)/ui/$$lang" -AppleLanguages "($$lang)" || status=1; \
+	done; exit $$status
 
 ## test: run the DuplicateCore test suite
 test:

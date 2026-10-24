@@ -46,16 +46,19 @@ enum SelfTest {
             "format", "progress", "volumes", "realroot", "phash-differential", "history",
             "cache-liveness", "video-timing", "corpus", "network-fallback",
         ]
+        // Outside `all`, so CI never runs them: they are the check before opening a PR. See `checkUserInterface`.
+        let localModes = ["ui"]
 
         let modes: [String]
         switch mode {
         case "all":
             modes = allModes
-        case let name where !allModes.contains(name):
+        case let name where !allModes.contains(name) && !localModes.contains(name):
             // Naming the alternatives, because the usual way to get here is a typo and an error that
             // only says "unknown" makes the reader go read the source.
             print("FAILED: unknown selftest mode '\(name)'")
             print("  available: \(allModes.joined(separator: ", "))")
+            print("  local only: \(localModes.joined(separator: ", "))")
             return 1
         default: modes = [mode]
         }
@@ -107,6 +110,7 @@ enum SelfTest {
                 case "network-fallback": try await checkNetworkFallback(arguments: arguments)
                 case "about": try checkAbout()
                 case "icon": try checkIcon()
+                case "ui": try await checkUserInterface(arguments: arguments)
                 default:
                     print("FAILED: unknown selftest mode '\(name)'")
                     return 1
@@ -2627,7 +2631,7 @@ enum SelfTest {
     /// The watcher reports on its own queue and hops to the main actor, so the update cannot arrive while
     /// this function blocks the main thread -- `Task.sleep` yields, which is what lets the hop land.
     @MainActor
-    private static func waitOnMainActor(
+    static func waitOnMainActor(
         until condition: @MainActor () -> Bool,
         what: String,
         deadline: Duration = .seconds(5)
@@ -6589,17 +6593,17 @@ enum SelfTest {
 
     // MARK: - helpers
 
-    private static func expect(_ condition: Bool, _ message: String) throws {
+    static func expect(_ condition: Bool, _ message: String) throws {
         guard condition else { throw SelfTestFailure(message) }
     }
 
     /// Unwraps or fails with a message, so a nil never turns into a silent skip.
-    private static func expectSome<T>(_ value: T?, _ message: String) throws -> T {
+    static func expectSome<T>(_ value: T?, _ message: String) throws -> T {
         guard let value else { throw SelfTestFailure(message) }
         return value
     }
 
-    private static func value(for flag: String, in arguments: [String]) -> String? {
+    static func value(for flag: String, in arguments: [String]) -> String? {
         guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else {
             return nil
         }
@@ -6684,7 +6688,7 @@ private final class StageLog: Sendable {
     var all: [ApplyProgress] { stored.withLock { $0 } }
 }
 
-private struct SelfTestFailure: Error, CustomStringConvertible {
+struct SelfTestFailure: Error, CustomStringConvertible {
     let description: String
     init(_ description: String) { self.description = description }
 }
