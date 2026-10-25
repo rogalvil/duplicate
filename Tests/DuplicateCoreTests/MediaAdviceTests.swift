@@ -291,7 +291,7 @@ struct SimilarDecisionTests {
 @Suite("SimilarDecisionDefaults")
 struct SimilarDecisionDefaultsTests {
 
-    @Test("A copy-looking name loses first, before anything is measured")
+    @Test("When quality ties, a copy-looking name loses")
     func prefersTheOriginalName() {
         let suggestion = SimilarDecisionDefaults.suggestion(
             for: pair("/r/photo copy.jpg", "/r/photo.jpg", .image), root: "/r")
@@ -299,7 +299,36 @@ struct SimilarDecisionDefaultsTests {
         #expect(suggestion.ground == .copyName)
     }
 
-    @Test("The advice decides when the names tie")
+    /// **The order the user asked for** (#223): the CLI let the name decide first, so a copy at four times the
+    /// resolution was the one suggested for the Trash.
+    @Test("Quality beats a copy-looking name")
+    func prefersQualityOverName() {
+        let sharper = SimilarDecisionDefaults.suggestion(
+            for: pair("/r/photo copy.jpg", "/r/photo.jpg", .image),
+            root: "/r",
+            factsA: MediaFacts(
+                path: "/r/photo copy.jpg", byteCount: 10, pixelWidth: 200, pixelHeight: 200),
+            factsB: MediaFacts(
+                path: "/r/photo.jpg", byteCount: 10, pixelWidth: 100, pixelHeight: 100)
+        )
+        #expect(sharper.decision == .keepA)
+        #expect(sharper.ground == .quality)
+
+        // And the advice speaks before the name too: a copy in a better codec is the one to keep.
+        let efficient = SimilarDecisionDefaults.suggestion(
+            for: pair("/r/clip copy.mp4", "/r/clip.mp4"),
+            root: "/r",
+            factsA: video("/r/clip copy.mp4", codec: "hevc"),
+            factsB: video("/r/clip.mp4", codec: "h264")
+        )
+        #expect(efficient.decision == .keepA)
+        guard case .advice = efficient.ground else {
+            Issue.record("expected the advice to decide, got \(efficient.ground)")
+            return
+        }
+    }
+
+    @Test("The advice decides first")
     func fallsThroughToAdvice() {
         let suggestion = SimilarDecisionDefaults.suggestion(
             for: pair("/r/a.mp4", "/r/b.mp4"),

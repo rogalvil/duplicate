@@ -5421,6 +5421,54 @@ enum SelfTest {
             chain.groupStatesForSelftest == [.undecided],
             "the refused group reads \(chain.groupStatesForSelftest)")
 
+        // 7c. **Quality before the name, also for a group nobody opened** (#223). The copy here is the heavier of two
+        // equal pictures, so by quality it stays; by the name it went. A batch accept decides groups no probe has read,
+        // so without their sizes the name decided after all.
+        // Teeth: drop `weighBySize` from `accept` -- the path the sheet's Accept and this harness share -- and the
+        // original name is kept; put the copy-name step back first
+        // in `SimilarDecisionDefaults` and the unit test `prefersQualityOverName` fails.
+        let portraits = root + "/portraits"
+        try FileManager.default.createDirectory(
+            atPath: portraits, withIntermediateDirectories: true)
+        let light = try SyntheticImage.write(
+            .rampWithCorner, width: 96, height: 96, format: .jpeg(quality: 0.5),
+            to: portraits + "/retrato.jpg")
+        let heavy = try SyntheticImage.write(
+            .rampWithCorner, width: 96, height: 96, format: .jpeg(quality: 0.95),
+            to: portraits + "/retrato copia.jpg")
+        let sizes = try [light, heavy].map {
+            try FileManager.default.attributesOfItem(atPath: $0)[.size] as? Int64 ?? 0
+        }
+        try expect(sizes[1] > sizes[0], "the copy is not the heavier file: \(sizes)")
+        let portraitPair = SimilarPair(
+            fileA: PathOrder.lessThan(heavy, light) ? heavy : light,
+            fileB: PathOrder.lessThan(heavy, light) ? light : heavy,
+            similarity: 1.0, mediaKind: .image)
+        let portraitScan = SimilarScan(
+            scanID: "20260813-190000-000000", root: portraits, createdAt: "t", imageThreshold: 5,
+            videoThreshold: 0.7, pairs: [portraitPair])
+        let portraitState = StateDirectory(
+            environment: ["XDG_STATE_HOME": root + "/portrait-state"], homePath: root)
+        let portraitStore = ScanStore(state: portraitState)
+        try portraitStore.save(portraitScan)
+        let portraitViewer = SimilarPairWindowController(
+            scan: portraitScan, stateDirectory: portraitState)
+        defer { portraitViewer.window?.close() }
+        // **And asking changes nothing until the answer** (found in review on #225). The sheet's preview weighed the
+        // live review, so a Cancel left the box on one file over a keep set that had moved to the other.
+        // Teeth: weigh `review` instead of the copy in `previewAccept` and the heavier file is already kept here.
+        let keptBefore = portraitViewer.fileRowsForSelftest.filter(\.kept).map(\.path)
+        portraitViewer.previewAcceptForSelftest()
+        try expect(
+            portraitViewer.fileRowsForSelftest.filter(\.kept).map(\.path) == keptBefore,
+            "asking to accept changed what the window keeps, before any answer")
+        portraitViewer.confirmShownForSelftest()
+        let portraitDecision = try portraitStore.loadSimilarDecisions(scanID: portraitScan.scanID)
+            .byKey[SimilarPairKey.key(for: portraitPair)]
+        try expect(
+            portraitDecision == (portraitPair.fileA == heavy ? .keepA : .keepB),
+            "a batch kept the lighter file by its name: \(String(describing: portraitDecision))")
+
         // 8. Narrowing, and accepting only what is shown.
         // Teeth: have `shownUndecidedGroups` return every group instead of the visible ones and the impossible filter
         // below decides the untouched group.
