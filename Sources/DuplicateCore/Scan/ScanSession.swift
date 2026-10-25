@@ -87,7 +87,7 @@ public struct ScanSession: Sendable {
         instant: ScanIdentifier.Instant,
         progress: ProgressCounters = ProgressCounters()
     ) async throws -> Result {
-        let cache = request.usesCache ? HashCache(url: cacheURL ?? HashCache.defaultURL()) : nil
+        var cache = request.usesCache ? HashCache(url: cacheURL ?? HashCache.defaultURL()) : nil
         await cache?.loadAndRepair()
 
         // The Trash and the CLI's three quarantine roots are excluded by **identity**, so a root reached
@@ -114,6 +114,9 @@ public struct ScanSession: Sendable {
         // derived data that `~/Library/Caches` may purge anyway, and losing it must not cost a finished
         // scan.
         if let cache { _ = try? await cache.persist() }
+        // Let go before the document is encoded (#161): the cache holds a row for every file it knows, and the
+        // encoder builds a tree of every path in a group. Both at once were the last peak of a warm scan.
+        cache = nil
 
         defer { progress.setPhase(.finished) }
         do {

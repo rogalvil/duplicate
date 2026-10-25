@@ -183,6 +183,65 @@ struct DuplicateFinderTests {
         #expect(outcome.unreadable == [doomed])
     }
 
+    /// **A file that grew between the walk and the hash is grouped by what was hashed** -- its digest is right for
+    /// what is on disk, but the walk's size no longer is. Nothing caught this until the hashing was reshaped (#161).
+    @Test("A file whose size changed while it was hashed is regrouped by the hashed size")
+    func regroupsAFileThatChangedSize() async throws {
+        let fixture = try WalkFixture()
+        defer { fixture.remove() }
+        let a = try fixture.file("a.bin", bytes: 200)
+        let b = try fixture.file("b.bin", bytes: 200)
+        let grew = try fixture.file("c.bin", bytes: 200)
+
+        struct GrowingHasher: FileHashing {
+            let inner = ContentHasher()
+            let grew: String
+            func usesPrefixStage(forSize size: Int64) -> Bool { false }
+            func prefixDigest(atPath path: String, size: Int64) throws -> Digest32 {
+                try inner.prefixDigest(atPath: path, size: size)
+            }
+            func fullDigest(atPath path: String) throws -> HashResult {
+                let real = try inner.fullDigest(atPath: path)
+                return path == grew ? HashResult(digest: real.digest, byteCount: 201) : real
+            }
+        }
+
+        let outcome = try await DuplicateFinder(hasher: GrowingHasher(grew: grew)).find(
+            root: fixture.root, instant: testInstant, configuration: .init(concurrency: 2))
+        #expect(outcome.scan.groups.map(\.files) == [[a, b]])
+    }
+
+    /// The list of unreadable files is in input order, not in the order the reads happened to finish.
+    @Test("Unreadable files are reported in input order")
+    func reportsUnreadableInInputOrder() async throws {
+        let fixture = try WalkFixture()
+        defer { fixture.remove() }
+        let paths = try (1...4).map { try fixture.file("f\($0).bin", bytes: 200) }
+
+        // The earlier a file sorts, the longer it takes and the later it fails.
+        struct SlowFailingHasher: FileHashing {
+            let inner = ContentHasher()
+            let delays: [String: UInt32]
+            struct Unreadable: Error {}
+            func usesPrefixStage(forSize size: Int64) -> Bool { false }
+            func prefixDigest(atPath path: String, size: Int64) throws -> Digest32 {
+                try inner.prefixDigest(atPath: path, size: size)
+            }
+            func fullDigest(atPath path: String) throws -> HashResult {
+                guard let delay = delays[path] else { return try inner.fullDigest(atPath: path) }
+                usleep(delay)
+                throw Unreadable()
+            }
+        }
+        let hasher = SlowFailingHasher(delays: [
+            paths[0]: 60_000, paths[1]: 40_000, paths[2]: 20_000,
+        ])
+
+        let outcome = try await DuplicateFinder(hasher: hasher).find(
+            root: fixture.root, instant: testInstant, configuration: .init(concurrency: 4))
+        #expect(outcome.unreadable == Array(paths.prefix(3)))
+    }
+
     @Test("Reports the directories the walk could not read")
     func reportsInaccessibleDirectories() async throws {
         try #require(getuid() != 0, "root can read a 0o000 directory")

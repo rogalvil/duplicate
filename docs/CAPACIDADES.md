@@ -366,7 +366,7 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p4 | #161 | Memoria: el escaneo de la app pasó de 897–955 a 610–664 MB a 800,000 archivos; < 400 MB pide rehacer la tabla de la caché y achicar `FileEntry` |
+| — | — | Nada abierto al 2026-10-25 |
 
 ```bash
 gh issue list --label priority:p1     # cerca de los datos del usuario

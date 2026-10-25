@@ -184,6 +184,50 @@ struct HashCacheTests {
         #expect(await reader.report.recordsRead == 1)
     }
 
+    /// **Appending is how an update is written, so the last row for a key is the one that counts.** The load sorts
+    /// its rows (#161), and a sort does not keep file order among equal keys -- three writes of one key, around
+    /// rows of others, must still read back as the third.
+    @Test("The last row written for a key wins on reload")
+    func lastRowWinsOnReload() async throws {
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+
+        let writer = HashCache(url: scratch.url)
+        await writer.load()
+        for (round, seed) in ["a", "b", "c"].enumerated() {
+            await writer.store(digest(seed), for: entry())
+            await writer.store(digest("d"), for: entry(inode: UInt64(100 + round)))
+            _ = try await writer.persist()
+        }
+
+        let reader = HashCache(url: scratch.url)
+        await reader.load()
+        #expect(await reader.report.recordsRead == 6)
+        #expect(await reader.digest(for: entry()) == digest("c"))
+        #expect(await reader.statistics.live == 4)
+    }
+
+    /// **A cold scan does not hold every new row until it ends** (#161): a block is appended as soon as it fills,
+    /// the same append ``persist()`` does, so the pending list stays one block long.
+    @Test("A full block of new rows is written without waiting for persist")
+    func flushesFullBlocks() async throws {
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+
+        let writer = HashCache(url: scratch.url)
+        await writer.load()
+        let block = HashCache.flushThreshold
+        for index in 0..<(block + 3) {
+            await writer.store(digest("a"), for: entry(inode: UInt64(index)))
+        }
+        #expect(await writer.statistics.pending == 3)
+
+        let reader = HashCache(url: scratch.url, pruneFloor: .max)
+        await reader.load()
+        #expect(await reader.report.recordsRead == block)
+        #expect(await reader.digest(for: entry(inode: UInt64(block - 1))) == digest("a"))
+    }
+
     /// Reserving is about memory only (#161): what is stored, written and read back must not move.
     @Test("Reserving room changes nothing that is stored")
     func reservingIsInvisible() async throws {
