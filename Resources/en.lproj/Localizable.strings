@@ -40,14 +40,14 @@
 /* %1$@ and %2$@ are counts with their noun, from Localizable.stringsdict: count.scans and count.shown. */
 "library.footer" = "%1$@ - %2$@";
 /* %@ is the directory scans are read from. */
-"library.empty" = "No scans yet.\n\nPress Command-N to scan a folder. Scans made with rav duplicate scan <folder> appear here too.\n\n%@";
+"library.empty" = "No scans yet.\n\nPress Command-N to scan a folder.\n\n%@";
 "library.empty.filtered" = "No scan matches this filter.";
 "library.action.revealFolder" = "Open Scanned Folder";
 "library.action.revealDocument" = "Show Scan File in Finder";
 "library.action.copyIdentifier" = "Copy Scan ID";
 "library.relativePaths.title" = "This scan recorded relative paths";
 /* %@ is the recorded root. */
-"library.relativePaths.body" = "Its root is \"%@\", which depends on the folder the CLI was run from. This app cannot resolve it, and guessing would point at the wrong folder.";
+"library.relativePaths.body" = "Its root is \"%@\", a relative path that depends on the folder the scan was run from. This app cannot resolve it, and guessing would point at the wrong folder.";
 "button.ok" = "OK";
 
 /* Main menu, added with the review */
@@ -105,12 +105,12 @@
 "review.unsaved.title" = "Save this review?";
 /* %@ is count.groups, from Localizable.stringsdict. */
 "review.unsaved.body" = "You decided %@. Groups you did not look at are not recorded either way.";
-"review.unsaved.cleared" = "You removed every decision for this scan. If you do not save, the file keeps the earlier ones, and the CLI or the next opening will act on them.";
+"review.unsaved.cleared" = "You removed every decision for this scan. If you do not save, the file keeps the earlier ones, and they will be back the next time you open it.";
 "review.unsaved.save" = "Save";
 "review.unsaved.discard" = "Discard";
 "button.cancel" = "Cancel";
 "library.action.review" = "Review This Scan";
-"library.relativePaths.reviewBody" = "Its root is \"%@\", which depends on the folder the CLI was run from. A review could not act on those paths.";
+"library.relativePaths.reviewBody" = "Its root is \"%@\", a relative path that depends on the folder the scan was run from. A review could not act on those paths.";
 
 /* Preview pane */
 "preview.empty" = "Select a file to preview it";
@@ -224,10 +224,10 @@
 /* Review footer */
 "review.button.simulate" = "Simulate and Apply...";
 "library.toolbar.review" = "Review";
-"scan.option.hidden.why" = "The CLI does. A folder of identical .DS_Store files buries every real finding.";
+"scan.option.hidden.why" = "Off by default: a folder of identical .DS_Store files buries every real finding.";
 "scan.option.packages.why" = "Removing a file from inside a .app or .photoslibrary corrupts it silently.";
 "scan.option.cache.why" = "A second scan of the same folder is much faster. Measured: 130 s cold, 7 s warm on 806 GB.";
-"scan.option.minimumSize.hint" = "Anything smaller is ignored, like the CLI does.";
+"scan.option.minimumSize.hint" = "Anything smaller is ignored.";
 "scan.recent.placeholder" = "Recent...";
 "review.group.title" = "Group %d";
 "review.group.detail" = "%1$@ each - %2$d files";
@@ -235,10 +235,10 @@
 "library.delete.title" = "Delete scan %@?";
 "library.delete.body" = "Only the scan record and its saved review are removed. No file this scan found is touched. The folder can be scanned again at any time.";
 "library.delete.confirm" = "Delete the Record";
-"review.imported.body" = "The rav duplicate CLI writes a decision for every group, including ones nobody opened, filled in with its own guess. So these check marks may not be choices you made. Reviewing again keeps them as a starting point; starting over clears them. Nothing is written either way until you save or apply.";
+"review.imported.body" = "A decision for every group, including ones nobody opened, usually means they were filled in from a suggestion. So these check marks may not be choices you made. Reviewing again keeps them as a starting point; starting over clears them. Nothing is written either way until you save or apply.";
 "review.imported.keep" = "Keep Them";
 "review.imported.discard" = "Start Over";
-"similar.imported.body" = "The rav duplicate CLI writes a decision for every pair it shows, including the ones nobody looked at closely. So these marks may not be your choices. Reviewing anyway keeps them as a starting point; starting over removes them, from the file too, because this viewer saves every change.";
+"similar.imported.body" = "A decision for every pair, including the ones nobody looked at closely, usually means they were filled in from a suggestion. So these marks may not be your choices. Reviewing anyway keeps them as a starting point; starting over removes them, from the file too, because this viewer saves every change.";
 "review.filter.anySize" = "Any size";
 "review.filter.atLeast" = "%@ and up";
 "review.filter.onlyUndecided" = "Not decided yet";
@@ -282,7 +282,6 @@
 "folders.onlyIn" = "Only in %@:";
 "folders.changedHeader" = "Same name, different contents:";
 "folders.identical" = "These two folders hold exactly the same files.";
-"folders.orientation" = "You decide here; rav duplicate folders-move quarantines \"Compared with\"";
 "folders.action.revealA" = "Open the First Folder";
 "folders.action.revealB" = "Open the Second Folder";
 "similar.window.title" = "Similar images - %@";
