@@ -4733,6 +4733,20 @@ enum SelfTest {
             savedDecisions.byKey[SimilarPairKey.key(for: reloaded.pairs[imageRow])] == .keepA,
             "the decision on disk is not the one that was clicked")
 
+        // **And ⌘Z takes that decision back** (#147), on screen and in the file. The undo further down is of a skip,
+        // which was always registered; a decision bypassed `mutate` and registered nothing, so that check passed
+        // while ⌘Z after a decision did nothing.
+        // Teeth: change `review` directly in `decisionChosen` again and `canUndo` is false here.
+        try expect(viewer.canUndoForSelftest, "deciding a pair registered nothing to undo")
+        viewer.undoForSelftest()
+        try expect(
+            viewer.reviewTallyForSelftest.decided == 0,
+            "⌘Z left the decision in place: \(viewer.reviewTallyForSelftest)")
+        try expect(
+            try store.loadSimilarDecisions(scanID: reloaded.scanID).count == 0,
+            "⌘Z took the decision off the screen and left it in the file")
+        viewer.decideForSelftest(.keepA, row: imageRow)
+
         // Skipping records neither, so "passed over" and "never seen" stay different.
         let otherRow = imageRow == 0 ? 1 : 0
         viewer.skipForSelftest(row: otherRow)
