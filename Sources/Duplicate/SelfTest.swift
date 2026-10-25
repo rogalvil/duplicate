@@ -4513,6 +4513,32 @@ enum SelfTest {
         )
         print("  the library lists it and the viewer names the overlap and the difference")
         print("  every saved pair is oriented by bytes, which is what folders-move deletes on")
+
+        // **The row menu acts on the folder scan under it** (#150). It read only the exact scans, so in this tab
+        // every action did nothing and a folder scan could not be deleted from the app. Last in the mode, because
+        // it deletes the scan everything above reads.
+        // Teeth: have `clickedTarget` read the exact rows in every tab and the first assertion finds nothing; have
+        // `remove` call `delete(id:)` for every kind and the folder scan survives.
+        let folderTarget = try expectSome(
+            library.menuTargetForSelftest(row: 0),
+            "the row menu has nothing to act on in the folder tab")
+        try expect(
+            folderTarget.scanID == reloaded.scanID,
+            "the row menu aims at \(folderTarget.scanID), wanted \(reloaded.scanID)")
+        try expect(
+            folderTarget.document?.hasSuffix("/folder-scans/\(reloaded.scanID).json") == true,
+            "Reveal Document would open \(folderTarget.document ?? "nothing")")
+        library.removeForSelftest(row: 0)
+        try await waitOnMainActor(
+            until: { library.folderRowCount == 0 },
+            what: "the deleted folder scan to leave the list")
+        try expect(
+            !store.identifiers(in: .folderScans).contains(reloaded.scanID),
+            "the folder scan survived Delete")
+        try expect(
+            !store.identifiers(in: .folderDecisions).contains(reloaded.scanID),
+            "Delete left the folder scan's decisions behind")
+        print("  the row menu reveals and deletes the folder scan under it")
     }
 
     // MARK: - similar-window
@@ -4974,6 +5000,31 @@ enum SelfTest {
         print(
             "  narrowing decided nothing; accepting \(undecidedShown) shown pairs wrote exactly those"
         )
+
+        // **The row menu acts on the perceptual scan under it** (#150), for the reason the folder viewer gives.
+        // This tab lists more than one scan, so the row is found by what the menu says it aims at.
+        // Teeth: have `remove` call `delete(id:)` for every kind and the perceptual scan survives.
+        let similarRow = try expectSome(
+            (0..<library.similarRowCount).first {
+                library.menuTargetForSelftest(row: $0)?.scanID == reloaded.scanID
+            },
+            "the row menu aims at no row holding \(reloaded.scanID)")
+        try expect(
+            library.menuTargetForSelftest(row: similarRow)?.document?
+                .hasSuffix("/similar-scans/\(reloaded.scanID).json") == true,
+            "Reveal Document would not open the perceptual scan")
+        let similarRowsBefore = library.similarRowCount
+        library.removeForSelftest(row: similarRow)
+        try await waitOnMainActor(
+            until: { library.similarRowCount == similarRowsBefore - 1 },
+            what: "the deleted perceptual scan to leave the list")
+        try expect(
+            !store.identifiers(in: .similarScans).contains(reloaded.scanID),
+            "the perceptual scan survived Delete")
+        try expect(
+            !store.identifiers(in: .similarDecisions).contains(reloaded.scanID),
+            "Delete left the perceptual scan's decisions behind")
+        print("  the row menu reveals and deletes the perceptual scan under it")
     }
 
     // MARK: - similar-apply
