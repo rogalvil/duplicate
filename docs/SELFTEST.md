@@ -153,12 +153,18 @@ make ui     # inglés y español; falla al final con todo lo que encontró
 
 Arma un árbol con respuestas conocidas (dos pares exactos, un par de carpetas al 90.9%, un par de imágenes y
 uno de video), lo escanea con los tres detectores de verdad y abre cada ventana con lo que encontraron:
-biblioteca en sus tres pestañas, el panel de escaneo con cada detector, la revisión exacta, el visor de
-carpetas, el de parecidos con el par de imagen y el de video, y el historial. Cada una en dos tamaños, el
-mínimo que permite y uno de laptop (1280×800). Después, las tres **hojas de aplicar** en estado de simulación,
-a su propio tamaño: entraron con #180, cuando su lista resultó vacía en las tres y ninguna captura había
-abierto nunca una hoja. Todo en los dos idiomas: **50 capturas por corrida** en `build/ui/en/` y
-`build/ui/es/`.
+biblioteca en sus tres pestañas y vacía, el panel de escaneo con cada detector, la revisión exacta, el visor
+de carpetas, el de parecidos con el par de imagen y el de video, y el historial con dos sesiones (una devuelta
+entera y otra a medias). Cada una en dos tamaños, el mínimo que permite y uno de laptop (1280×800); el panel de
+escaneo no se puede redimensionar, así que su captura de laptop muestra un hueco que nadie ve. Después, las tres
+**hojas de aplicar** en estado de simulación, a su propio tamaño —entraron con #180, cuando su lista resultó vacía
+en las tres y ninguna captura había abierto nunca una hoja—, y dos **terminadas**: la de carpetas con el rechazo por
+contención y la de parecidos con un archivo movido. Las terminadas pasan por los runners de verdad, con un
+disposer que mueve a un basurero falso dentro del árbol de prueba. Todo en los dos idiomas: **58 capturas por
+corrida** en `build/ui/en/` y `build/ui/es/`.
+
+**Las capturas del [manual](MANUAL.md) salen de aquí**, en español. Un cambio que se ve en una ventana del manual
+sube sus capturas nuevas con `scripts/push-captures.sh` y actualiza el enlace en el mismo PR.
 
 Sobre cada captura afirma:
 

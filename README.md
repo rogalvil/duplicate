@@ -117,7 +117,8 @@ open -a Duplicate     # ⌘N, elegir carpeta, Empezar
 ```
 
 El escaneo corre en la app con progreso —archivos vistos, hasheados, bytes leídos, aciertos de caché,
-segundos— y se puede cancelar; un escaneo cancelado no deja documento.
+segundos— y se puede cancelar; un escaneo cancelado no deja documento. El paso a paso, con capturas, está en el
+[manual de uso](docs/MANUAL.md).
 
 Doble clic en un escaneo abre su revisión. En la revisión:
 

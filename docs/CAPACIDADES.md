@@ -14,7 +14,8 @@ razón de la regla de abajo.
 ## En una página
 
 Tres detectores, y los tres cierran el ciclo completo desde la app, sobre documentos JSON en
-`~/.local/state/rav/duplicate/` (formato en [`FORMATO.md`](FORMATO.md)):
+`~/.local/state/rav/duplicate/` (formato en [`FORMATO.md`](FORMATO.md)). El recorrido con capturas, para quien
+usa la app, está en el [manual](MANUAL.md):
 
 | | Escanear | Revisar | Decidir | Simular y aplicar | Deshacer |
 |---|---|---|---|---|---|

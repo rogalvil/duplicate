@@ -196,6 +196,9 @@ se vuelve un assert permanente, en un modo de CI o en una regla de `make ui`, co
 la versión rota. A mano solo queda lo que ninguna herramienta puede simular sin cambiar lo que mide: los
 permisos de TCC, cuyo guion está al final de [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
+**El manual de uso ([`docs/MANUAL.md`](docs/MANUAL.md)) muestra capturas de `make ui`.** Un PR que cambia una ventana
+que aparece ahí sube las capturas nuevas y actualiza el manual en el mismo cambio, igual que `CAPACIDADES.md`.
+
 **Un cambio que se ve lleva capturas**, antes y después, de `build/ui/`, en el PR y en el issue. Se suben con
 `scripts/push-captures.sh` a la rama `ui-captures`, que nunca se mergea y no se borra, porque los PR las citan
 por URL. Solo capturas de `make ui`, nunca la pantalla del usuario: el repo es público. Las trampas técnicas
