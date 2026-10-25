@@ -226,6 +226,22 @@
 			<string>Moving %2$@ would lose %1$d files it has and the other does not.</string>
 		</dict>
 	</dict>
+	<key>scan.inaccessible.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 folder was skipped because macOS did not grant access. Anything inside it was not scanned, so this result is incomplete. To include it, choose it directly as the folder to scan: choosing it is what grants the app access.</string>
+			<key>other</key>
+			<string>%d folders were skipped because macOS did not grant access. Anything inside them was not scanned, so this result is incomplete. To include one, choose it directly as the folder to scan: choosing it is what grants the app access.</string>
+		</dict>
+	</dict>
 	<key>sessions.prune.body.kept</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
