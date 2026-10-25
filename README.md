@@ -3,9 +3,9 @@
 App nativa de macOS para encontrar archivos duplicados. Swift, AppKit programático, cero
 dependencias externas.
 
-Es el puerto de `rav duplicate`, el subcomando del CLI personal en Python, a una app con ventana —
-con vista previa antes de borrar, escaneo concurrente con caché, y algo que el CLI nunca tuvo:
-deshacer.
+Nació como versión con ventana de `rav duplicate`, una herramienta de línea de comandos del mismo autor que no
+es pública, y agrega lo que esa herramienta no tenía: vista previa antes de borrar, escaneo concurrente con
+caché, y deshacer. Para usarla no hace falta nada más.
 
 **Estado: en construcción, y la lista de abajo es literal.** No hay que deducir qué falta.
 
@@ -29,8 +29,8 @@ deshacer.
 | Cuarentena cuando la Papelera no existe, probada en un montaje SMB real | **funciona** |
 | Limpiar los journals de sesiones ya deshechas, con su regla probable | **funciona** |
 
-O sea: **los tres detectores cierran el ciclo completo** desde la app y sin el CLI — escanear, revisar, decidir,
-simular, aplicar a la Papelera, deshacer. Imágenes y video, los dos, con documentos que el CLI lee byte a byte.
+O sea: **los tres detectores cierran el ciclo completo** desde la app — escanear, revisar, decidir, simular,
+aplicar a la Papelera, deshacer. Imágenes y video, los dos.
 
 El hash perceptual está medido contra `imagehash` sobre las 2,779 fotos reales del corpus, y el modo
 `phash-differential` vuelve a medirlo cuando se le pide: **90.9% idéntico bit a bit** entre las 2,761 sin
@@ -47,9 +47,6 @@ correcto — una copia que solo cambia el flag debería coincidir con su origina
 - Swift 6, que viene con las Command Line Tools de esa versión.
 - Nada más. Cero dependencias externas es requisito del proyecto, así que no hay `brew install` de
   nada, ni SwiftPM resolviendo paquetes de red.
-
-Para que la interoperabilidad tenga sentido hace falta también el CLI
-(un CLI en Python del mismo autor), pero la app funciona sin él: lee el directorio de estado, no el CLI.
 
 ## Instalación
 
@@ -110,8 +107,8 @@ make uninstall              # quita la copia de /Applications
 rm -rf ~/Library/Caches/com.rogalvil.duplicate    # la caché de hashes, dato derivado
 ```
 
-El directorio de estado (`~/.local/state/rav/duplicate/`) **no se toca**: es compartido con el CLI y
-son los escaneos y decisiones del usuario, no de la app.
+El directorio de estado (`~/.local/state/rav/duplicate/`) **no se toca**: son los escaneos y decisiones del
+usuario, no de la app.
 
 ## Cómo se usa hoy
 
@@ -120,8 +117,7 @@ open -a Duplicate     # ⌘N, elegir carpeta, Empezar
 ```
 
 El escaneo corre en la app con progreso —archivos vistos, hasheados, bytes leídos, aciertos de caché,
-segundos— y se puede cancelar; un escaneo cancelado no deja documento. Un escaneo hecho con
-`rav duplicate scan` también aparece en la lista sin apretar nada.
+segundos— y se puede cancelar; un escaneo cancelado no deja documento.
 
 Doble clic en un escaneo abre su revisión. En la revisión:
 
@@ -140,17 +136,16 @@ Doble clic en un escaneo abre su revisión. En la revisión:
 | `⌘S` | guarda las decisiones (también se guardan solas al simular y al cerrar) |
 | `⌘⇧D` | simula y abre la hoja de aplicar — o el botón del pie |
 
-Las decisiones se guardan en `decisions/<scan_id>.json`, que es el mismo archivo que lee
-`rav duplicate decisions <scan_id>`. **Solo se escriben los grupos que decidiste**: los que saltaste y
-los que nunca abriste no aparecen, ni a favor ni en contra.
+Las decisiones se guardan en `decisions/<scan_id>.json`. **Solo se escriben los grupos que decidiste**: los que
+saltaste y los que nunca abriste no aparecen, ni a favor ni en contra.
 
 **⌘Z es deshacer de revisión, nunca de aplicación.** Deshacer una casilla y deshacer cuatro mil
-archivos mandados a la Papelera no son el mismo acto; el deshacer de sesión tendrá su propio menú y no
-tendrá atajo.
+archivos mandados a la Papelera no son el mismo acto; el deshacer de una sesión está en el menú Sesiones y en el
+historial, y no tiene atajo.
 
 ## Qué detecta
 
-Tres detectores, con los mismos criterios que el CLI:
+Tres detectores:
 
 | Detector | Criterio |
 |---|---|
@@ -158,61 +153,47 @@ Tres detectores, con los mismos criterios que el CLI:
 | Carpetas | coeficiente de Dice sobre `{ruta relativa → digest}` |
 | Media perceptual | pHash de imagen por distancia de Hamming; video por proporción de frames que coinciden |
 
-## Interoperabilidad con el CLI
-
-El estado vive en el mismo lugar que el del CLI y en el mismo formato:
+## Dónde guarda lo que encuentra
 
 ```
 $XDG_STATE_HOME/rav/duplicate/      (o ~/.local/state/rav/duplicate/)
-├── scans/                  ┐
-├── decisions/              │
-├── folder-scans/           │ compartidos con `rav duplicate`, byte a byte
-├── folder-decisions/       │
-├── similar-scans/          │
-├── similar-decisions/      ┘
-└── journal/                  solo de esta app: qué se movió y a dónde
+├── scans/                  duplicados exactos
+├── decisions/              qué conservar, por grupo
+├── folder-scans/           carpetas parecidas
+├── folder-decisions/
+├── similar-scans/          imágenes y videos parecidos
+├── similar-decisions/
+└── journal/                qué se movió y a dónde, para poder deshacerlo
 ```
 
-Un escaneo hecho en la terminal se revisa en la app, y al revés. Los formatos de scan y decisiones
-son byte-compatibles en las dos direcciones — hay modos de selftest que lo verifican contra los
-archivos reales del usuario, comparando bytes.
+Documentos JSON legibles, escritos de forma atómica. Qué campos llevan, en qué orden y por qué el escritor de
+JSON está hecho a mano: [`docs/FORMATO.md`](docs/FORMATO.md).
 
-El contrato exacto —qué campos, en qué orden, con qué escapes, y qué hace Foundation mal— está en
-[`docs/INTEROP.md`](docs/INTEROP.md).
+Aplicar manda a la Papelera real con `FileManager.trashItem` y registra cada movimiento en el journal. Eso da el
+"Sacar del basurero" de Finder y un deshacer dentro de la app. Solo cuando el volumen no tiene Papelera, como un
+montaje de red, mueve a una carpeta de cuarentena local.
 
-**La acción destructiva sí difiere, y conviene saberlo:** el CLI mueve a una carpeta de cuarentena
-con `shutil.move`; la app manda a la Papelera real con `FileManager.trashItem` y registra cada
-movimiento en el journal. Eso da "Devolver" de Finder y un deshacer dentro de la app. Un archivo que
-la app mandó a la Papelera no está donde el CLI lo buscaría.
-
-## Diferencias de comportamiento respecto al CLI
+## Decisiones de comportamiento
 
 No son accidentes. Cada una arregla algo o evita un riesgo, y cada una cambia lo que se encuentra:
 
-- **Los archivos ocultos se omiten por default.** Un grupo de 400 `.DS_Store` idénticos entierra
-  todo hallazgo real. Hay un toggle para volver al comportamiento del CLI.
-- **Los hardlinks se colapsan.** Dos hardlinks son un archivo; "borrar" uno no libera nada, así que
-  proponerlo es mentir sobre el espacio recuperado.
-- **Los clones de APFS se marcan como ya deduplicados**, no como duplicados a borrar. En volúmenes
-  que no son APFS la cifra de espacio recuperable es una cota superior, y la app lo dice —con un `≤`
-  delante del número, no redondeándola a un número confiado.
-- **Los paquetes (`.app`, `.photoslibrary`, `.fcpbundle`) no se recorren por default.** Sacar un
-  archivo de dentro de un bundle lo corrompe en silencio.
-- **Las raíces de Papelera y cuarentena se excluyen del recorrido.** El CLI no las excluye, así que
-  correr `rav duplicate ~` dos veces re-descubre lo que la primera corrida acaba de poner en
-  cuarentena.
-- **Los grupos sin revisar no se deciden solos.** El CLI escribe una decisión por default para cada
-  grupo, incluidos los que nunca viste; esta app solo escribe los que decidiste, y al aplicar dirá
-  cuántos quedaron sin revisar.
-- **Un archivo que comparte almacenamiento con el que conservas no se ofrece para borrar.** Su casilla
-  está deshabilitada y la nota dice por qué.
-- **En un par de carpetas, `folder_a` es siempre la ruta menor por bytes.** El CLI la deja en orden de
-  `os.walk` y `rav duplicate folders-move` **conserva `folder_a` y borra `folder_b`**, así que la
-  orientación decide cuál carpeta se destruye. Sobre el mismo árbol los dos encuentran el mismo
-  conjunto de pares; la app además los orienta igual en cada corrida y en cualquier máquina.
-- **"Descartar el grupo completo" descarta el grupo completo.** El CLI llama a eso "Mover todos" y
-  luego lo salta al aplicar porque su lista de conservados queda vacía: una acción destructiva
-  etiquetada que en silencio no hace nada.
+- **Los archivos ocultos se omiten por default.** Un grupo de 400 `.DS_Store` idénticos entierra todo hallazgo
+  real. El panel de escaneo tiene un interruptor para incluirlos.
+- **Los hardlinks se colapsan.** Dos hardlinks son un archivo; "borrar" uno no libera nada, así que proponerlo es
+  mentir sobre el espacio recuperado.
+- **Los clones de APFS se marcan como ya deduplicados**, no como duplicados a borrar. En volúmenes que no son APFS
+  la cifra de espacio recuperable es una cota superior, y la app lo dice —con un `≤` delante del número, no
+  redondeándola a un número confiado.
+- **Los paquetes (`.app`, `.photoslibrary`, `.fcpbundle`) no se recorren por default.** Sacar un archivo de dentro
+  de un bundle lo corrompe en silencio.
+- **La Papelera y las carpetas de cuarentena se excluyen del recorrido**, así que escanear `~` dos veces no
+  vuelve a encontrar lo que la primera vez acaba de mover.
+- **Los grupos sin revisar no se deciden solos.** Solo se escriben los que decidiste, y aplicar actúa sobre esos.
+- **Un archivo que comparte almacenamiento con el que conservas no se ofrece para borrar.** Su casilla está
+  deshabilitada y la nota dice por qué.
+- **Antes de mover nada, se verifica otra vez.** Un archivo exacto se vuelve a hashear, un par parecido se vuelve
+  a puntuar, y una carpeta solo se mueve si cada archivo suyo —ocultos y paquetes incluidos— está idéntico en la
+  que se conserva.
 
 ## Idiomas
 
@@ -241,8 +222,8 @@ modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fa
 |---|---|
 | macOS pide permiso de carpetas después de cada rebuild | falta el certificado: `./scripts/make-signing-cert.sh` |
 | "No se puede abrir porque Apple no puede comprobar…" | no está notarizada, a propósito. Clic derecho → Abrir |
-| La app no lista un escaneo que el CLI acaba de hacer | ¿`XDG_STATE_HOME` distinto entre los dos? `make selftest MODE=state-dir` imprime a dónde resolvió la app |
-| Un escaneo sale marcado "rutas relativas" y no se puede revisar | se hizo con `rav duplicate scan .`; la app arranca con `/` como directorio de trabajo y no puede resolverlas |
+| La app no lista escaneos que deberían estar | ¿`XDG_STATE_HOME` distinto del que se usó al escanear? `make selftest MODE=state-dir` imprime a dónde resolvió la app |
+| Un escaneo sale marcado "rutas relativas" y no se puede revisar | lo escribió una herramienta de terminal con una raíz relativa; la app arranca con `/` como directorio de trabajo y no puede resolverlas |
 | `make lint` pasa local y falla en CI | `swift-format` local es más nuevo que el del runner. No reformatear a ciegas |
 | El escaneo se ve lento en un disco externo | a propósito: dos lectores concurrentes como tope. Más lectores en un disco que gira convierten lecturas secuenciales en tormenta de seeks |
 
@@ -252,12 +233,11 @@ modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fa
   macOS atribuye el acceso a archivos a la terminal, y la app hereda los permisos de ella. Lanzada
   por Launch Services, la app es su propio proceso responsable. Los dos hechos son verdad y ninguno
   implica el otro.
-- El pHash de imágenes **no** será bit-idéntico al de `imagehash.phash` del CLI. La forma del pipeline
-  se reproduce, pero el resample de Pillow no es el de ImageIO, así que pares justo en el borde del
-  umbral pueden aparecer en una herramienta y no en la otra. El formato compartido no guarda hashes,
-  así que nada se vuelve ilegible.
-- El video se muestreará con `AVAssetImageGenerator` en vez de ffmpeg. `.mkv` y `.avi` pueden no
-  abrirse; el corpus real de este usuario es `.mp4` y `.mov`.
+- El pHash de imágenes **no** es bit-idéntico al de `imagehash.phash` de Python. La forma del pipeline se
+  reproduce, pero el resample de Pillow no es el de ImageIO, así que pares justo en el borde del umbral pueden
+  aparecer en una implementación y no en la otra (la medición está arriba).
+- El video se muestrea con `AVAssetImageGenerator`, sin ffmpeg. `.mkv` y `.avi` pueden no abrirse; el corpus
+  real de este usuario es `.mp4` y `.mov`.
 - **Los benchmarks son de un solo corpus, esta máquina.** Medido sobre datos reales:
 
   | Corpus | Archivos | Bytes | Frío | Caliente |
@@ -275,11 +255,10 @@ modos de selftest —que CI corre en cada PR— con la rotura exacta que hace fa
 El detalle y las alternativas que se descartaron están en
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-## La pasada a mano
+## Árbol de prueba
 
-Lo que ningún arnés alcanza —que un panel del sistema aparezca, que un texto quepa, y sobre todo **qué permisos
-tiene la app de verdad**— está en [`docs/PASADA-A-MANO.md`](docs/PASADA-A-MANO.md), con un árbol de prueba de
-respuestas medidas y el orden en que conviene mirarlo.
+Para probar a mano sin tocar archivos reales. Lo único que ninguna herramienta puede verificar, **qué permisos
+tiene la app de verdad**, tiene su guion corto al final de [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 ```bash
 python3 scripts/make-demo-tree.py ~/demo-duplicate                  # el árbol chico, 7 grupos exactos

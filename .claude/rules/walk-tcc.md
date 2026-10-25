@@ -38,7 +38,7 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **Elegir la carpeta en `NSOpenPanel` *es* el consentimiento, así que Escritorio y Documentos no disparan
   diálogo.** Medido con la app lanzada por Launch Services: no pregunta, lee los 15 archivos de un árbol en el
   Escritorio, y **no aparece en Ajustes → Privacidad → Archivos y carpetas** — las tres cosas consistentes entre
-  sí. El comentario de `chooseRoot` ya lo decía y la primera versión de la pasada a mano afirmaba lo contrario.
+  sí. El comentario de `chooseRoot` ya lo decía y la primera versión del guion de prueba a mano afirmaba lo contrario.
   Y no es porque el usuario sea administrador: TCC es una capa aparte de los permisos POSIX, y ni `sudo` la evita.
 - **Y las raíces recientes tampoco muerden**: medido, escanear la misma carpeta del Escritorio desde recientes,
   tras cerrar la app por completo, da los mismos 5 grupos sin preguntar. El consentimiento del panel persiste

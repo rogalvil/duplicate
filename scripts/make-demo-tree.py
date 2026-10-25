@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Árbol chico con duplicados conocidos, para la pasada a mano.
+"""Árbol chico con duplicados conocidos, para probar la app a mano.
 
-**Existe para no ensayar sobre el corpus real.** La pasada a mano incluye aplicar y deshacer, y aunque todo
-va a la Papelera y vuelve, un árbol desechable con respuestas conocidas hace que "esto está mal" sea
+**Existe para no ensayar sobre el corpus real.** Probar incluye aplicar y deshacer, y aunque todo
+va al basurero y vuelve, un árbol desechable con respuestas conocidas hace que "esto está mal" sea
 evidente en vez de discutible.
 
 Lo que arma, y lo que cada detector debe encontrar:
@@ -19,8 +19,8 @@ cinco archivos que copia-a y copia-b comparten. Es correcto, y es el recordatori
 exacto no sabe nada de carpetas.
 
 **Los seis archivos que se agregaron a parecidas/ no cambian ese 7**, y eso es deliberado: son parecidos
-entre sí y ninguno es byte-idéntico a otro, así que el detector exacto no los agrupa y los pasos 3 y 6 de
-la pasada siguen viendo el mismo escaneo chico de siempre.
+entre sí y ninguno es byte-idéntico a otro, así que el detector exacto no los agrupa y la revisión exacta
+sigue viendo el mismo escaneo chico de siempre.
 
 Uso: python3 scripts/make-demo-tree.py ~/demo-duplicate
      python3 scripts/make-demo-tree.py ~/demo-grande --carpeta-grande
@@ -42,8 +42,8 @@ def build_big_folder_pair(root: str) -> int:
     antes de mover nada, y eso es lo único que hace visible la etapa: con dos archivos, el apply termina antes
     del primer tick del `Timer` de 10 Hz y la línea nunca alcanza a decir "verificando" ni "moviendo".
 
-    Y va aparte porque 4,000 archivos compartidos serían **4,000 grupos exactos**: el escaneo chico que los
-    pasos 3 y 6 de la pasada necesitan dejaría de ser chico.
+    Y va aparte porque 4,000 archivos compartidos serían **4,000 grupos exactos**: el escaneo chico que la
+    revisión exacta necesita dejaría de ser chico.
     """
     shutil.rmtree(root, ignore_errors=True)
     a = f"{root}/original"
@@ -164,7 +164,7 @@ def main() -> int:
     # solo en `copia-b`, el Dice es `2s / (2s + 1)`; para llegar al umbral por default de 90% hace falta
     # `s >= 4.5`, o sea cinco. Con tres daba 85.7% y el par de las carpetas padre **no se encontraba**: el
     # detector sólo veía `copia-a/notas` contra `copia-b/notas` al 100%, un par de un archivo sin nada que
-    # sobre de un lado -- justo lo que el paso 5 de la pasada a mano existe para mirar.
+    # sobre de un lado -- justo lo que el visor de carpetas existe para mostrar.
     folder_a = f"{root}/copia-a"
     os.makedirs(f"{folder_a}/notas", exist_ok=True)
     for name, payload in [
