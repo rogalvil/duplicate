@@ -155,8 +155,10 @@ Arma un árbol con respuestas conocidas (dos pares exactos, un par de carpetas a
 uno de video), lo escanea con los tres detectores de verdad y abre cada ventana con lo que encontraron:
 biblioteca en sus tres pestañas, el panel de escaneo con cada detector, la revisión exacta, el visor de
 carpetas, el de parecidos con el par de imagen y el de video, y el historial. Cada una en dos tamaños, el
-mínimo que permite y uno de laptop (1280×800), y en los dos idiomas: **44 capturas por corrida** en
-`build/ui/en/` y `build/ui/es/`.
+mínimo que permite y uno de laptop (1280×800). Después, las tres **hojas de aplicar** en estado de simulación,
+a su propio tamaño: entraron con #180, cuando su lista resultó vacía en las tres y ninguna captura había
+abierto nunca una hoja. Todo en los dos idiomas: **50 capturas por corrida** en `build/ui/en/` y
+`build/ui/es/`.
 
 Sobre cada captura afirma:
 

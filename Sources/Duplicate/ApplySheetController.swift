@@ -171,6 +171,9 @@ final class ApplySheetController: NSWindowController {
         detailLabel.textColor = .secondaryLabelColor
 
         listView.isEditable = false
+        // Follows the scroll view's width. `NSTextView()` starts at zero width and nothing else resizes it, so the
+        // list -- the files a dry run would move, then what moved and what was refused -- drew nothing (#180).
+        listView.autoresizingMask = [.width]
         listView.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         listView.drawsBackground = false
         let scroll = NSScrollView()
@@ -441,6 +444,10 @@ final class ApplySheetController: NSWindowController {
     var headlineText: String { headlineLabel.stringValue }
     var detailText: String { detailLabel.stringValue }
     var listText: String { listView.string }
+    var listWidthForSelftest: CGFloat {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return listView.frame.width
+    }
     var canApply: Bool { applyButton.isEnabled }
     var canUndo: Bool { !undoButton.isHidden && undoButton.isEnabled }
     var lastReport: DisposalReport? { report }

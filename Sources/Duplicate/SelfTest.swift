@@ -4149,6 +4149,14 @@ enum SelfTest {
         review.simulateForSelftest()
         let sheet = try expectSome(review.openApplySheet, "simulating opened no sheet")
 
+        // **The list is drawn, not only filled** (#180). An `NSTextView()` with no width held the dry run's files and
+        // drew none of them, and every check that read its `string` passed.
+        // Teeth: drop `autoresizingMask = [.width]` from the sheet's list and this reads 0.
+        try expect(
+            sheet.listWidthForSelftest > 100,
+            "the sheet's list holds \(sheet.listText.count) characters in \(Int(sheet.listWidthForSelftest)) points of width"
+        )
+
         // **Simulating saves the decisions, so the user never has to think about it.** A review that was
         // acted on but never written would leave the app and the CLI disagreeing about what happened.
         //
@@ -4568,6 +4576,14 @@ enum SelfTest {
         viewer.simulateForSelftest()
         let folderSheet = try expectSome(viewer.applySheetForSelftest, "no apply sheet appeared")
         defer { folderSheet.window?.close() }
+
+        // **The list is drawn, not only filled** (#180). An `NSTextView()` with no width held the dry run's files and
+        // drew none of them, and every check that read its `string` passed.
+        // Teeth: drop `autoresizingMask = [.width]` from the sheet's list and this reads 0.
+        try expect(
+            folderSheet.listWidthForSelftest > 100,
+            "the sheet's list holds \(folderSheet.listText.count) characters in \(Int(folderSheet.listWidthForSelftest)) points of width"
+        )
         try expect(
             folderSheet.isAuthorizedForSelftest,
             "the gate would refuse this sheet, so pressing apply would do nothing")
@@ -5166,6 +5182,14 @@ enum SelfTest {
         viewer.simulateForSelftest()
         let sheet = try expectSome(viewer.applySheetForSelftest, "no apply sheet appeared")
         defer { sheet.window?.close() }
+
+        // **The list is drawn, not only filled** (#180). An `NSTextView()` with no width held the dry run's files and
+        // drew none of them, and every check that read its `string` passed.
+        // Teeth: drop `autoresizingMask = [.width]` from the sheet's list and this reads 0.
+        try expect(
+            sheet.listWidthForSelftest > 100,
+            "the sheet's list holds \(sheet.listText.count) characters in \(Int(sheet.listWidthForSelftest)) points of width"
+        )
         try expect(
             sheet.headlineText.contains("1"),
             "the sheet says \(sheet.headlineText) for one decided pair")

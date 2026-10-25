@@ -82,6 +82,9 @@ final class SimilarApplySheetController: NSWindowController {
         }
 
         listView.isEditable = false
+        // Follows the scroll view's width. `NSTextView()` starts at zero width and nothing else resizes it, so the
+        // list -- the files a dry run would move, then what moved and what was refused -- drew nothing (#180).
+        listView.autoresizingMask = [.width]
         listView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         let scroll = NSScrollView()
         scroll.documentView = listView
@@ -363,6 +366,10 @@ final class SimilarApplySheetController: NSWindowController {
     var headlineText: String { headlineLabel.stringValue }
     var detailText: String { detailLabel.stringValue }
     var listText: String { listView.string }
+    var listWidthForSelftest: CGFloat {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return listView.frame.width
+    }
     var isApplyEnabled: Bool { applyButton.isEnabled }
     var isUndoVisible: Bool { !undoButton.isHidden }
     var requiredContentSize: NSSize {
