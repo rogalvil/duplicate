@@ -87,6 +87,7 @@
 "review.subheader" = "Grupo %1$d de %2$d - %3$@ cada uno - %4$d archivos - libera %5$@";
 "review.subheader.upperBound" = "Grupo %1$d de %2$d - %3$@ cada uno - %4$d archivos - libera hasta %5$@";
 "review.warning.preview" = "Todavía no hay nada decidido. La marca es solo una sugerencia, y cerrar esta ventana no registra nada para este grupo.";
+"review.warning.noneShown" = "Ningún grupo coincide con el filtro. Cámbialo para seguir revisando.";
 "review.warning.keepNothing" = "Un grupo tiene que conservar al menos un archivo. Para quitar todas las copias, usa Grupo > Descartar el grupo completo.";
 "review.warning.sharedStorage" = "Un archivo comparte su almacenamiento con el que estás conservando, así que quitarlo no liberaría nada. No se ofrece.";
 "review.warning.lastGroup" = "Ese era el último grupo.";

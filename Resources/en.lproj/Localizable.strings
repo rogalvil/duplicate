@@ -88,6 +88,7 @@
 "review.subheader" = "Group %1$d of %2$d - %3$@ each - %4$d files - frees %5$@";
 "review.subheader.upperBound" = "Group %1$d of %2$d - %3$@ each - %4$d files - frees up to %5$@";
 "review.warning.preview" = "Nothing decided yet. The check mark is only a suggestion, and closing this window records nothing for this group.";
+"review.warning.noneShown" = "No group matches the filter. Change it to keep reviewing.";
 "review.warning.keepNothing" = "A group has to keep at least one file. To remove every copy, use Group > Discard the Whole Group.";
 "review.warning.sharedStorage" = "One file shares its storage with the file you are keeping, so removing it would free nothing. It is not offered.";
 "review.warning.lastGroup" = "That was the last group.";

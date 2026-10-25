@@ -526,6 +526,11 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         // The buttons say the same thing the menu items do, from one source: nothing decided means nothing
         // to simulate and nothing to save.
         simulateButton.isEnabled = !state.decisionsForSaving.isEmpty
+        confirmButton.isEnabled = !visible.isEmpty
+        if visible.isEmpty {
+            warningLabel.stringValue = Strings.string("review.warning.noneShown")
+            warningLabel.textColor = .systemOrange
+        }
 
         fileTable.reloadData()
         if !visible.isEmpty {
@@ -555,8 +560,10 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
         if let row = visible.firstIndex(of: previous) {
             groupTable.selectRowIndexes([row], byExtendingSelection: false)
-        } else if let first = visible.first {
-            selectGroup(first)
+        } else if !visible.isEmpty {
+            // The next group shown after it, which `selectGroup` falls forward to. Not the first: confirming moves
+            // past the group, and a hidden one after it sent the review back to the top of the list.
+            selectGroup(previous)
         }
     }
 
@@ -850,7 +857,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
 
     private func toggleSelectedFile() {
         let row = fileTable.selectedRow
-        guard row >= 0 else { return }
+        guard row >= 0, !visible.isEmpty else { return }
         var accepted = true
         mutate { state in
             state.go(to: state.groupIndex)
@@ -916,14 +923,17 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         }
     }
 
+    // **Over the groups the sidebar shows, not over the scan.** Stepping to `groupIndex - 1` landed on a group the
+    // filter hides, `selectGroup` fell forward to the next one shown -- the one already selected -- and Previous
+    // went nowhere.
     @objc func previousGroup(_ sender: Any?) {
-        guard state.groupIndex > 0 else { return }
-        selectGroup(state.groupIndex - 1)
+        guard let target = visible.last(where: { $0 < state.groupIndex }) else { return }
+        selectGroup(target)
     }
 
     @objc func nextGroup(_ sender: Any?) {
-        guard state.groupIndex + 1 < state.groupCount else { return }
-        selectGroup(state.groupIndex + 1)
+        guard let target = visible.first(where: { $0 > state.groupIndex }) else { return }
+        selectGroup(target)
     }
 
     /// Shows what applying would do, and only then allows applying.
@@ -1073,9 +1083,13 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(previousGroup(_:)):
-            return state.groupIndex > 0
+            return visible.contains { $0 < state.groupIndex }
         case #selector(nextGroup(_:)):
-            return state.groupIndex + 1 < state.groupCount
+            return visible.contains { $0 > state.groupIndex }
+        case #selector(confirmGroup(_:)), #selector(skipGroup(_:)), #selector(keepAll(_:)),
+            #selector(discardEntireGroup(_:)):
+            // Nothing shown, nothing to decide: the detail still holds the last group, and the list says it is gone.
+            return !visible.isEmpty
         case #selector(clearDecision(_:)):
             return state.decision(at: state.groupIndex) != .undecided
         case #selector(saveDecisions(_:)):
@@ -1099,6 +1113,16 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     // MARK: - Selftest hooks
 
     var reviewState: ExactReviewState { state }
+    func setSizeFilterForSelftest(_ index: Int) {
+        sizeFilterPopup.selectItem(at: index)
+        filterChanged(nil)
+    }
+    var confirmEnabledForSelftest: Bool { confirmButton.isEnabled }
+    func groupTitleForSelftest(row: Int) -> String? {
+        guard let column = groupTable.tableColumns.first else { return nil }
+        return (tableView(groupTable, viewFor: column, row: row) as? GroupRowView)?.titleField
+            .stringValue
+    }
     var reviewFlow: ReviewFlow { flow }
     var currentPresentation: GroupPresentation? { presentation }
     var headerText: String { headerLabel.stringValue }
@@ -1295,7 +1319,7 @@ extension ReviewWindowController: NSTableViewDataSource, NSTableViewDelegate {
         cell.titleField.stringValue =
             mark
             + String(
-                format: Strings.string("review.group.title"), row + 1)
+                format: Strings.string("review.group.title"), index + 1)
         cell.detailField.stringValue = String(
             format: Strings.string("review.group.detail"),
             ByteSize.format(group.size), group.files.count
