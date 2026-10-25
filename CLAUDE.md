@@ -202,6 +202,12 @@ por URL. Solo capturas de `make ui`, nunca la pantalla del usuario: el repo es p
 de los chequeos temporales (eventos sintéticos, autosave, live resize) están en
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
+**Un issue se trabaja con evidencia visual comprobada.** Al confirmar que un issue sigue vigente, se le agrega
+la captura que lo muestra, de `make ui` o de un chequeo temporal, y su PR lleva el antes y el después. Si el
+issue no tiene pantalla (un tiempo, el contenido de un archivo, un menú del sistema, ⌘Q), no se fabrica una
+captura que no muestra nada: **se le dice al usuario, y se decide con él qué evidencia vale**. Puede ser un
+selftest que falla y pasa, un archivo antes y después, o una medición.
+
 ## Qué no tocar sin plantearlo
 
 - **No agregar dependencias externas.** Cero dependencias es requisito del proyecto. `libsqlite3`
