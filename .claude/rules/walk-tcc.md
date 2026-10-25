@@ -90,6 +90,10 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **El 172 no se reproduce, y no es regresión (#161).** Medido otra vez: 219 MB a 200,000, 352 MB a 400,000 y
   657–714 MB a 800,000. El mismo commit que midió 172 (`a050021`), compilado hoy y alternado con `main`, da 219.
   Un número de memoria se vuelve a medir con el commit que lo produjo antes de llamar regresión a la diferencia.
+- **Ninguna lista de todos los archivos sobrevive a la siguiente (#161).** `Outcome` cargaba la lista entera del
+  recorrido hasta el final y nadie la leía; los buckets vivían durante el hasheo. En `DuplicateFinder` el recorrido
+  vive en un `do { }` y las listas ya usadas se vacían a mano. `FileEntry` mide 112 B, así que cada copia de más a
+  800,000 archivos son ~90 MB más su holgura de crecimiento.
 - **Launch Services arranca la app con `RLIMIT_NOFILE` blando en 256.** Quedarse sin descriptores no
   truena: sale como archivo ilegible, se cuenta como candidato saltado, y **el escaneo encuentra menos
   de lo que debía** — una falla que se ve como una respuesta más chica, no como un error. `main.swift`

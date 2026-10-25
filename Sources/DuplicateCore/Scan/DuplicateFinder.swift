@@ -45,6 +45,10 @@ public struct DuplicateFinder: Sendable {
     /// A finished scan, plus what the walk could not see.
     public struct Outcome: Sendable {
         public let scan: DuplicateScan
+        /// What the walk could not see, and how much it visited -- **without its entries** (#161).
+        ///
+        /// Carrying every file the walk found kept that list alive until the scan returned: 112 bytes an entry,
+        /// plus growth slack, for a list nothing downstream reads. The app reads `inaccessiblePaths`.
         public let walk: WalkResult
         /// Candidates that could not be hashed, with the reason. Skipped, not fatal.
         public let unreadable: [String]
@@ -93,20 +97,33 @@ public struct DuplicateFinder: Sendable {
     ) async throws -> Outcome {
         progress.setPhase(.indexing)
 
-        let walk = try walker.walk(
-            root: root,
-            policy: configuration.policy,
-            exclusions: configuration.exclusions
-        )
-        for entry in walk.entries {
-            progress.noteFileSeen(path: entry.path)
+        // **Every list of all the files is let go as soon as the next one exists** (#161). Peak memory was the
+        // sum of copies nobody read any more -- the walk's list until the scan returned, the buckets through the
+        // hashing, the survivors through the grouping -- and on 800,000 files that was 657-714 MB against a
+        // target of 400. The scopes and the emptied variables below are what end those lifetimes.
+        let walk: WalkResult
+        var buckets: [[FileEntry]]
+        do {
+            let walked = try walker.walk(
+                root: root,
+                policy: configuration.policy,
+                exclusions: configuration.exclusions
+            )
+            for entry in walked.entries {
+                progress.noteFileSeen(path: entry.path)
+            }
+            try Task.checkCancellation()
+            buckets = SizeBuckets.candidates(
+                in: walked.entries,
+                minimumSize: configuration.policy.minimumSize
+            )
+            walk = WalkResult(
+                entries: [],
+                inaccessiblePaths: walked.inaccessiblePaths,
+                skipped: walked.skipped,
+                visitedCount: walked.visitedCount
+            )
         }
-        try Task.checkCancellation()
-
-        let buckets = SizeBuckets.candidates(
-            in: walk.entries,
-            minimumSize: configuration.policy.minimumSize
-        )
         let width =
             configuration.concurrency ?? IOConcurrencyPolicy.recommended(forItemAt: root)
         progress.setCandidates(buckets.reduce(0) { $0 + $1.count })
@@ -115,7 +132,8 @@ public struct DuplicateFinder: Sendable {
         // survives as a singleton never gets read in full, which is where the whole win of the probe
         // lives -- two 4 GB disk images of the same length go from 8 GB of reads to 16 KiB.
         progress.setPhase(.probing)
-        let survivors = try await narrow(buckets, width: width, progress: progress)
+        var survivors = try await narrow(buckets, width: width, progress: progress)
+        buckets = []
         try Task.checkCancellation()
 
         // Stage two: the full digest, which is the content identity the shared format stores.
@@ -125,31 +143,46 @@ public struct DuplicateFinder: Sendable {
         // The cache is consulted here rather than inside the hasher, for two reasons. `FileHashing` is
         // synchronous and `HashCache` is an actor, so a caching hasher could not await it; and asking
         // once per candidate outside the bounded window keeps an actor hop out of the hot path.
-        var cached: [(entry: FileEntry, digest: Digest32)] = []
+        //
+        // **One list holds every digest, sized once** (#161). Hits go straight into it and the hasher appends to
+        // it; two lists joined with `cached + hashed` meant a third full copy, alive beside the other two.
+        var digests: [(entry: FileEntry, digest: Digest32)] = []
+        digests.reserveCapacity(survivors.count)
         var needsReading = survivors
         if let cache = configuration.cache {
-            needsReading = []
-            for entry in survivors {
+            var misses: [Int] = []
+            for (index, entry) in survivors.enumerated() {
                 if let digest = await cache.digest(for: entry) {
-                    cached.append((entry, digest))
+                    digests.append((entry, digest))
                     progress.noteCacheHit()
                 } else {
-                    needsReading.append(entry)
+                    misses.append(index)
                 }
             }
+            // A cold cache misses everything, and then the survivors already are the list to read.
+            if misses.count != survivors.count {
+                needsReading = misses.map { survivors[$0] }
+            }
         }
+        survivors = []
+        let cacheHits = digests.count
 
-        let hashed = try await hashAll(needsReading, width: width, progress: progress)
+        let unreadable = try await hashAll(
+            needsReading, into: &digests, width: width, progress: progress)
+        needsReading = []
         try Task.checkCancellation()
 
         if let cache = configuration.cache {
-            for (entry, digest) in hashed.digests {
+            await cache.reserve(digests.count - cacheHits)
+            for (entry, digest) in digests[cacheHits...] {
                 await cache.store(digest, for: entry)
             }
         }
 
         progress.setPhase(.grouping)
-        let groups = GroupBuilder.groups(from: cached + hashed.digests)
+        // Hits first and hashed after, an order that does not reach the document: the builder sorts on size,
+        // digest and path, which are unique together.
+        let groups = GroupBuilder.groups(from: digests)
         // **Not `.finished` here.** Finding is over; the scan is not. `ScanSession` still has to persist the
         // cache and write the document, and on a large tree that is minutes. A caller driving this type
         // directly ends at `.grouping`, which is the truth for what it does.
@@ -157,8 +190,8 @@ public struct DuplicateFinder: Sendable {
         return Outcome(
             scan: GroupBuilder.scan(root: root, instant: instant, groups: groups),
             walk: walk,
-            unreadable: hashed.unreadable,
-            cacheHits: cached.count
+            unreadable: unreadable,
+            cacheHits: cacheHits
         )
     }
 
@@ -202,11 +235,13 @@ public struct DuplicateFinder: Sendable {
 
     // MARK: - Stage two: full hash
 
+    /// Hashes `entries` and appends each digest to `digests`, returning the paths that could not be read.
     private func hashAll(
         _ entries: [FileEntry],
+        into digests: inout [(entry: FileEntry, digest: Digest32)],
         width: Int,
         progress: ProgressCounters
-    ) async throws -> (digests: [(entry: FileEntry, digest: Digest32)], unreadable: [String]) {
+    ) async throws -> [String] {
         let results = await run(over: entries, width: width) {
             entry -> Result<HashResult, any Error> in
             do {
@@ -218,7 +253,6 @@ public struct DuplicateFinder: Sendable {
             }
         }
 
-        var digests: [(entry: FileEntry, digest: Digest32)] = []
         var unreadable: [String] = []
         for (entry, outcome) in zip(entries, results) {
             switch outcome {
@@ -240,7 +274,7 @@ public struct DuplicateFinder: Sendable {
                 break
             }
         }
-        return (digests, unreadable)
+        return unreadable
     }
 
     // MARK: - The bounded window

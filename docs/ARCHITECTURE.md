@@ -994,6 +994,35 @@ La pendiente es de ~0.7–0.9 KB por archivo sobre una base de ~80 MB: el objeti
 450,000 archivos, y los 1.3 millones de `~` extrapolan a más de 1 GB. Decidir si el objetivo se mantiene está en
 #161.
 
+**Y esa medición era del camino equivocado.** El modo `corpus` medía `DuplicateFinder` solo. El escaneo que corre la
+app (`ScanSession`: caché de hashes cargada y persistida, documento escrito) llegaba a **897 MB en frío y 955 MB
+con la caché caliente** sobre los mismos 800,000 archivos. `corpus --session-cache <archivo>` mide ese camino.
+
+**Perfilado** (pico por fase más `heap` del proceso en vivo): la mitad del pico era transitoria, copias de la lista
+de archivos que nadie volvía a leer y arreglos creciendo por duplicación. `Outcome` cargaba la lista entera del
+recorrido hasta el final; los buckets vivían durante el hasheo; `cached + hashed` hacía una tercera copia. El
+diccionario de la caché crece por rehash, y a 800,000 claves Swift lo dimensiona a 2²¹ casillas de 72 B: ~150 MB
+calculados, no medidos aparte.
+
+Con las copias soltadas a tiempo, una sola lista de digests reservada una vez y la caché reservada antes de llenarse:
+
+| 800,000 archivos | antes | después |
+|---|---|---|
+| `DuplicateFinder` solo | 657–714 MB | 379–411 MB |
+| app, caché fría | 897 MB | 610–652 MB |
+| app, caché caliente | 955 MB | 662–664 MB |
+
+| 200,000 archivos | antes | después |
+|---|---|---|
+| app, caché fría | 218 MB | 128–155 MB |
+| app, caché caliente | 220 MB | 180–195 MB |
+
+**El objetivo de < 400 MB no se alcanza en el camino de la app.** Lo que queda a 800,000 archivos, medido por fase
+con caché caliente: cargar la caché lleva el proceso de 29 a 354 MB (el diccionario de ~150 MB más el archivo de
+60 MB leído y copiado), y el recorrido suma ~95 MB más encima. Bajar de ahí ya no es soltar copias: es guardar la
+caché en una tabla ordenada en vez de un diccionario, y achicar `FileEntry`, que mide 112 B porque cinco campos
+opcionales ocupan 16 B cada uno. Está en #161.
+
 ### Y la quinta: `AttrListWalker` queda formalmente rechazado
 
 Contado con `fs_usage` sobre el mismo árbol de 3,421 archivos (necesita root, así que lo corrió el usuario):

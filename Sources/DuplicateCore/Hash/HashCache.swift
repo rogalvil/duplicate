@@ -97,6 +97,7 @@ public actor HashCache {
         rowsAtLastPrune = HashCacheFormat.rowsAtLastPrune(bytes)
 
         let count = HashCacheFormat.wholeRecordCount(inFileOfLength: bytes.count)
+        entries.reserveCapacity(count)
         for index in 0..<count {
             let start = HashCacheFormat.headerSize + index * HashCacheFormat.recordSize
             let end = start + HashCacheFormat.recordSize
@@ -127,6 +128,16 @@ public actor HashCache {
         return nil
     }
 
+    /// Makes room for `count` more digests before a scan stores them (#161).
+    ///
+    /// Grown one insert at a time, the table and the pending list double their storage over and over, and each
+    /// doubling keeps the old storage alive beside the new: on 800,000 files that was a peak of its own.
+    public func reserve(_ count: Int) {
+        guard count > 0 else { return }
+        entries.reserveCapacity(entries.count + count)
+        pending.reserveCapacity(pending.count + count)
+    }
+
     /// Records a digest, to be written on the next ``persist()``.
     public func store(_ digest: Digest32, for entry: FileEntry) {
         guard let key = HashCacheKey(entry: entry) else { return }
@@ -155,6 +166,8 @@ public actor HashCache {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         var payload: [UInt8] = []
+        payload.reserveCapacity(
+            HashCacheFormat.headerSize + pending.count * HashCacheFormat.recordSize)
         let isNew = !FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
         if isNew {
             payload += HashCacheFormat.encodeHeader()
