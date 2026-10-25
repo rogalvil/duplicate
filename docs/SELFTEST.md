@@ -155,12 +155,22 @@ Arma un árbol con respuestas conocidas (dos pares exactos, un par de carpetas a
 uno de video), lo escanea con los tres detectores de verdad y abre cada ventana con lo que encontraron:
 biblioteca en sus tres pestañas y vacía, el panel de escaneo con cada detector, la revisión exacta, el visor
 de carpetas, el de parecidos con el par de imagen y el de video, y el historial con dos sesiones (una devuelta
-entera y otra a medias). Cada una en dos tamaños, el mínimo que permite y uno de laptop (1280×800); el panel de
-escaneo no se puede redimensionar, así que su captura de laptop muestra un hueco que nadie ve. Después, las tres
+entera y otra a medias). Cada una al tamaño con que abre y, si se puede redimensionar, también al mínimo que
+permite y a uno de laptop (1280×800).
+
+El de apertura va primero (#211), porque es lo primero que alguien ve. Además, el panel de escaneo no se puede
+redimensionar y ese es su único tamaño. Antes se renderizaba solo a los otros dos, y su captura de laptop mostraba
+un hueco que nadie puede ver. Ir primero también hace que el mínimo y el de laptop se alcancen desde una ventana ya
+acomodada, como le pasa a quien la redimensiona: así apareció la fila del visor de carpetas sin ancho propio.
+
+Las ventanas tampoco restauran el tamaño guardado. El proceso corre con los defaults de la app, así que sin eso la
+captura de apertura sería el último tamaño con que esta máquina cerró la ventana, no el de un primer arranque.
+
+Después, las tres
 **hojas de aplicar** en estado de simulación, a su propio tamaño —entraron con #180, cuando su lista resultó vacía
 en las tres y ninguna captura había abierto nunca una hoja—, y dos **terminadas**: la de carpetas con el rechazo por
 contención y la de parecidos con un archivo movido. Las terminadas pasan por los runners de verdad, con un
-disposer que mueve a un basurero falso dentro del árbol de prueba. Todo en los dos idiomas: **58 capturas por
+disposer que mueve a un basurero falso dentro del árbol de prueba. Todo en los dos idiomas: **70 capturas por
 corrida** en `build/ui/en/` y `build/ui/es/`.
 
 **Las capturas del [manual](MANUAL.md) salen de aquí**, en español. Un cambio que se ve en una ventana del manual
@@ -177,6 +187,7 @@ Sobre cada captura afirma:
 | Un `NSTextView` con texto y sin ancho | no dibuja nada, y cualquier test que lea su `string` pasa |
 | Una lista aplastada a menos de 60×40 | la mitad de la ventana vacía, que ya pasó con el panel de imagen |
 | Un control fuera de la ventana | uno que no se puede alcanzar |
+| Dos controles encimados | uno tapa al otro sin cortar texto ni salirse de la ventana, así que ninguna otra regla lo ve |
 | Una columna con el encabezado alineado distinto que sus celdas | un número a la izquierda bajo un encabezado a la derecha parece de la columna de al lado |
 
 **El idioma se afirma, no se supone.** El target pasa `-AppleLanguages (es)` en la línea de comando, que solo
@@ -195,6 +206,11 @@ mira. Y lo que el barrido encuentra es un defecto que se ve, no un dato que se c
 | `review.warning.preview` mal escrita en su sitio de llamada | `shows the raw key 'review.warning.preview'` |
 | `rootLabel` del panel de escaneo con `.byClipping` | `is cut at the right: needs 763 points, has 334` |
 | `minSize` de la biblioteca a 90 de alto | `NSScrollView is squeezed to 720x30` |
+| `optionsStack.spacing` del panel de escaneo a -14 | `NSPopUpButton 'Recientes...' and NSButton 'Incluir archivos ocultos' overlap by 162x12 points`; con la regla apagada, la misma corrida pasa |
+
+El orden de los tamaños también tiene dientes. Con la fila de decisiones del visor de carpetas sin ancho fijo, como
+estaba hasta #211, el visor encogido desde su tamaño de apertura reporta
+`NSButton 'Simular y aplicar…' falls outside the window, at x 816...946`.
 
 La de alineación tampoco necesitó rotura: en su primera corrida encontró que la pestaña Imágenes de la biblioteca
 alineaba Pares y Video a la izquierda (#142). Las otras tres reglas tampoco: en su primera corrida encontraron

@@ -57,7 +57,7 @@ La lista se actualiza sola: un escaneo nuevo aparece sin apretar nada.
 
 | Archivos idénticos | Carpetas parecidas | Imágenes parecidas |
 |---|---|---|
-| ![Panel, archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/scan-exact-min.png) | ![Panel, carpetas](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/scan-folders-min.png) | ![Panel, imágenes](https://raw.githubusercontent.com/rogalvil/duplicate/58e6fd83fd4025ab2d3ef4509ce6a7d270480f6d/manual/scan-similar-min-v2.png) |
+| ![Panel, archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/c3942a09903aecb2e3bd2d9a56601fb0f6698c68/manual/scan-exact-open.png) | ![Panel, carpetas](https://raw.githubusercontent.com/rogalvil/duplicate/c3942a09903aecb2e3bd2d9a56601fb0f6698c68/manual/scan-folders-open.png) | ![Panel, imágenes](https://raw.githubusercontent.com/rogalvil/duplicate/c3942a09903aecb2e3bd2d9a56601fb0f6698c68/manual/scan-similar-open.png) |
 
 1. **Buscar**: el tipo. Carpetas pide además qué tan parecidas (90 % por default). Imágenes pide cuántos bits de
    64 pueden diferir (5 por default) y qué revisar: **Imágenes y videos**, **Solo imágenes** o **Solo videos**.
@@ -145,7 +145,7 @@ decisiones de la revisión, que es otra cosa.
 
 Un escaneo de carpetas muestra pares de carpetas con casi el mismo contenido:
 
-![Carpetas parecidas](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/folder-pair-laptop.png)
+![Carpetas parecidas](https://raw.githubusercontent.com/rogalvil/duplicate/c3942a09903aecb2e3bd2d9a56601fb0f6698c68/manual/folder-pair-laptop-v2.png)
 
 - Arriba, cada par con qué tan parecidas son y cuántos archivos tienen iguales y distintos.
 - Abajo, el detalle: qué hay **solo** en una, solo en la otra, y qué tiene el mismo nombre con otro contenido.
