@@ -4541,6 +4541,29 @@ enum SelfTest {
         print("  the library lists it and the viewer names the overlap and the difference")
         print("  every saved pair is oriented by bytes, which is what folders-move deletes on")
 
+        // **A decision that could not be saved says so** (#152). The save was a `try?`: with the decisions directory
+        // read-only the window showed the pair decided and the file did not have it, and nothing on screen said so.
+        // Teeth: make the save a `try?` again and the footer stays silent.
+        let folderDecisionsDirectory = state.path(for: .folderDecisions)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o555], ofItemAtPath: folderDecisionsDirectory)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: folderDecisionsDirectory)
+        }
+        viewer.decideForSelftest("keepB", row: 0)
+        try expect(
+            viewer.footerText.hasPrefix(Strings.string("review.saveFailed.title")),
+            "a failed save is not at the start of the footer, where truncation cannot hide it: \(viewer.footerText)"
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: folderDecisionsDirectory)
+        viewer.decideForSelftest("keepA", row: 0)
+        try expect(
+            !viewer.footerText.contains(Strings.string("review.saveFailed.title")),
+            "the footer still reports a failure after a save that worked")
+        print("  a decision that could not be saved says so in the footer, until a save works")
+
         // **The row menu acts on the folder scan under it** (#150). It read only the exact scans, so in this tab
         // every action did nothing and a folder scan could not be deleted from the app. Last in the mode, because
         // it deletes the scan everything above reads.
@@ -5027,6 +5050,28 @@ enum SelfTest {
         print(
             "  narrowing decided nothing; accepting \(undecidedShown) shown pairs wrote exactly those"
         )
+
+        // **A decision that could not be saved says so, readably.** The footer carried `String(describing:)` of the
+        // error -- the whole `NSError`, `UserInfo` and all -- and now carries the localized description after the
+        // same "could not save" title the folder viewer uses (#152).
+        // Teeth: drop the title from `footerString` and the first assertion fails.
+        let similarDecisionsDirectory = state.path(for: .similarDecisions)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o555], ofItemAtPath: similarDecisionsDirectory)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: similarDecisionsDirectory)
+        }
+        viewer.decideForSelftest(.keepB, row: imageRow)
+        try expect(
+            viewer.footerText.hasPrefix(Strings.string("review.saveFailed.title")),
+            "a failed save is not at the start of the footer, where truncation cannot hide it: \(viewer.footerText)"
+        )
+        try expect(
+            !viewer.footerText.contains("UserInfo"),
+            "the footer shows the raw NSError: \(viewer.footerText)")
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: similarDecisionsDirectory)
 
         // **The row menu acts on the perceptual scan under it** (#150), for the reason the folder viewer gives.
         // This tab lists more than one scan, so the row is found by what the menu says it aims at.

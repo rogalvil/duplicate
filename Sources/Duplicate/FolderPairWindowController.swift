@@ -21,6 +21,8 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     private let tallyLabel = NSTextField(labelWithString: "")
     private var decisionButtons: [String: NSButton] = [:]
     private var savedCount = 0
+    /// Why the last save failed, shown in the footer until a save succeeds.
+    private var saveFailure: String?
     private let undo: UndoManager = {
         let manager = UndoManager()
         manager.groupsByEvent = false
@@ -212,10 +214,20 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     /// read-only, so the CLI is the only thing that can act on a pair today -- which makes "which side gets
     /// destroyed" information the reader needs here, not a footnote for the docs.
     private func footerString() -> String {
-        String(
-            format: Strings.string("folders.footer"), Strings.count("count.pairs", pairs.count),
-            Int(scan.threshold * 100))
+        let text =
+            String(
+                format: Strings.string("folders.footer"), Strings.count("count.pairs", pairs.count),
+                Int(scan.threshold * 100))
             + "  ·  " + Strings.string("folders.orientation")
+        guard let saveFailure else { return text }
+        // **First, and in orange.** The footer is one line truncated in the middle, and a failure at its end was
+        // exactly the part the ellipsis hid.
+        return Strings.string("review.saveFailed.title") + ": " + saveFailure + "  ·  " + text
+    }
+
+    private func refreshFooter() {
+        footerLabel.stringValue = footerString()
+        footerLabel.textColor = saveFailure == nil ? .secondaryLabelColor : .systemOrange
     }
 
     /// Locale-aware, unlike the byte counts, which are pinned to the CLI's format because they are interop.
@@ -262,7 +274,7 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
             detailView.string = ""
             metadataLabel.stringValue = ""
             metadataLabel.isHidden = true
-            footerLabel.stringValue = footerString()
+            refreshFooter()
             refreshAdvice()
             return
         }
@@ -292,7 +304,7 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         metadataLabel.stringValue = Self.metadataText(for: pair, formatter: dateFormatter)
         metadataLabel.isHidden =
             !MetadataPreference.isEnabled || metadataLabel.stringValue.isEmpty
-        footerLabel.stringValue = footerString()
+        refreshFooter()
         refreshAdvice()
     }
 
@@ -411,10 +423,19 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
 
     private func saveDecisions() {
         let document = review.decisionsForSaving(instant: ScanIdentifier.Instant(Date()))
-        savedCount = document.count
         // Only decided pairs are in there; an empty document is still worth writing, because it is how a review
         // that cleared its decisions stops the CLI from acting on the old ones.
-        _ = try? ScanStore(state: stateDirectory).save(document)
+        do {
+            _ = try ScanStore(state: stateDirectory).save(document)
+            savedCount = document.count
+            saveFailure = nil
+        } catch {
+            // **Said in the footer.** This was a `try?`: the window showed a decision the file did not hold, and
+            // nothing said so. Not a sheet, for the reason the perceptual viewer gives: a modal on every click
+            // would make deciding a long list impossible. The localized description, which Foundation writes in
+            // the system's language: `String(describing:)` is the whole `NSError`, `UserInfo` and all.
+            saveFailure = error.localizedDescription
+        }
     }
 
     @objc private func simulateAndApply(_ sender: Any?) {
