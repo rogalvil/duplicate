@@ -397,6 +397,68 @@ struct FolderApplyRunnerTests {
         #expect(examples == ["only-here.txt"])
     }
 
+    /// **Everything the move takes is verified (#190).** The default walk skips each of these, and with it a folder
+    /// whose only unique content was one of them passed the check and was moved.
+    @Test(
+        "A file the default walk skips still has to be in the keeper",
+        arguments: [
+            ".secret", ".git/config", "node_modules/x.js", "Lib.photoslibrary/database",
+            "App.app/Contents/Info.plist", "empty.txt",
+        ])
+    func verifiesWhatTheWalkSkips(unique: String) async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        for folder in ["keep", "gone"] {
+            try scratch.write("\(folder)/one.txt", "first")
+        }
+        try scratch.write("gone/" + unique, unique == "empty.txt" ? "" : "only here")
+
+        var review = FolderReviewState(
+            scan: folderScan(
+                [folderPair(scratch.tree + "/keep", scratch.tree + "/gone")], root: scratch.tree))
+        review.keep(scratch.tree + "/keep")
+        let disposer = RecordingDisposer()
+
+        let report = try await FolderApplyRunner(
+            state: scratch.state, cacheURL: URL(filePath: scratch.root + "/hashes.v1")
+        ).run(
+            FolderApplyPlan.from(review), sessionID: noon.identifier, instant: noon,
+            disposer: disposer)
+
+        #expect(disposer.disposed.isEmpty, "a folder holding \(unique) was moved unverified")
+        guard case .wouldLoseFiles(_, let examples) = report.refused.first?.reason else {
+            Issue.record("wrong refusal: \(String(describing: report.refused.first))")
+            return
+        }
+        #expect(examples == [unique])
+    }
+
+    /// The one thing still skipped. Finder rewrites a folder's `.DS_Store` whenever it is opened, so two copies
+    /// rarely agree on it, and it holds view settings rather than anything of the user's.
+    @Test("Finder's .DS_Store does not have to match")
+    func ignoresFinderNoise() async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        for folder in ["keep", "gone"] {
+            try scratch.write("\(folder)/one.txt", "first")
+            try scratch.write("\(folder)/.DS_Store", "view settings of \(folder)")
+        }
+
+        var review = FolderReviewState(
+            scan: folderScan(
+                [folderPair(scratch.tree + "/keep", scratch.tree + "/gone")], root: scratch.tree))
+        review.keep(scratch.tree + "/keep")
+        let disposer = RecordingDisposer()
+
+        let report = try await FolderApplyRunner(
+            state: scratch.state, cacheURL: URL(filePath: scratch.root + "/hashes.v1")
+        ).run(
+            FolderApplyPlan.from(review), sessionID: noon.identifier, instant: noon,
+            disposer: disposer)
+
+        #expect(disposer.disposed.count == 1, "refused over a .DS_Store: \(report.refused)")
+    }
+
     @Test("A folder that is gone is reported, not treated as a failure")
     func reportsMissingFolders() async throws {
         let scratch = try FolderScratch()

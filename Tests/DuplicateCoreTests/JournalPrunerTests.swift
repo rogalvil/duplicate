@@ -220,4 +220,38 @@ struct UndoPreflightTests {
             environment: .live(hasher: ContentHasher(), directoryDigests: digests))
         #expect(with.restorable.count == 1, "the folder was not planned even with its digest")
     }
+
+    /// **A folder moved before #190 still restores.** Its journal holds a digest over the default walk, so a hidden
+    /// file inside it changes today's digest without anyone having touched the folder.
+    @Test("A folder journalled over the old walk is matched against the old walk")
+    func acceptsTheLegacyDigest() async throws {
+        let scratch = try PrunerScratch()
+        defer { scratch.remove() }
+        let folder = scratch.root + "/trashed"
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        try Data("inside".utf8).write(to: URL(filePath: folder + "/a.txt"))
+        try Data("hidden".utf8).write(to: URL(filePath: folder + "/.hidden"))
+
+        let legacy = try await FolderManifest.build(root: folder, policy: ScanPolicy()).digest
+        let today = try await FolderManifest.build(root: folder).digest
+        #expect(legacy != today, "the fixture does not tell the two walks apart")
+
+        func entry(_ digest: Digest32) -> JournalEntry {
+            JournalEntry(
+                originalPath: scratch.root + "/gone", resultingPath: folder, mechanism: .trash,
+                byteCount: 12, digest: digest, groupKey: "folder", scanID: "s",
+                timestamp: "2026-08-12T12:00:00.000000Z")
+        }
+        let old = await UndoPreflight.directoryDigests(for: [entry(legacy)])
+        #expect(old[DirectoryTree.canonical(folder)] == legacy)
+        let plan = UndoPlanner.plan(
+            sessionID: "20260812-120000-000000", entries: [entry(legacy)], restoredPaths: [],
+            environment: .live(hasher: ContentHasher(), directoryDigests: old))
+        #expect(plan.restorable.count == 1, "an untouched folder from before #190 was blocked")
+
+        // A digest neither walk reproduces is reported as today's, so the planner still blocks it as changed.
+        let other = try #require(Digest32(hexString: String(repeating: "d", count: 64)))
+        let changed = await UndoPreflight.directoryDigests(for: [entry(other)])
+        #expect(changed[DirectoryTree.canonical(folder)] == today)
+    }
 }
