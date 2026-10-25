@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p1 | #180 | Las hojas de aplicar no muestran su lista de archivos: el `NSTextView` mide 0 de ancho, como el detalle de #135 |
 | p3 | #156 | Undo the Last Session elige la sesión más nueva aunque ya esté devuelta |
 | p3 | #157 | Lógica de Core que solo prueba el selftest, contra la regla de que todo Core lleva su test: la exclusión de `~/Library`, la fase `.grouping`, `HashCache.loadAndRepair`, las etapas y la cancelación del apply de carpetas |
 | p3 | #158 | Use the hash cache no tiene efecto en parecidos |

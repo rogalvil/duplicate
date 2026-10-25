@@ -117,6 +117,18 @@ extension SelfTest {
         defer { history.window?.close() }
         try await sweep.render(history.window, as: "history")
 
+        // **The apply sheets, as a dry run shows them** (#180): their lists drew nothing, and no render here had
+        // ever opened one. Last, because deciding something to simulate changes the windows above.
+        review.confirmGroup(nil)
+        review.simulateForSelftest()
+        try await sweep.renderAsIs(review.openApplySheet?.window, as: "apply-exact")
+        folders.decideForSelftest("keepA", row: 0)
+        folders.simulateForSelftest()
+        try await sweep.renderAsIs(folders.applySheetForSelftest?.window, as: "apply-folders")
+        similar.decideForSelftest(.keepA, row: 0)
+        similar.simulateForSelftest()
+        try await sweep.renderAsIs(similar.applySheetForSelftest?.window, as: "apply-similar")
+
         print("  \(sweep.renderCount) renders in '\(language)' saved to \(output)")
         for finding in sweep.findings { print("  \(finding)") }
         try expect(
@@ -243,6 +255,20 @@ private struct UISweep {
     /// The two sizes: the smallest the window allows, which is where text runs out of room, and a 13-inch
     /// laptop's, which is how most people first see it.
     private static let laptop = NSSize(width: 1280, height: 800)
+
+    /// A window with a size of its own -- a sheet -- rendered once, as it is.
+    mutating func renderAsIs(_ window: NSWindow?, as name: String) async throws {
+        let window = try SelfTest.expectSome(window, "\(name) has no window")
+        try? await Task.sleep(for: .milliseconds(300))
+        guard let content = window.contentView else { return }
+        content.layoutSubtreeIfNeeded()
+        let frameView = content.superview ?? content
+        frameView.displayIfNeeded()
+        let place = "\(name) @ \(Int(window.frame.width))x\(Int(window.frame.height))"
+        inspect(frameView, content: content, window: window, place: place)
+        try save(frameView, as: name)
+        renderCount += 1
+    }
 
     mutating func render(_ window: NSWindow?, as name: String) async throws {
         let window = try SelfTest.expectSome(window, "\(name) has no window")
