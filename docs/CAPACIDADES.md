@@ -366,7 +366,7 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p4 | #161 | Memoria: el objetivo de < 400 MB extrapola a ~570 MB a 800,000 archivos, y la corrida sobre `~` (1.3 millones) no registró el pico |
+| p4 | #161 | Memoria: medido, 657–714 MB a 800,000 archivos contra el objetivo de < 400 MB; falta decidir si el objetivo se mantiene |
 
 ```bash
 gh issue list --label priority:p1     # cerca de los datos del usuario

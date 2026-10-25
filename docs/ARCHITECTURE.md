@@ -976,9 +976,23 @@ Pico de RSS entre **21.7 y 54.8 MB** en todas las corridas sobre el corpus real,
 del plan.
 
 **Pero el corpus real es chico, y a escala el objetivo no se cumple.** Sobre 200,000 archivos sintéticos el pico
-fue de 298 MB, y 172 MB después de drenar el `autoreleasepool` por lotes; extrapolado son ~570 MB a 800,000
-archivos. La corrida sobre `~` completo (1.3 millones de archivos) no registró el pico. Está en los pendientes de
-[`CAPACIDADES.md`](CAPACIDADES.md).
+fue de 298 MB, y 172 MB después de drenar el `autoreleasepool` por lotes; extrapolado eran ~570 MB a 800,000
+archivos. La corrida sobre `~` completo (1.3 millones de archivos) no registró el pico.
+
+**Medido otra vez el 2026-10-24 (#161), y el 172 no se reproduce.** `c1-scale` a tres escalas, build release,
+modo `corpus`:
+
+| archivos | pico de RSS | tiempo |
+|---|---|---|
+| 200,000 | 218–220 MB (seis corridas) | 6–8 s |
+| 400,000 | 352 MB | 17 s |
+| 800,000 | 657–714 MB (dos corridas) | 38–39 s |
+
+**El commit que midió 172 MB (`a050021`), compilado hoy, da lo mismo: 219 MB**, en cuatro corridas alternadas con
+`main`. O sea que no es una regresión del código; el número de agosto no se puede reproducir en esta máquina hoy.
+La pendiente es de ~0.7–0.9 KB por archivo sobre una base de ~80 MB: el objetivo de < 400 MB alcanza para unos
+450,000 archivos, y los 1.3 millones de `~` extrapolan a más de 1 GB. Decidir si el objetivo se mantiene está en
+#161.
 
 ### Y la quinta: `AttrListWalker` queda formalmente rechazado
 
