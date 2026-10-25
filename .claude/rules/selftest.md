@@ -88,6 +88,8 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **Público no significa que alguien más pueda aterrizar un cambio.** Nadie externo tiene permiso de escritura,
   así que un PR de fuera se puede abrir pero no mergear: el botón es del dueño. Lo que sí hacía falta cerrar era
   el CI — la política de aprobación estaba en `first_time_contributors`, o sea que el **segundo** PR de alguien
-  corría workflows solo. Ahora es `all_external_contributors`. Y no se piden aprobaciones de revisión en el
-  ruleset a propósito: exigirlas no agrega nada contra quien no puede mergear, y bloquearía al dueño, que no
-  puede aprobar sus propios PR.
+  corría workflows solo. Ahora es `all_external_contributors`.
+- **La aprobación obligatoria vive en un ruleset aparte, con el admin exento.** Contra alguien de fuera no agrega
+  nada —no puede mergear—, pero un colaborador futuro con escritura sí podría mergear sin revisión. En el ruleset
+  `protect main` habría bloqueado al dueño, que no puede aprobar su propio PR, y eximirlo ahí lo habría eximido
+  también del CI. Separado, el dueño solo se salta la aprobación.
