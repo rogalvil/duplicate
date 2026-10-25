@@ -127,6 +127,11 @@ final class ScanPanelController: NSWindowController {
 
     // MARK: - Layout
 
+    /// How tightly a short row holds its content: above the default, and **below a control's compression
+    /// resistance**. At `.defaultHigh` the two tied -- a row pulling a pop-up in at the same priority the pop-up
+    /// resists it -- and a tie is ambiguous too.
+    private static let rowHugging = NSLayoutConstraint.Priority(740)
+
     private func build() {
         guard let window else { return }
 
@@ -275,9 +280,23 @@ final class ScanPanelController: NSWindowController {
         buttons.orientation = .horizontal
         buttons.spacing = 10
 
-        let content = NSStackView(views: [optionsStack, progressStack, buttons])
+        // **The spare height has one place to go** (#214). The panel is a fixed size and its content is shorter, so
+        // the difference had to land somewhere, and with no view designated it was ambiguous: AutoLayout put it
+        // between a checkbox and its explanation, a gap `make ui` showed under "Include hidden files". Filled in
+        // order, the stack gives it to this spacer, the only view that yields, above the buttons.
+        let slack = NSView()
+        slack.translatesAutoresizingMaskIntoConstraints = false
+        slack.setContentHuggingPriority(.init(1), for: .vertical)
+        // And the short rows are as wide as what they hold, instead of anything up to the panel's width. The root
+        // row keeps its cap below: hugging decides where it sits under the cap, the cap still wins above it.
+        for row in [detectorRow, rootRow, sizeRow] {
+            row.setHuggingPriority(Self.rowHugging, for: .horizontal)
+        }
+
+        let content = NSStackView(views: [optionsStack, progressStack, slack, buttons])
         content.orientation = .vertical
         content.alignment = .leading
+        content.distribution = .fill
         content.spacing = 14
         content.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
         content.translatesAutoresizingMaskIntoConstraints = false

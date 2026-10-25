@@ -10,8 +10,8 @@ extension SelfTest {
     /// Every window is rendered at the size it opens at, and then at its smallest and at a laptop's if it can be
     /// resized, in the language this process was launched with, over a real tree scanned by the three real
     /// detectors. Each render is swept for text that does not fit, keys that leaked untranslated, panes squeezed to
-    /// nothing, controls pushed out of the window and controls drawn over each other -- and saved as a PNG, for
-    /// what a sweep cannot judge.
+    /// nothing, controls pushed out of the window, controls drawn over each other and layouts the constraints leave
+    /// ambiguous -- and saved as a PNG, for what a sweep cannot judge.
     ///
     /// **Local only.** It is not in `--mode all`, so CI never runs it: it is the check before opening a PR, and
     /// `make ui` runs it once per language.
@@ -34,6 +34,7 @@ extension SelfTest {
     /// - overlap: set the scan panel's `optionsStack.spacing` to -14 and every row is reported over the next, at the
     ///   size the panel opens at. With the check off the same run passes: no text is cut and nothing leaves the
     ///   window.
+    /// - ambiguous layout: unpin the exact review's header from its pane and every render of the review reports it.
     /// - opening size: rendered first, it found the folder viewer's decision row with an ambiguous width -- shrunk
     ///   from the size it opened at, "Simulate and apply" stayed outside the window. Unpin the row's width to see it.
     /// - the other three were not staged: they caught real defects on their first run. A plural after a count of
@@ -440,6 +441,12 @@ private struct UISweep {
         }
         if let cut = Self.clipping(of: view) {
             findings.append("\(place): \(what) is cut \(cut)")
+        }
+        // **Ambiguous: more than one layout satisfies the constraints** (#214), so what is drawn depends on what was
+        // drawn before -- a row that kept its last width, a gap that landed between a checkbox and its explanation.
+        // The views TextKit puts inside a text view are AppKit's, and theirs to settle.
+        if view.hasAmbiguousLayout, !(view.superview is NSTextView) {
+            findings.append("\(place): \(what) has an ambiguous layout")
         }
         // Cut by the edge of its list: a cell wider than what its scroll view shows loses its end with no ellipsis,
         // because the cell truncates to its own width and not to the part of it on screen.

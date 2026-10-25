@@ -469,6 +469,12 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             footer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
             footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -10),
             inner.widthAnchor.constraint(equalTo: detail.widthAnchor, constant: -28),
+            // **The three lines above it too** (#214). Leading-aligned and yielding, each could be anything from its
+            // text's width to the pane's, so where a long path or warning got cut depended on what the layout had
+            // been before -- the same ambiguity as the folder viewer's decision row.
+            headerLabel.widthAnchor.constraint(equalTo: inner.widthAnchor),
+            subheaderLabel.widthAnchor.constraint(equalTo: inner.widthAnchor),
+            warningLabel.widthAnchor.constraint(equalTo: inner.widthAnchor),
             inner.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
             // A floor, and no ceiling. A ceiling here is what blocked the window from widening; the image
             // inside is capped on its own, which is what the original bug actually needed.

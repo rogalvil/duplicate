@@ -61,6 +61,19 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **`fittingSize` es la propiedad de layout que sí se puede afirmar.** Es el tamaño mínimo que los
   constraints exigen, o sea exactamente lo que decide si una ventana se puede achicar. La aserción falla con
   `996 points of height` contra el código que se envió y pasa con el arreglo. Las tres ventanas la llevan.
+- **Un layout ambiguo no da error: dibuja lo que quedó de la última vez (#214).** `make ui` lo busca con
+  `hasAmbiguousLayout` en cada render, y la primera medición encontró 27 vistas: 14 en el panel de escaneo, 3 en la
+  revisión exacta, 9 en el visor de parecidos y 1 en la hoja de aplicar de idénticos. Todas con una de tres formas:
+  - **Una fila de un stack vertical alineado a `.leading`, sin ancho propio**, puede medir cualquier cosa entre su
+    contenido y el ancho del stack. Se fija al ancho, o se le da abrazo horizontal.
+  - **Un stack horizontal centra a sus vistas, no las estira.** Los paneles de parecidos podían medir cualquier alto
+    entre su contenido y su fila. Se fija el alto.
+  - **El alto sobrante de una ventana fija necesita un dueño.** El panel de escaneo es más alto que su contenido, y
+    la diferencia caía entre una casilla y su explicación: el «hueco» de las capturas. Un espaciador que cede, en un
+    stack con `distribution = .fill`.
+
+  **Y un abrazo empatado con una resistencia también es ambiguo**: una fila que abraza a 750 tira de un pop-up que
+  resiste a 750, y AutoLayout no tiene con qué decidir. Las filas del panel abrazan a 740.
 - **Una ventana necesita `minSize`, no confiar en sus constraints.** Arrastrada por debajo de lo que el
   layout necesita, AutoLayout empieza a romper constraints y el panel de detalle desaparece entero — visto
   en una captura real: ventana aplastada, mitad derecha vacía, sin pie.

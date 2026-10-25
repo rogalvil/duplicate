@@ -57,7 +57,7 @@ La lista se actualiza sola: un escaneo nuevo aparece sin apretar nada.
 
 | Archivos idénticos | Carpetas parecidas | Imágenes parecidas |
 |---|---|---|
-| ![Panel, archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/c3942a09903aecb2e3bd2d9a56601fb0f6698c68/manual/scan-exact-open.png) | ![Panel, carpetas](https://raw.githubusercontent.com/rogalvil/duplicate/c3942a09903aecb2e3bd2d9a56601fb0f6698c68/manual/scan-folders-open.png) | ![Panel, imágenes](https://raw.githubusercontent.com/rogalvil/duplicate/c3942a09903aecb2e3bd2d9a56601fb0f6698c68/manual/scan-similar-open.png) |
+| ![Panel, archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/scan-exact-open-v2.png) | ![Panel, carpetas](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/scan-folders-open-v2.png) | ![Panel, imágenes](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/scan-similar-open-v2.png) |
 
 1. **Buscar**: el tipo. Carpetas pide además qué tan parecidas (90 % por default). Imágenes pide cuántos bits de
    64 pueden diferir (5 por default) y qué revisar: **Imágenes y videos**, **Solo imágenes** o **Solo videos**.
@@ -187,7 +187,7 @@ conservan, la app no confirma y te dice cuál es.
 
 Los videos se comparan por cuadros:
 
-![Videos parecidos](https://raw.githubusercontent.com/rogalvil/duplicate/b53f2523b8a4dc4b28f4df6e63071e56545c0be6/manual/similar-video-laptop-v2.png)
+![Videos parecidos](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/similar-video-laptop-v3.png)
 
 Las decisiones se guardan por par, el formato que también lee el CLI. Si un escaneo trae decisiones por par que no
 cuadran entre sí (de una versión anterior de la app, o del CLI), el grupo dice «sin cuadrar» y confirmarlo las
