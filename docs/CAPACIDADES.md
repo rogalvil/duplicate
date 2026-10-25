@@ -108,7 +108,7 @@ Opciones, con su default. Ninguna se recuerda entre aperturas salvo las carpetas
 | Look for: Identical files / Similar folders / Similar images | Identical files | — |
 | Umbral de carpetas: 95 / 90 / 80 / 70 % | **90 %** | carpetas |
 | Umbral de imágenes: 0 / 2 / 5 / 10 bits | **5 bits** | parecidos |
-| Include videos (slower) | sí | parecidos |
+| Images and videos / Images only / Videos only | Images and videos | parecidos; con Videos only el umbral en bits se desactiva, porque es una distancia entre imágenes |
 | Recent… | hasta 10 carpetas que todavía existen | todos |
 | Choose Folder… | sin carpeta; Start gris hasta elegir | todos |
 | Include hidden files | no | todos |

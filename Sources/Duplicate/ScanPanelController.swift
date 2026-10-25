@@ -9,6 +9,21 @@ import DuplicateCore
 /// **Progress is pulled, not pushed.** The scanner counts with atomics and this reads a snapshot on a timer
 /// at 10 Hz. The CLI's hooks fire once per file; at 800,000 files a pushed update would be 800,000 actor
 /// hops to redraw a label nobody can read more than ten times a second. Ten reads per second instead.
+/// What a perceptual scan reads, in the order the menu shows it.
+private enum MediaChoice: Int, CaseIterable {
+    case imagesAndVideos
+    case imagesOnly
+    case videosOnly
+
+    var titleKey: String {
+        switch self {
+        case .imagesAndVideos: "scan.media.imagesAndVideos"
+        case .imagesOnly: "scan.media.imagesOnly"
+        case .videosOnly: "scan.media.videosOnly"
+        }
+    }
+}
+
 @MainActor
 final class ScanPanelController: NSWindowController {
     /// Called with the scan that was saved, so the library can select it.
@@ -43,7 +58,8 @@ final class ScanPanelController: NSWindowController {
     private let folderSession: FolderScanSession
     private let similarSession: SimilarScanSession
     private let hiddenToggle = NSButton()
-    private let videoToggle = NSButton()
+    /// What the perceptual detector reads: images and videos, images only, or videos only.
+    private let mediaPopup = NSPopUpButton()
     private let packagesToggle = NSButton()
     private let cacheToggle = NSButton()
     private let minimumSizeField = NSTextField()
@@ -133,13 +149,17 @@ final class ScanPanelController: NSWindowController {
         rebuildThresholdMenu()
         thresholdPopup.isHidden = true
 
-        // **On by default, like the CLI, and offered because video is the expensive half.** Measured on a real
-        // tree: 2,779 images take 19 seconds and 617 videos take 93. Someone who wants a quick pass over a
-        // photo folder should not pay for the movies sitting next to it.
-        videoToggle.setButtonType(.switch)
-        videoToggle.title = Strings.string("scan.includeVideo")
-        videoToggle.state = .on
-        videoToggle.isHidden = true
+        // **Both by default, like the CLI, and each half can be left out because they cost so differently.**
+        // Measured on a real tree: 2,779 images take 19 seconds and 617 videos take 93. A quick pass over a photo
+        // folder should not pay for the movies next to it, and a pass over the movies should not wait for the
+        // photos. One menu and not two switches, because two switches can both be off and scan nothing.
+        for choice in MediaChoice.allCases {
+            mediaPopup.addItem(withTitle: Strings.string(choice.titleKey))
+        }
+        mediaPopup.selectItem(at: MediaChoice.imagesAndVideos.rawValue)
+        mediaPopup.target = self
+        mediaPopup.action = #selector(mediaChanged(_:))
+        mediaPopup.isHidden = true
 
         // Recent roots, so a second scan of the same folder is a click rather than a walk through the open
         // panel. Hidden entirely when there are none, because an empty popup is worse than no popup.
@@ -221,7 +241,7 @@ final class ScanPanelController: NSWindowController {
         optionsStack.spacing = 10
         let detectorRow = NSStackView(views: [
             NSTextField(labelWithString: Strings.string("scan.detector")), detectorPopup,
-            thresholdPopup, videoToggle,
+            thresholdPopup, mediaPopup,
         ])
         detectorRow.orientation = .horizontal
         detectorRow.spacing = 8
@@ -389,7 +409,21 @@ final class ScanPanelController: NSWindowController {
         // for both would be two meanings behind one number, so the items are rebuilt with the detector.
         rebuildThresholdMenu()
         thresholdPopup.isHidden = detector == .exact
-        videoToggle.isHidden = detector != .similar
+        mediaPopup.isHidden = detector != .similar
+        refreshThresholdAvailability()
+    }
+
+    @objc private func mediaChanged(_ sender: Any?) {
+        refreshThresholdAvailability()
+    }
+
+    /// The bits menu is a distance between images, so it means nothing to a pass over videos only.
+    private func refreshThresholdAvailability() {
+        thresholdPopup.isEnabled = !(detector == .similar && mediaChoice == .videosOnly)
+    }
+
+    private var mediaChoice: MediaChoice {
+        MediaChoice(rawValue: mediaPopup.indexOfSelectedItem) ?? .imagesAndVideos
     }
 
     private func rebuildThresholdMenu() {
@@ -429,7 +463,8 @@ final class ScanPanelController: NSWindowController {
     private func similarRequest(from request: ScanSession.Request) -> SimilarScanSession.Request {
         SimilarScanSession.Request(
             root: request.root, imageThreshold: imageThreshold, policy: request.policy,
-            usesCache: request.usesCache, includesVideo: videoToggle.state == .on)
+            usesCache: request.usesCache, includesVideo: mediaChoice != .imagesOnly,
+            includesImages: mediaChoice != .videosOnly)
     }
 
     @objc private func startScan(_ sender: Any?) {
@@ -784,16 +819,16 @@ final class ScanPanelController: NSWindowController {
     var isFolderScanForSelftest: Bool { isFolderScan }
     var thresholdForSelftest: Double { threshold }
     var imageThresholdForSelftest: Int { imageThreshold }
-    var includesVideoForSelftest: Bool { videoToggle.state == .on }
-    var isVideoToggleVisibleForSelftest: Bool { !videoToggle.isHidden }
+    var isMediaMenuVisibleForSelftest: Bool { !mediaPopup.isHidden }
+    var isImageThresholdEnabledForSelftest: Bool { thresholdPopup.isEnabled }
+    func chooseMediaForSelftest(_ index: Int) {
+        mediaPopup.selectItem(at: index)
+        mediaChanged(nil)
+    }
 
     func setUsesCacheForSelftest(_ on: Bool) { cacheToggle.state = on ? .on : .off }
     func similarRequestForSelftest() -> SimilarScanSession.Request? {
         request.map(similarRequest(from:))
-    }
-
-    func setIncludesVideoForSelftest(_ on: Bool) {
-        videoToggle.state = on ? .on : .off
     }
 
     func chooseSimilarDetectorForSelftest() {

@@ -308,7 +308,9 @@
 "similar.header.video" = "%1$.2f%% de los cuadros muestreados coinciden";
 "similar.header.video.fewFrames" = "%1$.2f%% de los cuadros muestreados coinciden — juzgado con %2$d de %3$d cuadros";
 "similar.state.missing" = "Este archivo ya no existe.";
-"scan.includeVideo" = "Incluir videos (más lento)";
+"scan.media.imagesAndVideos" = "Imágenes y videos";
+"scan.media.imagesOnly" = "Solo imágenes";
+"scan.media.videosOnly" = "Solo videos";
 "similar.decision.keepA" = "Conservar el primero";
 "similar.decision.keepB" = "Conservar el segundo";
 "similar.decision.keepBoth" = "Conservar los dos";

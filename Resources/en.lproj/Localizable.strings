@@ -309,7 +309,9 @@
 "similar.header.video" = "%1$.2f%% of the sampled frames match";
 "similar.header.video.fewFrames" = "%1$.2f%% of sampled frames match — judged on %2$d of %3$d frames";
 "similar.state.missing" = "This file is no longer there.";
-"scan.includeVideo" = "Include videos (slower)";
+"scan.media.imagesAndVideos" = "Images and videos";
+"scan.media.imagesOnly" = "Images only";
+"scan.media.videosOnly" = "Videos only";
 "similar.decision.keepA" = "Keep the first";
 "similar.decision.keepB" = "Keep the second";
 "similar.decision.keepBoth" = "Keep both";
