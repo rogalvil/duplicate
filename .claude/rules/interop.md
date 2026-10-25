@@ -3,7 +3,7 @@ paths:
   - "Sources/DuplicateCore/Store/**"
   - "Sources/DuplicateCore/Support/**"
   - "Sources/DuplicateCore/Model/**"
-  - "docs/INTEROP.md"
+  - "docs/FORMATO.md"
 ---
 
 # Formatos compartidos con el CLI

@@ -194,7 +194,7 @@ temporal**: código dentro del selftest que reproduce el caso y lo mide. Se corr
 issue o al PR, y **se borra antes del commit**. Si lo que verificó puede volver a romperse, no se borra sin más:
 se vuelve un assert permanente, en un modo de CI o en una regla de `make ui`, con su prueba de que falla contra
 la versión rota. A mano solo queda lo que ninguna herramienta puede simular sin cambiar lo que mide: los
-permisos de TCC, pasos 1 y 8 de la pasada.
+permisos de TCC, cuyo guion está al final de [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
 **Un cambio que se ve lleva capturas**, antes y después, de `build/ui/`, en el PR y en el issue. Se suben con
 `scripts/push-captures.sh` a la rama `ui-captures`, que nunca se mergea y no se borra, porque los PR las citan

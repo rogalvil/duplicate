@@ -13,8 +13,8 @@ razón de la regla de abajo.
 
 ## En una página
 
-Tres detectores, y los tres cierran el ciclo completo desde la app, sin el CLI, sobre los mismos documentos JSON
-que el CLI lee y escribe:
+Tres detectores, y los tres cierran el ciclo completo desde la app, sobre documentos JSON en
+`~/.local/state/rav/duplicate/` (formato en [`FORMATO.md`](FORMATO.md)):
 
 | | Escanear | Revisar | Decidir | Simular y aplicar | Deshacer |
 |---|---|---|---|---|---|
@@ -95,8 +95,8 @@ El menú Group siempre está en la barra; fuera de la revisión exacta todo sale
 | Columnas Files | — | carpeta, fecha, grupos, archivos, recuperable (`≤ X` cuando es cota), estado (Reviewed / Relative paths) |
 | Columnas Folders | — | carpeta, fecha, umbral %, pares, carpetas, estado |
 | Columnas Images | — | carpeta, fecha, pares de imagen, pares de video, archivos, umbral en bits, estado |
-| Se actualiza sola | — | Vigila `scans/`, `decisions/`, `folder-scans/` y `similar-scans/`: un escaneo del CLI aparece sin tocar nada |
-| Origen | — | Lista escaneos de la app y del CLI por igual |
+| Se actualiza sola | — | Vigila `scans/`, `decisions/`, `folder-scans/` y `similar-scans/`: un documento escrito por otro proceso aparece sin tocar nada |
+| Origen | — | Lista todo documento válido del directorio, lo haya escrito la app o no |
 
 ### 1.4 Nuevo escaneo
 
@@ -113,7 +113,7 @@ Opciones, con su default. Ninguna se recuerda entre aperturas salvo las carpetas
 | Include hidden files | no | todos |
 | Look inside packages | no | todos |
 | Use the hash cache | sí | los tres detectores |
-| Ignore files smaller than | 1 B (el default del CLI) | todos |
+| Ignore files smaller than | 1 B: los archivos vacíos no cuentan | todos |
 
 Fijo y sin control en pantalla: umbral de video 0.70; **no cruza volúmenes**; se excluyen la Papelera, las
 cuarentenas y `~/Library` (salvo que la raíz esté dentro); extensiones de parecidos `jpg jpeg png webp gif` y
@@ -126,9 +126,11 @@ Al terminar:
 
 | Detector | Qué pasa | Aviso de carpetas que no se pudieron leer |
 |---|---|---|
-| Exactos | Selecciona el escaneo nuevo, sin cambiar de pestaña | **sí**, con conteo y botón a Ajustes |
-| Carpetas | Cambia a la pestaña Folders, sin seleccionar | **no** — el dato existe y nadie lo muestra |
-| Parecidos | Cambia a Images, sin seleccionar; avisa imágenes ilegibles | **no** — igual |
+| Exactos | Selecciona el escaneo nuevo, sin cambiar de pestaña | sí, con el conteo |
+| Carpetas | Cambia a la pestaña Folders, sin seleccionar | sí, con el conteo |
+| Parecidos | Cambia a Images, sin seleccionar; avisa imágenes ilegibles | sí, con el conteo |
+
+El aviso tiene un solo botón: el que abría Acceso Total al Disco se quitó en #163.
 
 ### 1.5 Revisión exacta
 
@@ -143,7 +145,7 @@ Al terminar:
 | Vista previa | — | Miniatura, nombre, ruta completa, tamaño y fecha |
 | Filtros | barra lateral | Tamaño mínimo, "Not decided yet", "Still on disk" |
 | Check the disk | botón (Cancel mientras corre) | Hace `stat` de todo el escaneo en segundo plano y guarda el resultado con su fecha |
-| Decisiones importadas | al abrir, si un archivo del CLI decide todos los grupos | Keep Them / Start Over; Start Over se puede deshacer |
+| Decisiones importadas | al abrir, si el archivo de decisiones trae una para cada grupo (5 o más) | Keep Them / Start Over; Start Over se puede deshacer |
 | Pie | — | Simulate and Apply…, y "N decididos · N saltados · N sin mirar · X se liberarían" |
 | Guardar | ⌘S, al simular, o al cerrar | Escribe **solo** los grupos decididos |
 
@@ -214,7 +216,7 @@ cosa se bloquea y se dice por qué.
 | Tamaño de ventana | biblioteca, revisión exacta y carpetas; **el visor de parecidos no** |
 | Resultado del chequeo de disco | `~/Library/Caches`, por clave de grupo |
 | Cachés de digests y de hashes perceptuales | `~/Library/Caches` |
-| Escaneos, decisiones y journals | `~/.local/state/rav/`, compartido con el CLI |
+| Escaneos, decisiones y journals | `~/.local/state/rav/duplicate/` ([`FORMATO.md`](FORMATO.md)) |
 
 ---
 
@@ -234,9 +236,9 @@ tocar cualquiera de los tres.
 | Anterior / siguiente | ⌘[ ⌘] | flechas de la tabla | flechas de la tabla |
 | ⏎ | confirma | nada | acepta la sugerencia |
 | Doble clic | revela el archivo | abre A | revela **solo A** (⌘R revela los dos) |
-| Guardar | ⌘S, al simular, al cerrar; **sin decisiones no escribe**, así que el archivo anterior sobrevive | automático, escribe vacío a propósito, **una falla no se ve** | automático, la falla sale en el pie |
+| Guardar | ⌘S, al simular, al cerrar; **sin decisiones no escribe**, así que el archivo anterior sobrevive | automático, escribe vacío a propósito; la falla sale primero en el pie, en naranja | automático, igual |
 | Agrupa el deshacer a mano | **no** (por evento) | sí | sí |
-| Avisa decisiones importadas del CLI | sí | no hace falta: el CLI nunca escribe `folder-decisions` | sí (17 de 18 `similar-decisions` reales vienen completas del CLI) |
+| Avisa decisiones importadas (una por cada grupo o par) | sí | **no** | sí |
 | Pregunta al cerrar | sí | no | no (sí avisa contradicciones) |
 | Simular | botón y ⇧⌘D | botón | botón |
 | ⌘Q protegido durante el apply | sí, por la hoja | sí, por la hoja | sí, por la hoja |
@@ -260,8 +262,8 @@ El detalle técnico de lo de arriba, con lo que se midió para decidirlo. El *po
 
 | Mecanismo | Detalle | Dónde (`Sources/DuplicateCore/`) |
 |---|---|---|
-| Recorrido con reglas de skip | Oculto, paquete y cruce de volumen configurables; **no cruza puntos de montaje por default**, divergencia deliberada de `os.walk` | `Walk/DirectoryWalker.swift`, `Walk/ScanPolicy.swift` |
-| Exclusiones por identidad | Papelera, las tres cuarentenas del CLI y `~/Library`, incluso alcanzadas por symlink o firmlink | `Walk/ExclusionSet.swift` |
+| Recorrido con reglas de skip | Oculto, paquete y cruce de volumen configurables; **no cruza puntos de montaje por default** | `Walk/DirectoryWalker.swift`, `Walk/ScanPolicy.swift` |
+| Exclusiones por identidad | Papelera, cuarentenas y `~/Library`, incluso alcanzadas por symlink o firmlink | `Walk/ExclusionSet.swift` |
 | Directorios inaccesibles | Se cuentan; nunca se lee "no encontré duplicados" cuando fue "no pude entrar" | `Walk/DirectoryWalker.swift` |
 | Agrupar por tamaño y luego digest | Ordenar y detectar runs, sin allocation por bucket | `Scan/DuplicateFinder.swift` |
 | Etapa de prefijo | Sonda cabeza + cola **solo arriba de 8 MiB**. Sobre 80 archivos de 64 MiB del mismo tamaño: 0.03 s contra 1.75 s | `Hash/ContentHasher.swift` |
@@ -269,18 +271,19 @@ El detalle técnico de lo de arriba, con lo que se midió para decidirlo. El *po
 | Concurrencia por volumen | Interno `min(max(cpus-2,2),8)`, externo y red 2. La curva medida es plana de c=1 a c=16 | `Runtime/IOConcurrencyPolicy.swift` |
 | Clases de almacenamiento | Hardlinks y clones APFS cuentan como **ya deduplicado**. El conjunto de acción nunca es `files[1:]` | `Model/StoragePartition.swift` |
 | Cancelación | Por lote del recorrido, por archivo y entre chunks de 1 MiB | `Scan/DuplicateFinder.swift`, `Hash/ContentHasher.swift` |
-| Caché de digests | Clave `(volumen, inodo, tamaño, mtime, generation)`, CRC, `flock`, reparación de cola truncada y poda de filas cuyo archivo ya no existe | `Hash/HashCache.swift` |
+| Caché de digests | Clave `(volumen, inodo, tamaño, mtime, generation)`, CRC, `flock`, reparación de cola truncada y poda de filas cuyo archivo ya no existe. En memoria es una tabla ordenada, no un diccionario | `Hash/HashCache.swift`, `Hash/DigestTable.swift` |
 | Fases honestas | `.finished` se marca después de guardar, no antes | `Scan/ScanSession.swift` |
+| Memoria a escala | 800,000 archivos en 336–371 MB (caché fría) y 356–362 MB (caliente), contra 897–955 antes de #161: `FileEntry` de 72 B, ninguna lista de todos los archivos vive más que la siguiente | `Scan/DuplicateFinder.swift`, `Model/FileEntry.swift` |
 
 ### 3.2 Carpetas
 
 | Mecanismo | Detalle | Dónde |
 |---|---|---|
-| Un solo hasheo del árbol | El CLI hashea cada archivo una vez **por nivel**; aquí es una pasada | `Folders/FolderSimilarity.swift` |
+| Un solo hasheo del árbol | Cada archivo se hashea una vez, no una por cada nivel de carpetas que lo contiene | `Folders/FolderSimilarity.swift` |
 | Intervalos de Euler | Ancestro en O(1) | `Folders/DirectoryTree.swift` |
 | Candidatos por `(digest, basename)` | Con prueba de completitud | `Folders/FolderSimilarity.swift` |
 | Poda por tamaño | A t=0.9 descarta todo par que difiera más de 22% en conteo | `Folders/FolderSimilarity.swift` |
-| Orientación por bytes | `folder_a` es la ruta menor: el CLI borra `folder_b` | `Folders/FolderSimilarity.swift` |
+| Orientación por bytes | `folder_a` es la ruta menor, así que el documento sale igual sin importar el orden del recorrido | `Folders/FolderSimilarity.swift` |
 | Clase patológica truncada | 10,000 archivos idénticos con el mismo nombre se cortan y se nombran | `Folders/FolderSimilarity.swift` |
 
 ### 3.3 Parecidos: imágenes
@@ -300,7 +303,7 @@ implementación llame casi idéntico y la otra ajeno. Lo vuelve a medir el modo 
 
 | Mecanismo | Detalle | Dónde |
 |---|---|---|
-| Ocho cuadros | `interval = max(dur/(n+1), 0.1)`; aritmética del CLI preservada porque el umbral 0.70 se calibró contra ella | `Media/VideoFrameSampler.swift` |
+| Ocho cuadros | `interval = max(dur/(n+1), 0.1)`; la aritmética no se toca porque el umbral 0.70 se calibró contra ella | `Media/VideoFrameSampler.swift` |
 | Sin `ffmpeg` | `AVAssetImageGenerator` con tolerancia: ~0.62 s por video de 10 MB a 1 GB | `Media/VideoHasher.swift` |
 | Similitud asimétrica preservada | Con la orientación fijada por bytes | `Media/VideoSimilarity.swift` |
 | Comparación por pares, sin LSH | Popcounts sobre listas de cuadros | `Media/SimilarScanSession.swift` |
@@ -316,16 +319,16 @@ implementación llame casi idéntico y la otra ajeno. Lo vuelve a medir el modo 
 | Journal JSON Lines | Lotes de 32; un `undone_at` se agrega, nunca reescribe |
 | Cancelar | Devuelve reporte y hace el flush; una cancelación nunca se reporta como archivo ilegible |
 
-### 3.6 Interop con el CLI
+### 3.6 Formato en disco
 
 | Mecanismo | Detalle |
 |---|---|
-| JSON byte-idéntico | Encoder a mano: `\uXXXX`, `1.0` para doubles enteros, indent 2, orden de inserción |
+| JSON escrito a mano | `\uXXXX`, `1.0` para doubles enteros, indent 2, orden de inserción: el formato de `json.dumps` de Python |
 | Seis formatos | `scans`, `decisions`, `folder-scans`, `folder-decisions`, `similar-scans`, `similar-decisions` — tres formas distintas de documento de decisiones |
 | Orden por bytes UTF-8 | `PathOrder`: NFC y NFD son rutas distintas |
-| Escrituras atómicas | Mejora sobre el `write_text` del CLI, sin cambio de formato |
+| Escrituras atómicas | Temporal y rename: quien lee ve el documento viejo o el nuevo |
 
-Detalle completo en [`INTEROP.md`](INTEROP.md).
+Detalle completo en [`FORMATO.md`](FORMATO.md).
 
 ---
 
@@ -338,25 +341,24 @@ una vez.
 
 | No hace | Por qué |
 |---|---|
-| Borrar definitivamente | El CLI tiene `delete`, `folders-delete` y `similar-delete`. Aquí todo va a la Papelera y se journaliza, porque deshacer es la razón de la app |
-| Mover sin decisiones | `rav duplicate move` y `folders-move` actúan sobre todo lo no revisado; aquí un grupo sin decidir no se toca |
-| Cruzar volúmenes por default | Divergencia deliberada de `os.walk` |
+| Borrar definitivamente | Todo va a la Papelera y se journaliza, porque deshacer es la razón de la app |
+| Mover sin decisiones | Aplicar actúa solo sobre lo decidido: un grupo sin decidir no se toca, nunca se completa con la sugerencia |
+| Cruzar volúmenes por default | Escanear `~` no baja a los discos externos montados dentro |
 | Escanear `~/Library` | Son cachés donde quitar un "duplicado" rompe una app. Excepción: la raíz elegida está dentro |
 | Pedir Full Disk Access | No hay API para pedirlo, y una app que lo pide para ordenar Descargas parece malware |
-| Sandbox | `~/.local/state/rav/` está fuera del contenedor, y compartir estado con el CLI es el punto |
+| Sandbox | El estado vive en `~/.local/state/rav/duplicate/`, fuera del contenedor, para que otras herramientas lo lean |
 | Bookmarks security-scoped | Sin sandbox, un permiso de TCC persiste por bundle id |
 | Cortar la cancelación dentro de un chunk | El límite es una lectura de 1 MiB |
-| `folder-decisions/` contra un archivo real | El CLI tiene el slot y nunca escribió uno; el round-trip se prueba contra uno sintetizado |
+| `folder-decisions/` contra un archivo real | No existe uno escrito fuera de la app; el round-trip se prueba contra uno sintetizado |
 | Usar `PerceptualHash(hex:)` en producción | Existe para que el diferencial contra Python sea depurable lado a lado |
 
-### 4.2 Lo que el CLI tiene y la app no
+### 4.2 Lo que no tiene
 
-| Subcomando | En la app |
+| Qué | En su lugar |
 |---|---|
-| `report` (texto o JSON en la terminal) | No hay exportar. La biblioteca y los visores lo cubren en pantalla |
-| `open`, `reveal` | Quick Look ⌘Y y Show in Finder ⌘R |
-| `interactive`, `review` | Los tres visores |
-| `delete`, `move`, `folders-delete`, `folders-move`, `similar-delete`, `similar-move` | Ausentes a propósito (4.1) |
+| Exportar un reporte (texto, CSV o JSON) | La biblioteca y los visores lo muestran en pantalla; los documentos JSON están en disco ([`FORMATO.md`](FORMATO.md)) |
+| Preferencias | Las opciones se eligen en cada escaneo y no se recuerdan, salvo las carpetas recientes |
+| Escaneos programados o en segundo plano | Cada escaneo lo empieza alguien, con la ventana abierta |
 
 ### 4.3 Pendiente
 
@@ -373,7 +375,8 @@ gh issue list --label priority:p1     # cerca de los datos del usuario
 gh issue list --label bloqueado       # y por qué está bloqueado
 ```
 
-Lo que ningún issue cierra solo: [`PASADA-A-MANO.md`](PASADA-A-MANO.md), el guion de verificación a mano.
+Lo que ninguna herramienta verifica: los permisos de macOS, con el guion corto al final de
+[`SELFTEST.md`](SELFTEST.md).
 
 ---
 
@@ -425,7 +428,7 @@ Lo que **sí** es una sola pieza y conviene que siga así: el deshacer (`UndoPla
 | Enums de detector | `ScanKind` (solo tests), `ScanPanelController.Detector`, `LibraryWindowController.LibraryKind` | tres nombres para lo mismo | — | ~30 |
 
 **No es redundancia** y se queda: los seis codecs JSON. Las tres formas de documento de decisiones, y que un
-umbral sea entero en un formato y float en otro, los dicta el CLI.
+umbral sea entero en un formato y float en otro, los dicta el formato en disco.
 
 ### 5.3 Código que producción no usa
 
@@ -443,7 +446,7 @@ y no se leen, y ~30 hooks de selftest que nadie llama.
 | `clearDecision` de carpetas y de parecidos | En Core, ningún visor lo llama |
 | `RecentRoots.forget`, `PresenceCache.forget` | No hay forma de quitar una carpeta reciente, y borrar un escaneo no borra su chequeo de disco |
 | `previousGroup`, `retreat`, `actionableCount`, `confirmEffective` | Las ventanas navegan por su cuenta |
-| `ReviewFlow` completo | Es la máquina del menú del CLI, cuatro pasos por ocho acciones; producción usa cuatro métodos. El invariante real —"la simulación sigue vigente"— cabe en ~20 líneas |
+| `ReviewFlow` completo | Es una máquina de menú de cuatro pasos por ocho acciones, heredada de la herramienta de línea de comandos; producción usa cuatro métodos. El invariante real —"la simulación sigue vigente"— cabe en ~20 líneas |
 | Protocolo `DirectoryEnumerating` | Un solo conforme y ningún fake: era la costura para `AttrListWalker`, que se rechazó con medición |
 
 **Calculado y nunca mostrado** — la regla del proyecto dice que esto es peor que código muerto, porque tiene
@@ -479,13 +482,13 @@ vale lo que cuesta.
 
 ### 5.5 El selftest
 
-44 modos y 6,690 líneas. Tres problemas distintos:
+Tres problemas distintos:
 
 - **Modos que ya cubren los tests unitarios**: `state-dir`, `gate`, `keeper`, `format`, `trash`, `review` y
   media `storage`. ~700 líneas.
-- **Lógica de Core que solo prueba el selftest** —y por lo tanto queda fuera del piso de cobertura—: la exclusión
-  de `~/Library`, la fase `.grouping`, `loadAndRepair`, las etapas del apply de carpetas, la cancelación a media
-  corrida. Va a `Tests/` (pendiente p3).
+- **Lógica de Core que solo probaba el selftest** —y por lo tanto quedaba fuera del piso de cobertura—: la
+  exclusión de `~/Library`, la fase `.grouping`, `loadAndRepair`, las etapas del apply de carpetas, la cancelación
+  a media corrida. Ya tiene tests en `Tests/` (#157).
 - **Copia y pega**: seis round-trips con el mismo esqueleto (~357 líneas), la cadena Papelera→journal cinco veces,
   y el contrato de visor tres veces. Y ningún modo aplica ni deshace a través de las hojas de carpetas o de
   parecidos: sus hooks existen y nadie los llama.
@@ -496,15 +499,16 @@ En orden, y con el riesgo dicho:
 
 1. **Barrido de lo muerto (5.3).** ~500 líneas, riesgo nulo, y quita afirmaciones falsas sobre capacidades que
    no existen.
-2. **Los pendientes p1 y p2 de la sección 4.3, por separado**, antes de cualquier consolidación: son bugs con
-   nombre, y arreglarlos dentro de un refactor los esconde.
+2. **Los pendientes de la sección 4.3, por separado**, antes de cualquier consolidación: son bugs con nombre, y
+   arreglarlos dentro de un refactor los esconde.
 3. **Selftest** (5.5): borrar lo cubierto, mover Core a `Tests/`, un round-trip genérico. ~1,700–2,200 líneas,
    riesgo bajo para producción, y la cobertura sube.
 4. **Pipeline de escaneo y biblioteca**: una cola de sesión común, un despacho que muestre `inaccessible` en los
    tres, `ScanStore` genérico, `ScanKind` adoptado, biblioteca igual en las tres pestañas. ~250–300 líneas, riesgo
    bajo-medio, y cierra tres filas de la sección 2.
 5. **Revisión**: estado y soporte de ventana compartidos, un solo panel de vista previa. ~450–500 líneas, riesgo
-   medio: obliga a elegir **una** política de guardado, y esa decide sobre qué actúa el CLI.
+   medio: obliga a elegir **una** política de guardado, y esa decide qué queda escrito en el archivo de
+   decisiones.
 6. **Familia de aplicar**: un runner y una hoja con un adaptador por detector. ~850 líneas y el valor más alto,
    porque es donde la deriva ya tocó seguridad. Riesgo **alto**: es el camino destructivo. La red existe
    (~1,600 líneas de tests de apply), y el orden del journal, el flush al cancelar, el lote de 32 y el corte a
