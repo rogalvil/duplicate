@@ -53,16 +53,18 @@ La lista se actualiza sola: un escaneo nuevo aparece sin apretar nada.
 
 ## 3. Escanear una carpeta
 
-**⌘N** (o el botón **+**) abre el panel de escaneo. Primero eliges qué buscar:
+**⌘N** (o el botón **+**) abre el panel de escaneo, ya en el tipo de la pestaña donde estás: desde **Carpetas**,
+en «Carpetas parecidas»; desde **Imágenes**, en «Imágenes y videos parecidos». Primero eliges qué buscar:
 
-| Archivos idénticos | Carpetas parecidas | Imágenes parecidas |
+| Archivos idénticos | Carpetas parecidas | Imágenes y videos parecidos |
 |---|---|---|
-| ![Panel, archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/scan-exact-open-v2.png) | ![Panel, carpetas](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/scan-folders-open-v2.png) | ![Panel, imágenes](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/scan-similar-open-v2.png) |
+| ![Panel, archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/scan-exact-open-v2.png) | ![Panel, carpetas](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/scan-folders-open-v2.png) | ![Panel, imágenes](https://raw.githubusercontent.com/rogalvil/duplicate/bdfd574a6f047a29f4ecd97d59a1f941e0321023/manual/scan-similar-open-v3.png) |
 
-1. **Buscar**: el tipo. Carpetas pide además qué tan parecidas (90 % por default). Imágenes pide cuántos bits de
-   64 pueden diferir (5 por default) y qué revisar: **Imágenes y videos**, **Solo imágenes** o **Solo videos**.
-   Los videos son la parte lenta, así que separarlos sirve para una pasada rápida por las fotos o por las películas.
-   Con **Solo videos** el menú de bits se apaga: es una distancia entre imágenes.
+1. **Buscar**: el tipo. **Archivos idénticos**, **Carpetas parecidas**, **Imágenes y videos parecidos**, **Solo
+   imágenes parecidas** o **Solo videos parecidos**. Carpetas pide además qué tan parecidas (90 % por default), e
+   imágenes cuántos bits de 64 pueden diferir (5 por default). Los videos son la parte lenta, así que separarlos sirve
+   para una pasada rápida por las fotos o por las películas. Con **Solo videos parecidos** el menú de bits se apaga:
+   es una distancia entre imágenes.
 2. **Elegir carpeta…**: la carpeta a revisar. **Recientes…** guarda las últimas diez.
 3. Las opciones, todas apagadas salvo la caché:
    - **Incluir archivos ocultos**: apagado, porque cientos de `.DS_Store` idénticos tapan lo que importa.

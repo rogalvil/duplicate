@@ -17,10 +17,9 @@ let application = NSApplication.shared
 application.setActivationPolicy(.regular)
 
 if CommandLine.arguments.contains("--selftest") {
-    // **A selftest that ends early has to fail, not pass.** The async main exits with status 0 whenever the main run
-    // loop stops, and a selftest once stopped it halfway through a mode -- a `performClick` on a window with a sheet
-    // attached -- so the process ended with 0, no `OK` and no `FAILED`, and `--mode all` would have skipped every
-    // mode after it with CI green (#217). The guard turns any exit that `SelfTest.run` did not return into a failure.
+    // **A selftest that ends early has to fail, not pass.** A mode that stopped the main run loop halfway through
+    // once ended the process with 0, no `OK` and no `FAILED`, and `--mode all` would have skipped every mode after it
+    // with CI green (#217). The guard turns any exit that `SelfTest.run` did not return into a failure.
     atexit {
         guard !SelfTest.hasFinished else { return }
         fflush(stdout)
@@ -28,9 +27,18 @@ if CommandLine.arguments.contains("--selftest") {
             Data("FAILED: the process exited before the selftest finished\n".utf8))
         _exit(1)
     }
-    let status = await SelfTest.run(arguments: CommandLine.arguments)
-    SelfTest.hasFinished = true
-    exit(status)
+    // **And this file runs the main run loop itself, rather than an async `main`** (#222). The async main drains with
+    // `CFRunLoopRun()` and calls `exit(0)` the moment it returns -- which a mode that closed a sheet and then awaited
+    // made happen, with no `CFRunLoopStop`, `stopModal` or `terminate:` anywhere (traced with lldb). Here the loop
+    // only ends when the selftest calls `exit`, and the timer keeps the run loop from ever being empty.
+    Task { @MainActor in
+        let status = await SelfTest.run(arguments: CommandLine.arguments)
+        SelfTest.hasFinished = true
+        exit(status)
+    }
+    let keepAlive = Timer(timeInterval: 3600, repeats: true) { _ in }
+    RunLoop.main.add(keepAlive, forMode: .common)
+    while true { _ = RunLoop.main.run(mode: .default, before: .distantFuture) }
 }
 
 let mainMenu = MainMenuBuilder.build()

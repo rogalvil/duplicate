@@ -292,7 +292,9 @@
 "similar.kind.video" = "Video";
 "similar.footer" = "%1$@ a %2$@ o menos - %3$@ al %4$d%% de los cuadros";
 "similar.empty" = "Ningún grupo seleccionado";
-"scan.detector.similar" = "Imágenes parecidas";
+"scan.detector.similar" = "Imágenes y videos parecidos";
+"scan.detector.similarImages" = "Solo imágenes parecidas";
+"scan.detector.similarVideos" = "Solo videos parecidos";
 "scan.threshold.bits" = "Hasta %d bits distintos";
 "library.kind.similar" = "Imágenes";
 "library.column.similarPairs" = "Pares";
@@ -308,9 +310,6 @@
 "similar.header.video" = "%1$.2f%% de los cuadros muestreados coinciden";
 "similar.header.video.fewFrames" = "%1$.2f%% de los cuadros muestreados coinciden — juzgado con %2$d de %3$d cuadros";
 "similar.state.missing" = "Este archivo ya no existe.";
-"scan.media.imagesAndVideos" = "Imágenes y videos";
-"scan.media.imagesOnly" = "Solo imágenes";
-"scan.media.videosOnly" = "Solo videos";
 "similar.decision.skip" = "Saltar";
 "similar.column.files" = "Archivos";
 "similar.column.keep" = "Conservar";

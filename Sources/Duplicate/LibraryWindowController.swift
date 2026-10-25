@@ -433,11 +433,14 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     /// bounded read concurrency, and the second would make the first slower for no gain.
     @objc func beginScan(_ sender: Any? = nil) {
         if let existing = scanPanel {
+            existing.preselect(for: showingKind)
             existing.showWindow(nil)
             existing.window?.makeKeyAndOrderFront(nil)
             return
         }
         let panel = ScanPanelController(stateDirectory: stateDirectory)
+        // **On the tab's detector** (#222): from the Folders tab, a new scan is most likely a folder scan.
+        panel.preselect(for: showingKind)
         panel.onUnsaved = { [weak self] scan in self?.openUnsaved(scan) }
         panel.onFolderFinished = { [weak self] _ in
             guard let self else { return }
@@ -861,6 +864,10 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     }
 
     var hasUnsavedHandlerForSelftest: Bool { scanPanel?.onUnsaved != nil }
+    var scanPanelDetectorForSelftest: ScanDetector? { scanPanel?.detectorForSelftest }
+    func chooseScanPanelDetectorForSelftest(_ choice: ScanDetector) {
+        scanPanel?.chooseDetectorForSelftest(choice)
+    }
     var openReviewIDsForSelftest: Set<String> {
         Set(reviewWindows.keys).union(folderWindows.keys).union(similarWindows.keys)
     }
