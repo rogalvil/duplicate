@@ -61,6 +61,16 @@ final class ScanPanelController: NSWindowController {
     /// because a modal one stops the run until someone clicks it.
     var presentAlert: (NSAlert) -> NSApplication.ModalResponse = { $0.runModal() }
 
+    /// A scan that finished but could not be saved, handed over so it can still be reviewed from memory.
+    enum UnsavedScan {
+        case exact(DuplicateScan)
+        case folders(FolderScan)
+        case similar(SimilarScan)
+    }
+
+    /// Called instead of the `onFinished` family when the scan ran and its document did not reach disk.
+    var onUnsaved: ((UnsavedScan) -> Void)?
+
     /// - Parameter cacheDirectory: where the sessions keep their caches. `nil` is the app's own, in
     ///   `~/Library/Caches`; a selftest passes one under `/tmp`, or its scans would land in the user's.
     init(
@@ -496,10 +506,7 @@ final class ScanPanelController: NSWindowController {
         case .failure(let error):
             presentFailure(String(describing: error))
         case .success(let result):
-            if let failure = result.saveFailure {
-                presentFailure(failure)
-                return
-            }
+            if let failure = result.saveFailure { presentUnsaved(failure) }
             if !result.unreadable.isEmpty {
                 let alert = NSAlert()
                 alert.alertStyle = .informational
@@ -510,7 +517,11 @@ final class ScanPanelController: NSWindowController {
                 alert.addButton(withTitle: Strings.string("button.ok"))
                 _ = presentAlert(alert)
             }
-            onSimilarFinished?(result.scan)
+            if result.saveFailure == nil {
+                onSimilarFinished?(result.scan)
+            } else {
+                onUnsaved?(.similar(result.scan))
+            }
             reportUnreadable(count: result.inaccessible.count)
             window?.close()
         }
@@ -528,10 +539,7 @@ final class ScanPanelController: NSWindowController {
         case .failure(let error):
             presentFailure(String(describing: error))
         case .success(let result):
-            if let failure = result.saveFailure {
-                presentFailure(failure)
-                return
-            }
+            if let failure = result.saveFailure { presentUnsaved(failure) }
             // A truncated class means the answer is incomplete, and saying so is the whole point of
             // tracking it rather than returning quietly wrong results.
             if let worst = result.truncated.max(by: { $0.fileCount < $1.fileCount }) {
@@ -543,7 +551,11 @@ final class ScanPanelController: NSWindowController {
                 alert.addButton(withTitle: Strings.string("button.ok"))
                 _ = presentAlert(alert)
             }
-            onFolderFinished?(result.scan)
+            if result.saveFailure == nil {
+                onFolderFinished?(result.scan)
+            } else {
+                onUnsaved?(.folders(result.scan))
+            }
             reportUnreadable(count: result.inaccessible.count)
             window?.close()
         }
@@ -574,14 +586,16 @@ final class ScanPanelController: NSWindowController {
             presentFailure(String(describing: error))
         case .success(let scanResult):
             if let failure = scanResult.saveFailure {
-                // The scan itself succeeded. Saying so matters: the work is not lost, it is just not on
-                // disk, and the user can still review it.
-                presentFailure(failure)
+                // **Finished, only not on disk -- so said, and then opened anyway.** This returned here, and a scan
+                // that may have taken twenty minutes was gone with the alert, while this comment promised the user
+                // could still review it (#153).
+                presentUnsaved(failure)
+                onUnsaved?(.exact(scanResult.scan))
             } else {
                 onFinished?(scanResult.scan)
-                reportUnreadable(count: scanResult.outcome.walk.inaccessiblePaths.count)
-                window?.close()
             }
+            reportUnreadable(count: scanResult.outcome.walk.inaccessiblePaths.count)
+            window?.close()
         }
     }
 
@@ -622,6 +636,16 @@ final class ScanPanelController: NSWindowController {
                 NSWorkspace.shared.open(url)
             }
         }
+    }
+
+    /// Says that a scan finished but its document could not be written, and that it opens anyway.
+    private func presentUnsaved(_ failure: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = Strings.string("scan.saveFailed.title")
+        alert.informativeText = String(format: Strings.string("scan.saveFailed.body"), failure)
+        alert.addButton(withTitle: Strings.string("button.ok"))
+        _ = presentAlert(alert)
     }
 
     private func presentFailure(_ message: String) {

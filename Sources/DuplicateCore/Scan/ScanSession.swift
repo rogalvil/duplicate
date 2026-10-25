@@ -123,7 +123,7 @@ public struct ScanSession: Sendable {
             // Finished either way: the scan ran, and a save failure is reported rather than thrown so the
             // caller can still review what it found.
             return Result(
-                outcome: outcome, savedPath: nil, saveFailure: String(describing: error))
+                outcome: outcome, savedPath: nil, saveFailure: error.localizedDescription)
         }
     }
 
