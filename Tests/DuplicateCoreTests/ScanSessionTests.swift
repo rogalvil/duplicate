@@ -247,6 +247,19 @@ struct ScanSessionTests {
         #expect(result.saveFailure != nil)
     }
 
+    /// The order #131 introduced, pinned now that the phases can be read back: saving, then finished.
+    @Test("The scan says it is saving, and finishes only after that")
+    func finishesAfterSaving() async throws {
+        let scratch = try SessionScratch()
+        defer { scratch.remove() }
+        for index in 0..<2 { try scratch.write("f\(index).txt", "shared contents") }
+        let counters = ProgressCounters()
+        _ = try await scratch.session().run(
+            ScanSession.Request(root: scratch.tree), instant: noon, progress: counters)
+        let phases = counters.phaseLog.withLock { $0 }
+        #expect(Array(phases.suffix(2)) == [.saving, .finished])
+    }
+
     @Test("Progress counters reach the caller")
     func reportsProgress() async throws {
         let scratch = try SessionScratch()

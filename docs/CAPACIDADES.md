@@ -244,7 +244,7 @@ tocar cualquiera de los tres.
 | Biblioteca: ordenar, filtrar, badge "Reviewed" | sí | **no** | **no** |
 | Biblioteca: menú contextual | sí | sí | sí |
 | Aviso de carpetas sin permiso al escanear | sí | sí | sí |
-| "Terminado" solo después de guardar | sí | **no** | **no** |
+| "Terminado" solo después de guardar | sí | sí | sí |
 
 Casi todos los **no** de esta tabla no son decisiones: son la misma pieza escrita tres veces, arreglada en una.
 La sección 5 cuenta cuántas líneas cuesta eso.
@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p3 | #154 | Carpetas y parecidos marcan "Terminado" antes de guardar: el arreglo de #131 solo llegó al exacto |
 | p3 | #155 | El aviso de decisiones importadas y la nota de cuarentena solo existen en el exacto |
 | p3 | #156 | Undo the Last Session elige la sesión más nueva aunque ya esté devuelta |
 | p3 | #157 | Lógica de Core que solo prueba el selftest, contra la regla de que todo Core lleva su test: la exclusión de `~/Library`, la fase `.grouping`, `HashCache.loadAndRepair`, las etapas y la cancelación del apply de carpetas |

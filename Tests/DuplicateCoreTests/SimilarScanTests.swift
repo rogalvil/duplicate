@@ -189,6 +189,20 @@ struct SimilarScanCodecTests {
 @Suite("SimilarScanSession")
 struct SimilarScanSessionTests {
 
+    /// **"Finished" comes after the document is written** (#154), for the reason the folder session test gives.
+    @Test("The scan says it is saving, and finishes only after that")
+    func finishesAfterSaving() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        try scratch.writeImage("a/one.png", .rampWithCorner)
+        try scratch.writeImage("b/two.png", .rampWithCorner)
+        let counters = ProgressCounters()
+        _ = try await scratch.session().run(
+            SimilarScanSession.Request(root: scratch.tree), instant: noon, progress: counters)
+        let phases = counters.phaseLog.withLock { $0 }
+        #expect(Array(phases.suffix(3)) == [.grouping, .saving, .finished])
+    }
+
     @Test("Two copies of one picture are found and saved")
     func findsAndSaves() async throws {
         let scratch = try SimilarScratch()

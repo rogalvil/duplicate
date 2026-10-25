@@ -195,6 +195,20 @@ struct FolderScanSessionTests {
         #expect(reloaded.threshold == 0.9)
     }
 
+    /// **"Finished" comes after the document is written** (#154), the order #131 gave the exact session. This
+    /// session said "finished" before saving, so the panel read "Terminado" through the save.
+    @Test("The scan says it is saving, and finishes only after that")
+    func finishesAfterSaving() async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        for folder in ["copyA", "copyB"] { try scratch.write("\(folder)/one.txt", "first") }
+        let counters = ProgressCounters()
+        _ = try await scratch.session().run(
+            FolderScanSession.Request(root: scratch.tree), instant: noon, progress: counters)
+        let phases = counters.phaseLog.withLock { $0 }
+        #expect(Array(phases.suffix(3)) == [.grouping, .saving, .finished])
+    }
+
     /// **Every file is hashed, not just size collisions.** That is the difference from the exact detector,
     /// and it is what makes the cache decisive here.
     @Test("A second scan of the same tree is served entirely by the cache")

@@ -103,11 +103,16 @@ public final class ProgressCounters: Sendable {
     private let bytesReadStorage = Atomic<Int64>(0)
     private let cacheHitsStorage = Atomic<Int>(0)
     private let currentPath = Mutex<String>("")
+    /// Every phase set, in order. Internal, for tests: a snapshot holds only the current phase, so after a run
+    /// nothing else can show whether "finished" came before or after the document was written. A handful of
+    /// entries per scan.
+    let phaseLog = Mutex<[ScanPhase]>([])
 
     public init() {}
 
     public func setPhase(_ phase: ScanPhase) {
         phaseStorage.store(phase.rawValue, ordering: .relaxed)
+        phaseLog.withLock { $0.append(phase) }
     }
 
     public func setCandidates(_ count: Int) {
