@@ -4929,6 +4929,16 @@ enum SelfTest {
             panel.isImageThresholdEnabledForSelftest,
             "the bits menu stays grey for a pass over images")
         panel.chooseDetectorForSelftest(.similar)
+        // **A chosen distance survives moving between the three perceptual entries** (found in review on #224):
+        // rebuilding the menu on every change reset 0 bits to 5, so leaving videos out widened the image search.
+        // Teeth: rebuild the threshold menu on every `detectorChanged` and this reads 5.
+        panel.chooseImageThresholdForSelftest(0)
+        panel.chooseDetectorForSelftest(.similarImages)
+        try expect(
+            panel.imageThresholdForSelftest == 0,
+            "0 bits became \(panel.imageThresholdForSelftest) on choosing images only")
+        panel.chooseDetectorForSelftest(.similar)
+        panel.chooseImageThresholdForSelftest(5)
 
         // **The hash-cache toggle reaches this detector too** (#158). The perceptual request was built without it,
         // so it always used the cache -- turning the toggle off changed nothing here.

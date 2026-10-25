@@ -445,8 +445,10 @@ final class ScanPanelController: NSWindowController {
     @objc private func detectorChanged(_ sender: Any?) {
         // **Each detector's threshold is a different quantity in a different unit**: folders are a Dice
         // coefficient in percent, images are a Hamming distance in bits out of 64. One popup showing "90%"
-        // for both would be two meanings behind one number, so the items are rebuilt with the detector.
-        rebuildThresholdMenu()
+        // for both would be two meanings behind one number, so the items are rebuilt with the detector --
+        // **only when the unit changes** (found in review on #224). The three perceptual entries share the bits, and
+        // rebuilding between them reset a chosen 0 bits to 5: leaving videos out silently widened the image search.
+        if thresholdInBits != detector.isPerceptual { rebuildThresholdMenu() }
         thresholdPopup.isHidden = detector == .exact
         refreshThresholdAvailability()
     }
@@ -456,7 +458,11 @@ final class ScanPanelController: NSWindowController {
         thresholdPopup.isEnabled = detector != .similarVideos
     }
 
+    /// Whether the threshold menu holds bits (perceptual) or percentages (folders), as last built.
+    private var thresholdInBits: Bool?
+
     private func rebuildThresholdMenu() {
+        thresholdInBits = detector.isPerceptual
         thresholdPopup.removeAllItems()
         switch detector {
         case .exact, .folders:
@@ -850,6 +856,10 @@ final class ScanPanelController: NSWindowController {
     var thresholdForSelftest: Double { threshold }
     var imageThresholdForSelftest: Int { imageThreshold }
     var isImageThresholdEnabledForSelftest: Bool { thresholdPopup.isEnabled }
+    func chooseImageThresholdForSelftest(_ bits: Int) {
+        let index = thresholdPopup.itemArray.firstIndex { ($0.representedObject as? Int) == bits }
+        thresholdPopup.selectItem(at: index ?? -1)
+    }
     var detectorForSelftest: ScanDetector { detector }
     var detectorTitlesForSelftest: [String] { detectorPopup.itemTitles }
     func chooseDetectorForSelftest(_ choice: ScanDetector) {
