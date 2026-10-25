@@ -90,7 +90,7 @@ El menú Group siempre está en la barra; fuera de la revisión exacta todo sale
 | Refresh | botón | Relee el disco |
 | Ordenar | Newest / Oldest / Most groups / Most reclaimable | **Solo pestaña Files** |
 | Filtrar | por carpeta o scan id, sin distinguir mayúsculas ni acentos | **Solo pestaña Files** |
-| Menú contextual | clic derecho | Review, Open Scanned Folder, Show Scan File in Finder, Copy Scan ID, Delete This Scan… — **solo funciona en Files** |
+| Menú contextual | clic derecho | Review, Open Scanned Folder, Show Scan File in Finder, Copy Scan ID, Delete This Scan…, en las tres pestañas |
 | Delete This Scan… | menú contextual | Borra el documento del escaneo y sus decisiones, no los archivos |
 | Columnas Files | — | carpeta, fecha, grupos, archivos, recuperable (`≤ X` cuando es cota), estado (Reviewed / Relative paths) |
 | Columnas Folders | — | carpeta, fecha, umbral %, pares, carpetas, estado |
@@ -241,7 +241,8 @@ tocar cualquiera de los tres.
 | Simular | botón y ⇧⌘D | botón | botón |
 | ⌘Q protegido durante el apply | sí, por la hoja | sí, por la hoja | sí, por la hoja |
 | Nota de cuarentena tras el apply | sí | **no** | **no** |
-| Biblioteca: ordenar, filtrar, menú contextual, badge "Reviewed" | sí | **no** | **no** |
+| Biblioteca: ordenar, filtrar, badge "Reviewed" | sí | **no** | **no** |
+| Biblioteca: menú contextual | sí | sí | sí |
 | Aviso de carpetas sin permiso al escanear | sí | **no** | **no** |
 | "Terminado" solo después de guardar | sí | **no** | **no** |
 
@@ -366,7 +367,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 | Prioridad | Issue | Qué |
 |---|---|---|
 | p2 | #146 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
-| p2 | #150 | El menú contextual de la biblioteca no hace nada en Folders ni en Images: no hay forma de borrar esos escaneos desde la app (verificado: no actúa sobre otro escaneo, no hace nada) |
 | p2 | #151 | Quitar todas las decisiones de una revisión exacta no reescribe el archivo: el anterior sobrevive, y el CLI o una reapertura actúan sobre decisiones retiradas |
 | p2 | #152 | En carpetas, una falla al guardar decisiones se traga con `try?` |
 | p2 | #153 | Si guardar un escaneo falla, el resultado en memoria se pierde, aunque el comentario dice que se puede revisar |
@@ -454,7 +454,6 @@ y no se leen, y ~30 hooks de selftest que nadie llama.
 
 | Pieza | Qué pasa |
 |---|---|
-| Menú contextual de la biblioteca en Folders e Images | Lee la lista de escaneos exactos, vacía en esas pestañas: no hace nada, en silencio |
 | `clearDecision` de carpetas y de parecidos | En Core, ningún visor lo llama |
 | `RecentRoots.forget`, `PresenceCache.forget` | No hay forma de quitar una carpeta reciente, y borrar un escaneo no borra su chequeo de disco |
 | `previousGroup`, `retreat`, `actionableCount`, `confirmEffective` | Las ventanas navegan por su cuenta |

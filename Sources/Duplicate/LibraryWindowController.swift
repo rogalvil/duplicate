@@ -549,7 +549,8 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
             return
         }
         guard !summary.hasRelativePaths else {
-            presentRelativePathWarning(summary, bodyKey: "library.relativePaths.reviewBody")
+            presentRelativePathWarning(
+                root: summary.root, bodyKey: "library.relativePaths.reviewBody")
             return
         }
         let store = ScanStore(state: stateDirectory)
@@ -642,18 +643,16 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     /// directory, which this app does not share, and Launch Services starts the app in `/`. Guessing would
     /// reveal the wrong folder, or none.
     @objc private func revealScannedFolder(_ sender: Any?) {
-        guard let summary = clickedSummary() else { return }
-        guard !summary.hasRelativePaths else {
-            presentRelativePathWarning(summary, bodyKey: "library.relativePaths.body")
+        guard let target = clickedTarget() else { return }
+        guard !target.hasRelativePaths else {
+            presentRelativePathWarning(root: target.root, bodyKey: "library.relativePaths.body")
             return
         }
-        Reveal.folder(at: summary.root)
+        Reveal.folder(at: target.root)
     }
 
     @objc private func revealScanDocument(_ sender: Any?) {
-        guard let summary = clickedSummary(),
-            let path = try? stateDirectory.filePath(for: .scans, id: summary.scanID)
-        else { return }
+        guard let target = clickedTarget(), let path = documentPath(of: target) else { return }
         Reveal.item(at: path)
     }
 
@@ -665,28 +664,83 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     /// This exists because the library filled up: 119 scans from four days in May, most of them describing
     /// folders that no longer exist, with no way to clear any of them.
     @objc private func deleteScan(_ sender: Any?) {
-        guard let summary = clickedSummary() else { return }
+        guard let target = clickedTarget() else { return }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = String(
-            format: Strings.string("library.delete.title"), summary.scanID)
+            format: Strings.string("library.delete.title"), target.scanID)
         alert.informativeText = Strings.string("library.delete.body")
         alert.addButton(withTitle: Strings.string("library.delete.confirm"))
         alert.addButton(withTitle: Strings.string("button.cancel"))
         guard let window else { return }
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            MainActor.assumeIsolated {
-                _ = try? ScanStore(state: self.stateDirectory).delete(id: summary.scanID)
-                self.loadFromDisk()
-            }
+            MainActor.assumeIsolated { self.remove(target) }
         }
     }
 
     @objc private func copyIdentifier(_ sender: Any?) {
-        guard let summary = clickedSummary() else { return }
+        guard let target = clickedTarget() else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(summary.scanID, forType: .string)
+        NSPasteboard.general.setString(target.scanID, forType: .string)
+    }
+
+    /// What a menu action is aimed at, in whichever list is showing.
+    ///
+    /// **Per tab.** The actions read only the exact scans, so in Folders and Images every one of them did
+    /// nothing -- and with no way to delete those scans from the app, the two lists only ever grew.
+    private struct RowTarget {
+        let scanID: String
+        let root: String
+        let hasRelativePaths: Bool
+        let kind: LibraryKind
+    }
+
+    private func clickedTarget() -> RowTarget? {
+        let clicked = tableView.clickedRow
+        let index = clicked >= 0 ? clicked : tableView.selectedRow
+        switch showingKind {
+        case .files:
+            guard rows.indices.contains(index) else { return nil }
+            let row = rows[index]
+            return RowTarget(
+                scanID: row.scanID, root: row.root, hasRelativePaths: row.hasRelativePaths,
+                kind: .files)
+        case .folders:
+            guard folderRows.indices.contains(index) else { return nil }
+            let row = folderRows[index]
+            return RowTarget(
+                scanID: row.scanID, root: row.root, hasRelativePaths: row.hasRelativePaths,
+                kind: .folders)
+        case .similar:
+            guard similarRows.indices.contains(index) else { return nil }
+            let row = similarRows[index]
+            return RowTarget(
+                scanID: row.scanID, root: row.root, hasRelativePaths: row.hasRelativePaths,
+                kind: .similar)
+        }
+    }
+
+    /// Where a target's scan document lives: each kind has its own directory.
+    private func documentPath(of target: RowTarget) -> String? {
+        let slot: StateDirectory.Slot =
+            switch target.kind {
+            case .files: .scans
+            case .folders: .folderScans
+            case .similar: .similarScans
+            }
+        return try? stateDirectory.filePath(for: slot, id: target.scanID)
+    }
+
+    /// Removes a target's scan and the decisions beside it, through the store call for its kind.
+    private func remove(_ target: RowTarget) {
+        let store = ScanStore(state: stateDirectory)
+        switch target.kind {
+        case .files: _ = try? store.delete(id: target.scanID)
+        case .folders: _ = try? store.deleteFolderScan(id: target.scanID)
+        case .similar: _ = try? store.deleteSimilarScan(id: target.scanID)
+        }
+        loadFromDisk()
     }
 
     /// The row the menu or double-click was aimed at, which is not always the selected row.
@@ -697,11 +751,11 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         return rows[index]
     }
 
-    private func presentRelativePathWarning(_ summary: ScanStore.Summary, bodyKey: String) {
+    private func presentRelativePathWarning(root: String, bodyKey: String) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = Strings.string("library.relativePaths.title")
-        alert.informativeText = String(format: Strings.string(bodyKey), summary.root)
+        alert.informativeText = String(format: Strings.string(bodyKey), root)
         alert.addButton(withTitle: Strings.string("button.ok"))
         if let window {
             alert.beginSheetModal(for: window)
@@ -740,6 +794,19 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     func showSimilarScansForSelftest() {
         kindControl.selectedSegment = LibraryKind.similar.rawValue
         kindChanged(nil)
+    }
+
+    /// What the row menu would act on for a row of the tab being shown: its scan and its document.
+    func menuTargetForSelftest(row: Int) -> (scanID: String, document: String?)? {
+        tableView.selectRowIndexes([row], byExtendingSelection: false)
+        guard let target = clickedTarget() else { return nil }
+        return (target.scanID, documentPath(of: target))
+    }
+
+    /// What Delete does once its confirmation is accepted; the confirmation is a sheet a mode cannot click.
+    func removeForSelftest(row: Int) {
+        tableView.selectRowIndexes([row], byExtendingSelection: false)
+        if let target = clickedTarget() { remove(target) }
     }
 
     func showFolderScansForSelftest() {

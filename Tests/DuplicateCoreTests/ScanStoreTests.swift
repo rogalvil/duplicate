@@ -313,6 +313,41 @@ struct ScanStoreTests {
         #expect(try scratch.store.delete(id: "20260511-064716-685054") == false)
     }
 
+    /// **Each kind deletes its own two files and nothing else.** One identifier can name a scan of each kind --
+    /// it is a timestamp, and three detectors can finish in the same microsecond only in a test, but nothing in
+    /// the format forbids it -- so the slot, not the identifier, decides what goes.
+    @Test("Deleting a folder or perceptual scan removes its decisions and leaves the other kinds")
+    func deletesByKind() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        let id = "20260511-064716-685054"
+        try scratch.store.save(scan(id: id))
+        try scratch.store.save(
+            FolderScan(scanID: id, root: "/r", createdAt: "t", threshold: 0.9, pairs: []))
+        try scratch.store.save(
+            FolderDecisionsDocument(
+                scanID: id, createdAt: "t", decisions: [(key: "/a||/b", keptPaths: ["/a"])]))
+        try scratch.store.save(
+            SimilarScan(
+                scanID: id, root: "/r", createdAt: "t", imageThreshold: 5, videoThreshold: 0.7,
+                pairs: []))
+        try scratch.store.save(
+            SimilarDecisionsDocument(entries: [(key: "/a||/b", decision: .keepA)]), scanID: id)
+
+        #expect(try scratch.store.deleteFolderScan(id: id))
+        #expect(scratch.store.identifiers(in: .folderScans).isEmpty)
+        #expect(scratch.store.identifiers(in: .folderDecisions).isEmpty)
+        #expect(scratch.store.identifiers(in: .scans) == [id])
+        #expect(scratch.store.identifiers(in: .similarScans) == [id])
+
+        #expect(try scratch.store.deleteSimilarScan(id: id))
+        #expect(scratch.store.identifiers(in: .similarScans).isEmpty)
+        #expect(scratch.store.identifiers(in: .similarDecisions).isEmpty)
+        #expect(scratch.store.identifiers(in: .scans) == [id])
+
+        #expect(try scratch.store.deleteFolderScan(id: id) == false)
+    }
+
     /// Deleting one scan must not take its neighbours with it.
     @Test("Deleting one scan leaves the others alone")
     func deletesOnlyOne() throws {

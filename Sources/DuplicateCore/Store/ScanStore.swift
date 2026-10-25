@@ -249,10 +249,28 @@ public struct ScanStore: Sendable {
     /// A missing file is not an error: deleting something already gone is the outcome the caller wanted.
     @discardableResult
     public func delete(id: String) throws -> Bool {
-        let scan = try state.filePath(for: .scans, id: id)
-        let decisions = try state.filePath(for: .decisions, id: id)
+        try delete(id: id, scan: .scans, decisions: .decisions)
+    }
+
+    /// Removes a folder scan and the decisions saved beside it, for the reason ``delete(id:)`` removes both.
+    @discardableResult
+    public func deleteFolderScan(id: String) throws -> Bool {
+        try delete(id: id, scan: .folderScans, decisions: .folderDecisions)
+    }
+
+    /// Removes a perceptual scan and the decisions saved beside it, for the reason ``delete(id:)`` removes both.
+    @discardableResult
+    public func deleteSimilarScan(id: String) throws -> Bool {
+        try delete(id: id, scan: .similarScans, decisions: .similarDecisions)
+    }
+
+    private func delete(
+        id: String, scan: StateDirectory.Slot, decisions: StateDirectory.Slot
+    ) throws -> Bool {
         var removed = false
-        for path in [scan, decisions] where FileManager.default.fileExists(atPath: path) {
+        for slot in [scan, decisions] {
+            let path = try state.filePath(for: slot, id: id)
+            guard FileManager.default.fileExists(atPath: path) else { continue }
             try FileManager.default.removeItem(atPath: path)
             removed = true
         }
