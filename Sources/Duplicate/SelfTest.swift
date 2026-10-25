@@ -3894,8 +3894,12 @@ enum SelfTest {
                 cacheDirectory: URL(filePath: root + "/caches"))
             defer { probe.window?.close() }
             var shown: [String] = []
+            var unreadableButtons: [Int] = []
             probe.presentAlert = { alert in
                 shown.append(alert.messageText)
+                if alert.messageText == Strings.string("scan.inaccessible.title") {
+                    unreadableButtons.append(alert.buttons.count)
+                }
                 return .alertFirstButtonReturn
             }
             probe.setRootForSelftest(unreadableTree)
@@ -3907,6 +3911,11 @@ enum SelfTest {
                 shown.contains(Strings.string("scan.inaccessible.title")),
                 "the \(detector) scan that could not enter a folder said nothing about it (alerts: \(shown))"
             )
+            // **One button: no way from here into Full Disk Access** (#163), which this app never asks for.
+            // Teeth: add back a second button and this reads [2].
+            try expect(
+                unreadableButtons == [1],
+                "the unreadable-folder alert offers \(unreadableButtons) buttons, wanted only OK")
         }
 
         // **A scan that could not be saved still opens** (#153). Each detector's finish returned after the alert,

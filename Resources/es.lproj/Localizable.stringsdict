@@ -226,6 +226,22 @@
 			<string>Mover %2$@ perdería %1$d archivos que tiene y la otra no.</string>
 		</dict>
 	</dict>
+	<key>scan.inaccessible.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se saltó 1 carpeta porque macOS no dio acceso. Nada de lo que hay dentro se escaneó, así que este resultado está incompleto. Para incluirla, elígela directamente como carpeta a escanear: elegirla es lo que le da acceso a la app.</string>
+			<key>other</key>
+			<string>Se saltaron %d carpetas porque macOS no dio acceso. Nada de lo que hay dentro se escaneó, así que este resultado está incompleto. Para incluir una, elígela directamente como carpeta a escanear: elegirla es lo que le da acceso a la app.</string>
+		</dict>
+	</dict>
 	<key>sessions.prune.body.kept</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

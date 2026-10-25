@@ -160,8 +160,6 @@
 "scan.saveFailed.body" = "%@\n\nIt opens anyway so you can review it. It is not in the library: once its window closes, the result is gone.";
 "scan.inaccessible.title" = "Some folders could not be read";
 /* %d folders that could not be entered. */
-"scan.inaccessible.body" = "%d folders were skipped because macOS did not grant access. Anything inside them was not scanned, so this result is incomplete. A permission granted now does not apply to a running app: the app has to be relaunched.";
-"scan.inaccessible.openSettings" = "Open Privacy Settings";
 "menu.file.newScan" = "New Scan...";
 "library.toolbar.newScan" = "New Scan";
 

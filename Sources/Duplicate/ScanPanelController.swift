@@ -624,18 +624,11 @@ final class ScanPanelController: NSWindowController {
         alert.alertStyle = .informational
         alert.messageText = Strings.string("scan.inaccessible.title")
         alert.informativeText = body
+        // **One button.** There was a second, and it opened Full Disk Access -- the one permission this app has
+        // decided never to ask for (#163). The way in that the app does support is in the text: choosing a folder
+        // in the panel is what grants access to it.
         alert.addButton(withTitle: Strings.string("button.ok"))
-        alert.addButton(withTitle: Strings.string("scan.inaccessible.openSettings"))
-        if presentAlert(alert) == .alertSecondButtonReturn {
-            // A TCC grant does not apply to a process already running, which is why the sheet says to
-            // relaunch rather than implying the scan can be retried in place.
-            if let url = URL(
-                string:
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
-            {
-                NSWorkspace.shared.open(url)
-            }
-        }
+        _ = presentAlert(alert)
     }
 
     /// Says that a scan finished but its document could not be written, and that it opens anyway.
