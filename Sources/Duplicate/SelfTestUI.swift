@@ -10,8 +10,8 @@ extension SelfTest {
     /// Every window is rendered at the size it opens at, and then at its smallest and at a laptop's if it can be
     /// resized, in the language this process was launched with, over a real tree scanned by the three real
     /// detectors. Each render is swept for text that does not fit, keys that leaked untranslated, panes squeezed to
-    /// nothing, controls pushed out of the window and controls drawn over each other -- and saved as a PNG, for
-    /// what a sweep cannot judge.
+    /// nothing, controls pushed out of the window, controls drawn over each other and layouts the constraints leave
+    /// ambiguous -- and saved as a PNG, for what a sweep cannot judge.
     ///
     /// **Local only.** It is not in `--mode all`, so CI never runs it: it is the check before opening a PR, and
     /// `make ui` runs it once per language.
@@ -34,6 +34,7 @@ extension SelfTest {
     /// - overlap: set the scan panel's `optionsStack.spacing` to -14 and every row is reported over the next, at the
     ///   size the panel opens at. With the check off the same run passes: no text is cut and nothing leaves the
     ///   window.
+    /// - ambiguous layout: unpin the exact review's header from its pane and every render of the review reports it.
     /// - opening size: rendered first, it found the folder viewer's decision row with an ambiguous width -- shrunk
     ///   from the size it opened at, "Simulate and apply" stayed outside the window. Unpin the row's width to see it.
     /// - the other three were not staged: they caught real defects on their first run. A plural after a count of
@@ -427,6 +428,16 @@ private struct UISweep {
             findings.append(
                 "\(place): an NSTextView holds \(text.string.count) characters in "
                     + "\(Int(text.frame.width)) points of width, so it draws nothing")
+        }
+        // **Ambiguous: more than one layout satisfies the constraints** (#214), so what is drawn depends on what was
+        // drawn before -- a row that kept its last width, a gap that landed between a checkbox and its explanation.
+        // **Before the visibility guard**, because an ambiguous view can resolve to nothing at all, and that is the
+        // worst case of it rather than a reason to skip it (found in review on #221). The views TextKit puts inside a
+        // text view are AppKit's, and theirs to settle.
+        if view.hasAmbiguousLayout, !(view.superview is NSTextView) {
+            findings.append(
+                "\(place): \(Self.describe(view)) has an ambiguous layout, "
+                    + "\(Int(view.frame.width))x\(Int(view.frame.height)) this time")
         }
         guard !view.visibleRect.isEmpty else { return }
         let what = Self.describe(view)

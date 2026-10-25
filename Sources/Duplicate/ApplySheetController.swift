@@ -238,6 +238,8 @@ final class ApplySheetController: NSWindowController {
             scroll.heightAnchor.constraint(equalToConstant: 200),
             progressBar.widthAnchor.constraint(equalToConstant: 500),
             detailLabel.widthAnchor.constraint(equalToConstant: 500),
+            // Pinned like the other two sheets' rows, or its width is anything from its buttons to the sheet's (#214).
+            buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
         ])
         window.contentView = container
     }

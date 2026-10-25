@@ -188,6 +188,7 @@ Sobre cada captura afirma:
 | Una lista aplastada a menos de 60×40 | la mitad de la ventana vacía, que ya pasó con el panel de imagen |
 | Un control fuera de la ventana | uno que no se puede alcanzar |
 | Dos controles encimados | uno tapa al otro sin cortar texto ni salirse de la ventana, así que ninguna otra regla lo ve |
+| Un layout ambiguo (`hasAmbiguousLayout`) | los constraints admiten más de una solución, así que lo que se dibuja depende de lo que se dibujó antes: una fila que conserva su último ancho, un hueco que cae entre una casilla y su explicación. Las vistas internas de un `NSTextView` son de AppKit y quedan fuera |
 | Una columna con el encabezado alineado distinto que sus celdas | un número a la izquierda bajo un encabezado a la derecha parece de la columna de al lado |
 
 **El idioma se afirma, no se supone.** El target pasa `-AppleLanguages (es)` en la línea de comando, que solo
@@ -207,6 +208,8 @@ mira. Y lo que el barrido encuentra es un defecto que se ve, no un dato que se c
 | `rootLabel` del panel de escaneo con `.byClipping` | `is cut at the right: needs 763 points, has 334` |
 | `minSize` de la biblioteca a 90 de alto | `NSScrollView is squeezed to 720x30` |
 | `optionsStack.spacing` del panel de escaneo a -14 | `NSPopUpButton 'Recientes...' and NSButton 'Incluir archivos ocultos' overlap by 162x12 points`; con la regla apagada, la misma corrida pasa |
+| El encabezado de la revisión exacta sin fijar a su panel | `review @ open 1000x648: NSTextField '/tmp/duplicate-ui/demo/exactos' has an ambiguous layout`, y lo mismo a sus otros dos tamaños |
+| El panel de escaneo sin el espaciador que absorbe el alto sobrante | `scan-exact @ open 620x348: NSButton 'Include hidden files' has an ambiguous layout` |
 
 El orden de los tamaños también tiene dientes. Con la fila de decisiones del visor de carpetas sin ancho fijo, como
 estaba hasta #211, el visor encogido desde su tamaño de apertura reporta

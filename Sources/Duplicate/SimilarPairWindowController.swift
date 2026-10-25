@@ -261,6 +261,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         filterRow.spacing = 8
         filterRow.translatesAutoresizingMaskIntoConstraints = false
         filterRow.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // As wide as what it holds: its trailing edge is only capped, so without this its width was free (#214).
+        filterRow.setHuggingPriority(.init(740), for: .horizontal)
 
         // **A button, not only a menu item.** The last time an action of this app lived behind a keyboard
         // shortcut alone, nothing on screen said a review could be applied at all.
@@ -324,6 +326,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             groupScroll.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
             middle.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
             actionRow.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
+            decisionRow.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
             groupScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 110),
             // **A cap, not a minimum.** Without it the group list takes every extra point of height and the two
             // pictures stay at their floor -- which shipped once, with a thumbnail the size of a postage stamp. The
@@ -332,6 +335,11 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
                 lessThanOrEqualTo: container.heightAnchor, multiplier: 0.3),
             fileScroll.widthAnchor.constraint(equalToConstant: 240),
             panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
+            // **As tall as their row** (#214). A horizontal stack centres its views rather than stretching them, so a
+            // pane could be anything from its content's height to the row's, and the thumbnail landed wherever the
+            // last layout left it.
+            leftPane.heightAnchor.constraint(equalTo: panes.heightAnchor),
+            rightPane.heightAnchor.constraint(equalTo: panes.heightAnchor),
         ])
         window?.contentView = container
     }
@@ -1182,6 +1190,9 @@ final class SimilarSidePane: NSView {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
+        // The picture takes the pane's spare height; the lines under it keep to their text (#214).
+        stack.distribution = .fill
+        imageView.setContentHuggingPriority(.init(1), for: .vertical)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
