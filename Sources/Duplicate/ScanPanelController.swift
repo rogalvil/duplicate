@@ -424,6 +424,14 @@ final class ScanPanelController: NSWindowController {
         (thresholdPopup.selectedItem?.representedObject as? Int) ?? 5
     }
 
+    /// The perceptual request, built from the shared one. **`usesCache` included**: the toggle reached the exact
+    /// and folder sessions and not this one, so turning it off changed nothing for a perceptual scan (#158).
+    private func similarRequest(from request: ScanSession.Request) -> SimilarScanSession.Request {
+        SimilarScanSession.Request(
+            root: request.root, imageThreshold: imageThreshold, policy: request.policy,
+            usesCache: request.usesCache, includesVideo: videoToggle.state == .on)
+    }
+
     @objc private func startScan(_ sender: Any?) {
         guard let request else { return }
         // Remembered here rather than on success: a scan the user started is one they meant to start, and a
@@ -439,9 +447,7 @@ final class ScanPanelController: NSWindowController {
         let counters = self.counters
         if detector == .similar {
             let similarSession = self.similarSession
-            let similarRequest = SimilarScanSession.Request(
-                root: request.root, imageThreshold: imageThreshold, policy: request.policy,
-                includesVideo: videoToggle.state == .on)
+            let similarRequest = similarRequest(from: request)
             task = Task { [weak self] in
                 let outcome: Result<SimilarScanSession.Result, any Error>
                 do {
@@ -779,6 +785,11 @@ final class ScanPanelController: NSWindowController {
     var imageThresholdForSelftest: Int { imageThreshold }
     var includesVideoForSelftest: Bool { videoToggle.state == .on }
     var isVideoToggleVisibleForSelftest: Bool { !videoToggle.isHidden }
+
+    func setUsesCacheForSelftest(_ on: Bool) { cacheToggle.state = on ? .on : .off }
+    func similarRequestForSelftest() -> SimilarScanSession.Request? {
+        request.map(similarRequest(from:))
+    }
 
     func setIncludesVideoForSelftest(_ on: Bool) {
         videoToggle.state = on ? .on : .off

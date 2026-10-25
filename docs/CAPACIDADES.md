@@ -112,7 +112,7 @@ Opciones, con su default. Ninguna se recuerda entre aperturas salvo las carpetas
 | Choose Folder… | sin carpeta; Start gris hasta elegir | todos |
 | Include hidden files | no | todos |
 | Look inside packages | no | todos |
-| Use the hash cache | sí | exactos y carpetas — **en parecidos no tiene efecto** |
+| Use the hash cache | sí | los tres detectores |
 | Ignore files smaller than | 1 B (el default del CLI) | todos |
 
 Fijo y sin control en pantalla: umbral de video 0.70; **no cruza volúmenes**; se excluyen la Papelera, las
@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p3 | #158 | Use the hash cache no tiene efecto en parecidos |
 | p3 | #159 | Los tamaños del filtro salen como "97.7 KB / 976.6 KB": umbrales decimales impresos en unidades binarias |
 | p3 | #160 | Textos viejos: el pie de carpetas dice que solo el CLI puede actuar, y el estado vacío de la biblioteca manda a `rav duplicate scan` |
 | p3 | #166 | El apply de carpetas reporta el tamaño de la entrada del directorio («1.3 KB» por 160 MB), no el de su contenido |
