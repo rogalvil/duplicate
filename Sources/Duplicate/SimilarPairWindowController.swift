@@ -1036,7 +1036,9 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     func pressRevealForSelftest(left: Bool) {
         (left ? leftPane : rightPane).pressRevealForSelftest()
     }
-    var paneActionsEnabledForSelftest: Bool { leftPane.actionsEnabled && rightPane.actionsEnabled }
+    /// Each of the four buttons on its own: one `&&` over them let a single disabled button pass for all four
+    /// (found in review on #227).
+    var paneButtonsEnabledForSelftest: [Bool] { leftPane.buttonsEnabled + rightPane.buttonsEnabled }
     /// A double click, through the table's own `doubleAction` and target -- calling `openClickedFile` directly would
     /// pass with the wiring removed.
     func doubleClickFileForSelftest(_ row: Int) {
@@ -1319,7 +1321,7 @@ final class SimilarSidePane: NSView {
         if let currentPath { onReveal?(currentPath) }
     }
 
-    var actionsEnabled: Bool { openButton.isEnabled && revealButton.isEnabled }
+    var buttonsEnabled: [Bool] { [openButton.isEnabled, revealButton.isEnabled] }
     func pressOpenForSelftest() { openButton.performClick(nil) }
     func pressRevealForSelftest() { revealButton.performClick(nil) }
 

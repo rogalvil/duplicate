@@ -5188,7 +5188,8 @@ enum SelfTest {
         viewer.openFile = { opened.append($0) }
         viewer.revealFile = { revealed.append($0) }
         try expect(
-            viewer.paneActionsEnabledForSelftest, "the panes' buttons are off for files that exist")
+            viewer.paneButtonsEnabledForSelftest == [true, true, true, true],
+            "the panes' buttons read \(viewer.paneButtonsEnabledForSelftest) for files that exist")
         viewer.pressOpenForSelftest(left: true)
         viewer.pressRevealForSelftest(left: false)
         try expect(opened == [viewer.leftPaneText], "Open on the left opened \(opened)")
@@ -5257,10 +5258,11 @@ enum SelfTest {
             "a missing file's pane says nothing"
         )
         // And a file that is gone has nothing to open (#226).
-        // Teeth: leave the buttons' `isEnabled` alone in `show(path:thumbnailer:)` and this fails.
+        // Every one of the four, each on its own (found in review on #227).
+        // Teeth: leave only `revealButton.isEnabled` alone in `show(path:thumbnailer:)` and this fails.
         try expect(
-            !videoViewer.paneActionsEnabledForSelftest,
-            "Open and Show in Finder are on for files that are gone")
+            videoViewer.paneButtonsEnabledForSelftest == [false, false, false, false],
+            "the buttons read \(videoViewer.paneButtonsEnabledForSelftest) for files that are gone")
         // **And a file that cannot be read is asked once** (#219). Only an answer was remembered, so the probe's own
         // redraw asked again for the two missing clips, forever, rebuilding the tables each time.
         // Teeth: probe the files without facts instead of the files not tried, and the count climbs.
