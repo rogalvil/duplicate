@@ -42,6 +42,18 @@ public enum UndoPreflight {
                         root: path, walker: walker, hasher: hasher, cache: cache)
                 else { continue }
                 digests[canonical] = manifest.digest
+                // **A folder moved before #190 was journalled over the default walk**, which skipped hidden files,
+                // packages and the rest. Rebuilt with today's walk, any of those inside it changes the digest,
+                // and the undo would block a folder nobody touched as edited. The old walk is tried only on a
+                // mismatch, and accepted only if it reproduces the recorded digest exactly.
+                if manifest.digest != entry.digest,
+                    let legacy = try? await FolderManifest.build(
+                        root: path, walker: walker, hasher: hasher, policy: ScanPolicy(),
+                        cache: cache),
+                    legacy.digest == entry.digest
+                {
+                    digests[canonical] = legacy.digest
+                }
             }
         }
         return digests

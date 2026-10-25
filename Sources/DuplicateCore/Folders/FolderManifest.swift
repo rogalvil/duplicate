@@ -22,6 +22,21 @@ public struct FolderManifest: Sendable, Hashable {
 
     public var fileCount: Int { entries.count }
 
+    /// What a verification walks: everything moving the folder takes with it.
+    ///
+    /// **The default walk is the wrong one here (#190).** It skips hidden files, `.git` and `node_modules`,
+    /// whole packages and empty files -- right for finding duplicates, and a blind spot for proving nothing is
+    /// lost: a folder whose only unique content was a `.git` passed the check, was moved, and the sheet said
+    /// nothing was lost. Only Finder's noise stays out. A `.DS_Store` differs between two copies as soon as
+    /// either is opened, so requiring it would refuse almost every folder, and it holds no content of the user's.
+    public static let verificationPolicy = ScanPolicy(
+        ignoredDirectoryNames: [],
+        includesHiddenDirectories: true,
+        includesHiddenFiles: true,
+        minimumSize: 0,
+        packageHandling: .descend
+    )
+
     /// A single digest over the whole manifest, for the journal.
     ///
     /// **A folder has no content digest of its own**, and the journal needs one: it is what an undo compares to
@@ -62,7 +77,7 @@ public struct FolderManifest: Sendable, Hashable {
         root: String,
         walker: any DirectoryEnumerating = FileManagerWalker(),
         hasher: any FileHashing = ContentHasher(),
-        policy: ScanPolicy = ScanPolicy(),
+        policy: ScanPolicy = FolderManifest.verificationPolicy,
         cache: HashCache? = nil,
         onFile: (@Sendable (Int) -> Void)? = nil
     ) async throws -> FolderManifest {

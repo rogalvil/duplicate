@@ -38,6 +38,12 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   buena razón para *mirar* y pésima para borrar — el otro 5% es exactamente lo que se perdería. Antes de mover una
   carpeta, cada archivo suyo tiene que tener un gemelo byte-idéntico **en la misma ruta relativa** dentro de la que
   se conserva; si falta uno, se nombra y no se mueve nada. La caché de digests lo vuelve barato.
+- **El recorrido de la verificación no es el del escaneo (#190).** El manifiesto usaba el `ScanPolicy()` por defecto,
+  que se salta ocultos, `.git`, `node_modules`, paquetes y archivos vacíos: una carpeta cuyo único contenido propio
+  era un `.git` pasaba la contención y se movía. Ahora `FolderManifest.verificationPolicy` recorre todo lo que el
+  movimiento se lleva menos el ruido de Finder, porque un `.DS_Store` difiere entre dos copias en cuanto se abre una
+  y exigirlo rechazaría casi todo. **El undo prueba el recorrido viejo si el nuevo no coincide**: las carpetas
+  movidas antes se registraron con el otro digest, y sin eso un undo las bloquearía como editadas.
 - **El journal guarda el digest del *manifiesto*** —el SHA-256 de las líneas `relpath\0hex` ordenadas— porque un
   directorio no tiene digest propio y el undo necesita uno para probar que lo que está en la Papelera sigue siendo
   lo que se puso ahí. Editar cualquier archivo adentro, o agregar o quitar uno, lo cambia. Y por eso el
