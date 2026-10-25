@@ -348,6 +348,26 @@ struct ScanStoreTests {
         #expect(try scratch.store.deleteFolderScan(id: id) == false)
     }
 
+    /// A review that took back every decision removes the file, and only the file: the scan stays listed.
+    @Test("Deleting a scan's decisions leaves the scan")
+    func deletesOnlyDecisions() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        let id = "20260511-064716-685054"
+        try scratch.store.save(scan(id: id))
+        try scratch.store.save(
+            DecisionsDocument(
+                scanID: id, createdAt: "2026-05-11T06:50:00.000001Z",
+                decisions: [("2048:" + digest("a").hexString, ["/root/a.bin"])]))
+        #expect(scratch.store.summaries().first?.hasDecisions == true)
+
+        #expect(try scratch.store.deleteDecisions(scanID: id))
+        #expect(scratch.store.identifiers(in: .decisions).isEmpty)
+        #expect(scratch.store.identifiers(in: .scans) == [id])
+        #expect(scratch.store.summaries().first?.hasDecisions == false)
+        #expect(try scratch.store.deleteDecisions(scanID: id) == false)
+    }
+
     /// Deleting one scan must not take its neighbours with it.
     @Test("Deleting one scan leaves the others alone")
     func deletesOnlyOne() throws {

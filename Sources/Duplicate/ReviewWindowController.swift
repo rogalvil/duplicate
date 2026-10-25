@@ -1034,7 +1034,19 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     @objc func saveDecisions(_ sender: Any?) {
         let decisions = state.decisionsForSaving
         guard !decisions.isEmpty else {
-            // Nothing decided: writing an empty document would replace a real one from an earlier session.
+            // Nothing decided now. **If the file holds decisions, this session took them back** -- the window
+            // loaded that file when it opened -- and leaving it would let the CLI, or the next opening, act on
+            // decisions the user removed. It is deleted rather than written empty, because a file is what badges a
+            // scan as reviewed. With nothing saved either, there is nothing to write and nothing to remove.
+            if !savedDecisions.isEmpty {
+                do {
+                    try store.deleteDecisions(scanID: state.scan.scanID)
+                } catch {
+                    presentSaveFailure(error)
+                    return
+                }
+                flow.hasDecisions = false
+            }
             savedDecisions = decisions
             return
         }
@@ -1065,6 +1077,12 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         }
     }
 
+    /// Whether closing has something to lose: decisions not yet written, or every decision taken back while the
+    /// file still holds them.
+    private var hasUnsavedReview: Bool {
+        hasUnsavedChanges && (!state.decisionsForSaving.isEmpty || !savedDecisions.isEmpty)
+    }
+
     private var hasUnsavedChanges: Bool {
         let current = state.decisionsForSaving
         guard current.count == savedDecisions.count else { return true }
@@ -1093,7 +1111,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         case #selector(clearDecision(_:)):
             return state.decision(at: state.groupIndex) != .undecided
         case #selector(saveDecisions(_:)):
-            return hasUnsavedChanges && !state.decisionsForSaving.isEmpty
+            return hasUnsavedReview
         case #selector(simulateApply(_:)):
             // Offered only when something is decided. Nothing to simulate is not an error worth a sheet.
             return !state.decisionsForSaving.isEmpty
@@ -1247,6 +1265,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         previewPane.show(image: image)
     }
     var hasUnsavedReviewChanges: Bool { hasUnsavedChanges }
+    var asksBeforeClosingForSelftest: Bool { hasUnsavedReview }
 
     func selectFileForSelftest(_ row: Int) {
         fileTable.selectRowIndexes([row], byExtendingSelection: false)
@@ -1429,11 +1448,13 @@ extension ReviewWindowController: NSWindowDelegate {
     /// deliberate `q`. Discarding a review silently because a window closed would be the same class of
     /// mistake as writing decisions for groups nobody looked at.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard hasUnsavedChanges, !state.decisionsForSaving.isEmpty else { return true }
+        guard hasUnsavedReview else { return true }
         let alert = NSAlert()
         alert.messageText = Strings.string("review.unsaved.title")
-        alert.informativeText = String(
-            format: Strings.string("review.unsaved.body"), state.tally.decided)
+        alert.informativeText =
+            state.decisionsForSaving.isEmpty
+            ? Strings.string("review.unsaved.cleared")
+            : String(format: Strings.string("review.unsaved.body"), state.tally.decided)
         alert.addButton(withTitle: Strings.string("review.unsaved.save"))
         alert.addButton(withTitle: Strings.string("button.cancel"))
         alert.addButton(withTitle: Strings.string("review.unsaved.discard"))

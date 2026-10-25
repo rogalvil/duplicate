@@ -367,7 +367,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 | Prioridad | Issue | Qué |
 |---|---|---|
 | p2 | #146 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
-| p2 | #151 | Quitar todas las decisiones de una revisión exacta no reescribe el archivo: el anterior sobrevive, y el CLI o una reapertura actúan sobre decisiones retiradas |
 | p2 | #152 | En carpetas, una falla al guardar decisiones se traga con `try?` |
 | p2 | #153 | Si guardar un escaneo falla, el resultado en memoria se pierde, aunque el comentario dice que se puede revisar |
 | p3 | #154 | Carpetas y parecidos marcan "Terminado" antes de guardar: el arreglo de #131 solo llegó al exacto |

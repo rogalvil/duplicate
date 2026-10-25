@@ -3407,6 +3407,33 @@ enum SelfTest {
         print(
             "  under a size filter, Previous, Next and Confirm walk the groups shown, named as the header names them"
         )
+
+        // **Taking back every decision reaches the file** (#151). Saving with nothing decided returned early, to
+        // avoid clobbering an earlier session, so the old file survived and the CLI or the next opening acted on
+        // decisions the user had removed. The window loaded that file, so an empty review over a non-empty file is
+        // a removal, and the file goes.
+        // Teeth: return early again when nothing is decided and the file outlives the decision; drop
+        // `!savedDecisions.isEmpty` from `hasUnsavedReview` and closing stops asking.
+        nav.setSizeFilterForSelftest(0)
+        nav.saveDecisions(nil)
+        try expect(
+            (try? store.loadDecisions(scanID: navScan.scanID))?.decisions.count == 1,
+            "the confirmed group was not saved")
+        nav.selectGroupForSelftest(2)
+        nav.clearDecision(nil)
+        try expect(nav.reviewState.decisionsForSaving.isEmpty, "clearing left a decision behind")
+        try expect(
+            nav.asksBeforeClosingForSelftest,
+            "closing would not ask after every decision was taken back")
+        nav.saveDecisions(nil)
+        try expect(
+            (try? store.loadDecisions(scanID: navScan.scanID)) == nil,
+            "the decisions file outlived every decision in it")
+        try expect(
+            !nav.asksBeforeClosingForSelftest, "closing still asks after the removal was saved")
+        print(
+            "  taking back every decision removes the decisions file, and closing asks until it is saved"
+        )
     }
 
     // MARK: - preview
