@@ -311,6 +311,7 @@
 "similar.header.video" = "%1$.2f%% of the sampled frames match";
 "similar.header.video.fewFrames" = "%1$.2f%% of sampled frames match — judged on %2$d of %3$d frames";
 "similar.state.missing" = "This file is no longer there.";
+"similar.pane.open" = "Open";
 "similar.decision.skip" = "Skip";
 "similar.column.files" = "Files";
 "similar.column.keep" = "Keep";

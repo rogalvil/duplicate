@@ -81,6 +81,11 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     /// What the decisions loaded at open look like: a file covering every pair is most likely the CLI's.
     private var provenance: DecisionsProvenance
 
+    /// How a compared file is opened in its app, and shown in Finder (#226). Replaced by a selftest, which must not
+    /// launch Preview or raise a Finder window on the user's screen.
+    var openFile: (String) -> Void = { NSWorkspace.shared.open(URL(filePath: $0)) }
+    var revealFile: (String) -> Void = { Reveal.item(at: $0) }
+
     init(scan: SimilarScan, stateDirectory: StateDirectory = StateDirectory.current()) {
         self.scan = scan
         self.stateDirectory = stateDirectory
@@ -146,6 +151,12 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         fileTable.rowHeight = 20
         fileTable.allowsMultipleSelection = false
         fileTable.onConfirm = { [weak self] in self?.confirmGroup(nil) }
+        fileTable.target = self
+        fileTable.doubleAction = #selector(openClickedFile(_:))
+        for pane in [leftPane, rightPane] {
+            pane.onOpen = { [weak self] path in self?.openFile(path) }
+            pane.onReveal = { [weak self] path in self?.revealFile(path) }
+        }
         fileTable.onToggle = { [weak self] in self?.toggle(member: self?.cursor) }
         for (identifier, key, width) in [
             ("keep", "similar.column.keep", 64.0),
@@ -889,6 +900,13 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// A double click on a file of the list opens it (#226).
+    @objc private func openClickedFile(_ sender: Any?) {
+        let row = fileTable.clickedRow >= 0 ? fileTable.clickedRow : fileTable.selectedRow
+        guard let index = selectedGroup, fileOrder.indices.contains(row) else { return }
+        openFile(review.groups[index].files[fileOrder[row]])
+    }
+
     @objc private func revealSelected(_ sender: Any?) {
         guard let index = selectedGroup, let reference else { return }
         Reveal.item(at: review.groups[index].files[reference])
@@ -1014,6 +1032,18 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func pressConfirmForSelftest() { confirmButton.performClick(nil) }
+    func pressOpenForSelftest(left: Bool) { (left ? leftPane : rightPane).pressOpenForSelftest() }
+    func pressRevealForSelftest(left: Bool) {
+        (left ? leftPane : rightPane).pressRevealForSelftest()
+    }
+    var paneActionsEnabledForSelftest: Bool { leftPane.actionsEnabled && rightPane.actionsEnabled }
+    /// A double click, through the table's own `doubleAction` and target -- calling `openClickedFile` directly would
+    /// pass with the wiring removed.
+    func doubleClickFileForSelftest(_ row: Int) {
+        fileTable.selectRowIndexes([row], byExtendingSelection: false)
+        guard let action = fileTable.doubleAction else { return }
+        NSApp.sendAction(action, to: fileTable.target, from: fileTable)
+    }
 
     /// Selects a row of the file list the way a click or an arrow key does, delegate included.
     func selectFileForSelftest(_ row: Int) {
@@ -1173,6 +1203,12 @@ final class SimilarSidePane: NSView {
     /// read all of it to make a suggestion; the reader was being asked to trust the suggestion without seeing
     /// what it rested on.
     private let metadataLabel = NSTextField(labelWithString: "")
+    /// **A way to the file itself** (#226): the thumbnail says the two look alike; opening one is how to be sure. These
+    /// existed only as ⌘Y and a menu item, which nothing on screen pointed to.
+    private let openButton = NSButton()
+    private let revealButton = NSButton()
+    var onOpen: ((String) -> Void)?
+    var onReveal: ((String) -> Void)?
     private var currentPath: String?
 
     /// Locale-aware, unlike the byte counts, which are pinned to the CLI's format because they are interop.
@@ -1224,8 +1260,26 @@ final class SimilarSidePane: NSView {
             view.setContentCompressionResistancePriority(yielding, for: .horizontal)
         }
 
+        openButton.title = Strings.string("similar.pane.open")
+        openButton.target = self
+        openButton.action = #selector(openPressed(_:))
+        // Same title as the menu item, on purpose: two names for one action is how someone looks for a second thing.
+        revealButton.title = Strings.string("menu.group.revealFile")
+        revealButton.target = self
+        revealButton.action = #selector(revealPressed(_:))
+        for button in [openButton, revealButton] {
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        }
+        let actions = NSStackView(views: [openButton, revealButton])
+        actions.orientation = .horizontal
+        actions.spacing = 6
+        // As wide as its two buttons, and below their resistance, or its width is ambiguous (#214).
+        actions.setHuggingPriority(.init(740), for: .horizontal)
+
         let stack = NSStackView(views: [
-            imageView, nameLabel, pathLabel, metadataLabel, stateLabel,
+            imageView, nameLabel, pathLabel, metadataLabel, stateLabel, actions,
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1256,6 +1310,18 @@ final class SimilarSidePane: NSView {
     var metadataForSelftest: (text: String, hidden: Bool) {
         (metadataLabel.stringValue, metadataLabel.isHidden)
     }
+
+    @objc private func openPressed(_ sender: Any?) {
+        if let currentPath { onOpen?(currentPath) }
+    }
+
+    @objc private func revealPressed(_ sender: Any?) {
+        if let currentPath { onReveal?(currentPath) }
+    }
+
+    var actionsEnabled: Bool { openButton.isEnabled && revealButton.isEnabled }
+    func pressOpenForSelftest() { openButton.performClick(nil) }
+    func pressRevealForSelftest() { revealButton.performClick(nil) }
 
     /// The metadata sentence: size, date, and the media facts when they have arrived.
     ///
@@ -1308,6 +1374,8 @@ final class SimilarSidePane: NSView {
 
     func showEmpty() {
         currentPath = nil
+        openButton.isEnabled = false
+        revealButton.isEnabled = false
         imageView.image = nil
         nameLabel.stringValue = ""
         pathLabel.stringValue = ""
@@ -1333,6 +1401,9 @@ final class SimilarSidePane: NSView {
         // would be paying twice for one answer.
         let attributes = try? FileManager.default.attributesOfItem(atPath: path)
         let exists = attributes != nil
+        // A file that is gone has nothing to open and no folder to be selected in.
+        openButton.isEnabled = exists
+        revealButton.isEnabled = exists
         stateLabel.stringValue = exists ? "" : Strings.string("similar.state.missing")
         stateLabel.isHidden = exists
         metadataLabel.stringValue = Self.metadataText(attributes: attributes, facts: nil)

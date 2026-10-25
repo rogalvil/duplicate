@@ -5179,6 +5179,30 @@ enum SelfTest {
             viewer.fileRowsForSelftest.first { $0.kept }?.path == viewer.leftPaneText,
             "the left pane is not the first file the group keeps")
 
+        // **A way to each file from the comparison** (#226): Open and Show in Finder under each side, and a double click
+        // in the list. Captured rather than performed -- a selftest must not launch Preview or raise Finder.
+        // Teeth: hand the left pane's buttons the right pane's path and the first two fail; drop the `doubleAction`
+        // wiring and the last one does.
+        var opened: [String] = []
+        var revealed: [String] = []
+        viewer.openFile = { opened.append($0) }
+        viewer.revealFile = { revealed.append($0) }
+        try expect(
+            viewer.paneActionsEnabledForSelftest, "the panes' buttons are off for files that exist")
+        viewer.pressOpenForSelftest(left: true)
+        viewer.pressRevealForSelftest(left: false)
+        try expect(opened == [viewer.leftPaneText], "Open on the left opened \(opened)")
+        try expect(
+            revealed == [viewer.rightPaneText], "Show in Finder on the right showed \(revealed)")
+        // The last row, which is not the file Open just opened: a double click that did nothing must not pass.
+        let lastRow = viewer.fileRowsForSelftest.count - 1
+        let openedBefore = opened.count
+        viewer.doubleClickFileForSelftest(lastRow)
+        try expect(
+            opened.count == openedBefore + 1
+                && opened.last == viewer.fileRowsForSelftest.last?.path,
+            "a double click on the last file opened \(opened.dropFirst(openedBefore))")
+
         // **Select by kind, not by index.** Three assertions in this mode once assumed row 0 was an image, and all
         // three broke the moment a video landed in the fixture.
         let imageRow = try expectSome(
@@ -5232,6 +5256,11 @@ enum SelfTest {
             !videoViewer.leftStateForSelftest.isEmpty,
             "a missing file's pane says nothing"
         )
+        // And a file that is gone has nothing to open (#226).
+        // Teeth: leave the buttons' `isEnabled` alone in `show(path:thumbnailer:)` and this fails.
+        try expect(
+            !videoViewer.paneActionsEnabledForSelftest,
+            "Open and Show in Finder are on for files that are gone")
         // **And a file that cannot be read is asked once** (#219). Only an answer was remembered, so the probe's own
         // redraw asked again for the two missing clips, forever, rebuilding the tables each time.
         // Teeth: probe the files without facts instead of the files not tried, and the count climbs.
