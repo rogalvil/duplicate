@@ -143,6 +143,8 @@ El aviso tiene un solo botón: el que abría Acceso Total al Disco se quitó en 
 | Tabla de archivos | — | Keep (casilla), File (truncado al medio) y Note (gone, changed, unreadable, same storage as the keeper, looks like a copy) |
 | Conservar / descartar | espacio, o clic en la casilla | Pita si dejaría el grupo sin nada |
 | Confirmar | botón Confirm and Next, ⏎ con la lista enfocada, o ⌘↩ | Graba y avanza |
+| Accept the N undecided | botón | Acepta la sugerencia de los grupos mostrados que nadie ha decidido ni saltado, diciendo antes grupos y bytes. Un solo paso de ⌘Z |
+| Aceptar los seleccionados | menú Group, sobre la selección de la barra lateral | Lo mismo, solo para los grupos seleccionados que siguen sin decidir |
 | Vista previa | — | Miniatura, nombre, ruta completa, tamaño y fecha |
 | Filtros | barra lateral | Tamaño mínimo, "Not decided yet", "Still on disk" |
 | Check the disk | botón (Cancel mientras corre) | Hace `stat` de todo el escaneo en segundo plano y guarda el resultado con su fecha |

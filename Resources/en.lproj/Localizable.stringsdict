@@ -770,6 +770,22 @@
 			<string>%d skipped, because the pair no longer holds up:</string>
 		</dict>
 	</dict>
+	<key>review.acceptShown</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Accept the undecided group</string>
+			<key>other</key>
+			<string>Accept the %d undecided</string>
+		</dict>
+	</dict>
 	<key>similar.confirmShown</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

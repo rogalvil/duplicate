@@ -84,7 +84,7 @@ Acceso Total al Disco, y `~/Library` no se escanea salvo que la elijas tú: ahí
 
 Doble clic en un escaneo de archivos abre su revisión:
 
-![Revisión de archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/review-laptop.png)
+![Revisión de archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/69139c9ab0a8fb1d91353156be915ef383e1201f/manual/review-laptop-v2.png)
 
 - **A la izquierda**, los grupos: archivos con exactamente el mismo contenido. ✓ es un grupo decidido, ✗ uno saltado.
 - **Al centro**, los archivos del grupo. La casilla **Conservar** dice cuál se queda; la app marca una sugerencia
@@ -102,8 +102,10 @@ Doble clic en un escaneo de archivos abre su revisión:
 **Solo se guarda lo que decidiste.** Un grupo que no abriste o que saltaste no queda registrado ni a favor ni en
 contra, y aplicar no lo toca. ⌘Z deshace decisiones; ⌘S guarda (también se guarda al simular y al cerrar).
 
-Para muchos grupos a la vez: selecciona varios en la lista y usa **Grupo → Aceptar la sugerencia en los grupos
-seleccionados…**. Primero dice cuántos archivos y bytes implica.
+Para muchos grupos a la vez, **Aceptar los N sin decidir** acepta la sugerencia de todos los grupos que la lista
+muestra y nadie ha decidido ni saltado. Sin filtros son todos los del escaneo; con un filtro, solo los que deja
+ver. Antes de hacerlo dice cuántos grupos y cuánto espacio, y **⌘Z** lo deshace de una vez. Para escoger grupos
+sueltos, selecciona varios en la lista y usa **Grupo → Aceptar la sugerencia en los grupos seleccionados…**.
 
 ## 5. Simular y aplicar
 
