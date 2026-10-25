@@ -201,6 +201,11 @@ capacidad que sí estaba, dentro de otra frase.
 **CI no corre solo en un PR desde un fork.** Hace falta que el dueño lo apruebe, cada vez. No es desconfianza
 en particular: un workflow aprobado ejecuta el código del PR.
 
+## Licencia de lo que aportas
+
+El proyecto es [GPL-3.0](LICENSE), y un PR se acepta bajo esa misma licencia. No hay un acuerdo aparte que
+firmar.
+
 ## Git
 
 Todo pasa por PR; `main` está protegido del lado del servidor y no hay bypass. Se exige PR, CI verde
