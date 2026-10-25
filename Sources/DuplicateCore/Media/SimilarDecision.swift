@@ -55,9 +55,11 @@ public enum SimilarPairKey {
 
 /// What a review starts from, before the user touches anything.
 ///
-/// **The chain is the CLI's, in its order** (`similar_review.py:229-251`): a name that looks like a copy loses to
-/// one that does not; then the media advice; then resolution and size; then depth. Each step only speaks when the
-/// one before it tied.
+/// **Quality first, then the name** (#223). The CLI's chain (`similar_review.py:229-251`) put a copy-looking name
+/// first, so "photo copy.jpg" lost to "photo.jpg" even at four times the resolution -- reported from real use, as a
+/// suggestion decided "by the name". Here the media advice speaks first, then resolution and size, and the name only
+/// when quality ties; depth stays last. Each step only speaks when the one before it tied. A deliberate departure:
+/// the suggestion is not interop data, and nothing reaches the decisions file until someone confirms it.
 ///
 /// **And it is a *suggestion*, not a decision.** The same rule the exact detector learned the hard way: a pair
 /// nobody looked at must not be written to disk as decided. This produces what the UI should show highlighted;
@@ -92,22 +94,14 @@ public enum SimilarDecisionDefaults {
         factsA: MediaFacts? = nil,
         factsB: MediaFacts? = nil
     ) -> Suggestion {
-        // 1. A copy-looking name loses. `CopyNamePattern` is the same one the exact detector uses, quirks and
-        // all, so the two detectors agree about what a copy is called.
-        let copyA = CopyNamePattern.score(path: pair.fileA)
-        let copyB = CopyNamePattern.score(path: pair.fileB)
-        if copyA != copyB {
-            return Suggestion(decision: copyA < copyB ? .keepA : .keepB, ground: .copyName)
-        }
-
-        // 2. The advice, which only speaks for video.
+        // 1. The advice, which only speaks for video: codec, bitrate, a trailer against the full film.
         let advice = MediaAdvisor.advise(a: factsA, b: factsB, kind: pair.mediaKind)
         if let keep = advice.keep {
             return Suggestion(
                 decision: keep == .a ? .keepA : .keepB, ground: .advice(advice))
         }
 
-        // 3. More pixels wins; equal pixels, more bytes wins. The CLI sorts on `(-pixels, -size)` and takes the
+        // 2. More pixels wins; equal pixels, more bytes wins. The CLI sorts on `(-pixels, -size)` and takes the
         // minimum, which is the same order stated forwards.
         let pixelsA = factsA?.pixelCount ?? 0
         let pixelsB = factsB?.pixelCount ?? 0
@@ -116,6 +110,14 @@ public enum SimilarDecisionDefaults {
         if pixelsA != pixelsB || bytesA != bytesB {
             let aWins = pixelsA != pixelsB ? pixelsA > pixelsB : bytesA > bytesB
             return Suggestion(decision: aWins ? .keepA : .keepB, ground: .quality)
+        }
+
+        // 3. Only when quality ties: a copy-looking name loses. `CopyNamePattern` is the same one the exact detector
+        // uses, quirks and all, so the two detectors agree about what a copy is called.
+        let copyA = CopyNamePattern.score(path: pair.fileA)
+        let copyB = CopyNamePattern.score(path: pair.fileB)
+        if copyA != copyB {
+            return Suggestion(decision: copyA < copyB ? .keepA : .keepB, ground: .copyName)
         }
 
         // 4. Depth, as a last resort. `depthScore` is negative depth, so the deeper file wins -- counter-intuitive

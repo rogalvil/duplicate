@@ -646,6 +646,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             NSSound.beep()
             return
         }
+        weighBySize(indices)
 
         // What accepting would plan, computed on a copy so the question can be asked before the answer is taken.
         var preview = review
@@ -682,6 +683,33 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     /// One undo step for the whole batch: accepting 800 groups and undoing them one at a time would not be an undo.
     private func accept(_ indices: [Int]) {
         mutate { $0.confirmGroups(indices) }
+    }
+
+    /// Gives the files of these groups that no probe has read their size on disk, and refines their suggestions.
+    ///
+    /// **So a batch decides on quality too** (#223). Quality comes before the name, but a group nobody opened has no
+    /// facts -- probing reads every file, 300 ms a video -- so its suggestion fell through to the copy-looking name.
+    /// The size is a `stat`, which the sheet below already pays per file to say how much would move. Resolution and
+    /// codec still arrive when a group is opened, and refine the suggestion again.
+    ///
+    /// **Like against like.** When only one file of a pair was probed, both are weighed by size alone: a resolution
+    /// against an unknown that reads as zero pixels would win every time, whatever the files are.
+    private func weighBySize(_ indices: [Int]) {
+        func sizeOnly(_ path: String) -> MediaFacts? {
+            let size = Self.fileSize(path)
+            return size > 0
+                ? MediaFacts(path: path, byteCount: size, pixelWidth: 0, pixelHeight: 0) : nil
+        }
+        for index in indices {
+            for link in review.groups[index].links {
+                let pair = scan.pairs[link.pairIndex]
+                let probedA = facts[Array(pair.fileA.utf8)]
+                let probedB = facts[Array(pair.fileB.utf8)]
+                guard probedA == nil || probedB == nil else { continue }
+                review.updateSuggestion(
+                    at: link.pairIndex, factsA: sizeOnly(pair.fileA), factsB: sizeOnly(pair.fileB))
+            }
+        }
     }
 
     /// Records the keep set on screen and moves on. The Group menu's Confirm (⌘↩) arrives here too.
@@ -948,7 +976,11 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     /// What the accept button does once its sheet is answered. The sheet is modal and cannot be clicked from here,
     /// so the groups come from the same property the button reads.
-    func confirmShownForSelftest() { accept(shownUndecidedGroups) }
+    func confirmShownForSelftest() {
+        let indices = shownUndecidedGroups
+        weighBySize(indices)
+        accept(indices)
+    }
 
     func undoForSelftest() { undo.undo() }
     var canUndoForSelftest: Bool { undo.canUndo }
