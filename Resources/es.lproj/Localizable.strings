@@ -248,6 +248,7 @@
 "review.bulk.title" = "¿Aceptar la sugerencia en %@?";
 "review.bulk.body" = "Para los grupos que no has abierto, la sugerencia es la corazonada de esta app: conservar el archivo más profundo en el árbol de carpetas que no parezca una copia. Aceptarla aquí registra una decisión por cada uno, liberando hasta %@. Nada se mueve hasta que simules y apliques, y deshacer lo devuelve todo.";
 "review.bulk.confirm" = "Aceptar en todos";
+"review.acceptShown.tip" = "Acepta la sugerencia de cada grupo que la lista muestra y que nadie ha decidido ni saltado. Antes dice cuántos grupos y cuánto espacio.";
 "review.filter.stillThere" = "Que todavía existen";
 "review.filter.checkDisk" = "Revisar el disco";
 /* %2$@ es count.groups, de Localizable.stringsdict. */

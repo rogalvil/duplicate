@@ -70,6 +70,10 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     /// window and end with an empty apply. Reported from real use, and the same lesson the simulate button
     /// already carries.
     private let confirmButton = NSButton()
+    /// **Accepting many groups had no button either** (#216). It was a menu item over the sidebar's selection, so
+    /// in practice every group was approved one at a time -- reported from real use, the same lesson as the two
+    /// buttons above.
+    private let acceptShownButton = NSButton()
     private let warningLabel = NSTextField(labelWithString: "")
 
     private let undo = UndoManager()
@@ -203,6 +207,9 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             MainActor.assumeIsolated { controller.mutate { $0 = before } }
         }
         flow.decisionsChanged(hasAny: false)
+        // Rebuilt, or the sidebar and the accept button keep describing the review before it started over: the
+        // button said "0" and stayed disabled over six groups that were undecided again.
+        rebuildVisibleGroups()
         selectGroup(0)
     }
 
@@ -431,7 +438,14 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         // The per-group action on the leading side, the whole-review action on the trailing side, and the
         // tally on its own line below -- the arrangement the similar and folder viewers already use. The
         // exact review was the only one of the three without a decision row at all.
-        let decisionRow = NSStackView(views: [confirmButton, spacer, simulateButton])
+        acceptShownButton.bezelStyle = .rounded
+        acceptShownButton.toolTip = Strings.string("review.acceptShown.tip")
+        acceptShownButton.target = self
+        acceptShownButton.action = #selector(acceptShownGroups(_:))
+
+        let decisionRow = NSStackView(views: [
+            confirmButton, acceptShownButton, spacer, simulateButton,
+        ])
         decisionRow.orientation = .horizontal
         decisionRow.spacing = 10
         let footer = NSStackView(views: [decisionRow, tallyLabel])
@@ -563,6 +577,9 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             Strings.count("count.groups", state.groupCount))
         if let diskSummary { summary += "  \u{00B7}  " + diskSummary }
         filterCountLabel.stringValue = summary
+        let undecided = shownUndecidedGroups.count
+        acceptShownButton.title = String(format: Strings.string("review.acceptShown"), undecided)
+        acceptShownButton.isEnabled = undecided > 0
         groupTable.reloadData()
 
         if let row = visible.firstIndex(of: previous) {
@@ -709,15 +726,35 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         }
     }
 
-    /// Accepts what is shown for every selected group, after saying how many and how much.
-    ///
-    /// **The line this does not cross**: it records the keep set that is on screen, for groups the user
-    /// selected. What the CLI does -- and what this app refuses to do -- is decide every group as a side
-    /// effect of quitting, with nothing asked and nothing shown.
+    /// The groups the sidebar shows that nobody has decided or skipped: what the accept button acts on.
+    private var shownUndecidedGroups: [Int] {
+        visible.filter { state.decision(at: $0) == .undecided }
+    }
+
+    /// Accepts the suggestion for every group the sidebar shows and nobody has decided, after saying how many and
+    /// how much. With no filter on, that is every undecided group of the scan.
+    @objc private func acceptShownGroups(_ sender: Any?) {
+        askToAccept(shownUndecidedGroups)
+    }
+
+    /// Accepts what is shown for every selected group that is still undecided, after saying how many and how much.
     @objc func confirmSelectedGroups(_ sender: Any?) {
-        let indices = selectedGroupIndices
-        guard !indices.isEmpty, let window else { return }
-        let untouched = indices.filter { state.decision(at: $0) == .undecided }
+        askToAccept(selectedGroupIndices.filter { state.decision(at: $0) == .undecided })
+    }
+
+    /// **The line this does not cross**: it records the keep set that is on screen, for groups the user can see and
+    /// chose to accept. What the CLI does -- and what this app refuses to do -- is decide every group as a side
+    /// effect of quitting, with nothing asked and nothing shown.
+    ///
+    /// **Only undecided groups.** A skip is a decision to pass, and a confirmed group already has the keep set
+    /// someone chose; accepting a suggestion over either would undo a choice. It is also what the sheet counts,
+    /// so the number asked about is the number decided -- the menu item used to decide the skipped ones too.
+    private func askToAccept(_ untouched: [Int]) {
+        guard let window else { return }
+        guard !untouched.isEmpty else {
+            NSSound.beep()
+            return
+        }
         let bytes = untouched.reduce(Int64(0)) { total, index in
             total + state.scan.groups[index].reclaimableBytes
         }
@@ -733,11 +770,14 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         alert.addButton(withTitle: Strings.string("button.cancel"))
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            MainActor.assumeIsolated {
-                self.mutate { $0.confirmAll(indices) }
-                self.rebuildVisibleGroups()
-            }
+            MainActor.assumeIsolated { self.accept(untouched) }
         }
+    }
+
+    /// One undo step for the whole batch: accepting 800 groups and undoing them one at a time would not be an undo.
+    private func accept(_ indices: [Int]) {
+        mutate { $0.confirmAll(indices) }
+        rebuildVisibleGroups()
     }
 
     private func selectGroup(_ index: Int) {
@@ -1215,10 +1255,11 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         filterChanged(nil)
     }
 
-    func confirmAllVisibleForSelftest() {
-        let indices = visible
-        mutate { $0.confirmAll(indices) }
-        rebuildVisibleGroups()
+    /// What the accept button does once its sheet is answered. The sheet is modal and cannot be clicked from here,
+    /// so the indices come from the same property the button reads.
+    func confirmAllVisibleForSelftest() { accept(shownUndecidedGroups) }
+    var acceptShownButtonForSelftest: (title: String, enabled: Bool) {
+        (acceptShownButton.title, acceptShownButton.isEnabled)
     }
 
     /// The smallest size this window's constraints allow.

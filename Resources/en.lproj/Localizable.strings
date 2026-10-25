@@ -249,6 +249,7 @@
 "review.bulk.title" = "Accept the suggestion for %@?";
 "review.bulk.body" = "For groups you have not opened, the suggestion is this app's guess: keep the file that is deepest in the folder tree and does not look like a copy. Accepting it here records a decision for each of them, freeing up to %@. Nothing moves until you simulate and apply, and undo puts everything back.";
 "review.bulk.confirm" = "Accept for All of Them";
+"review.acceptShown.tip" = "Accepts the suggestion for every group the list shows that nobody has decided or skipped. It says how many groups and how much space first.";
 "review.filter.stillThere" = "Still on disk";
 "review.filter.checkDisk" = "Check the disk";
 /* %2$@ is count.groups, from Localizable.stringsdict. */
