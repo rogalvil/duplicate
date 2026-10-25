@@ -176,10 +176,22 @@ final class SimilarApplySheetController: NSWindowController {
         }
         detailLabel.stringValue = details.joined(separator: "\n")
 
-        listView.string =
-            plan.isEmpty
-            ? Strings.string("similar.apply.nothing")
-            : plan.items.map { "\($0.path)\n    ← \($0.pairKey)" }.joined(separator: "\n")
+        listView.string = Self.listing(for: plan)
+    }
+
+    /// Each file that would go, with the other file of its pair under it.
+    ///
+    /// **The other file, not the pair's key** (#184). The `a||b` key stood here: the interop format, which repeated
+    /// the path above it and named the other file nowhere. The other file is usually the one that stays; after
+    /// "discard both" it goes too, unless another decision keeps it, and the line says which.
+    static func listing(for plan: SimilarApplyPlan) -> String {
+        guard !plan.isEmpty else { return Strings.string("similar.apply.nothing") }
+        let moving = Set(plan.items.map(\.path))
+        return plan.items.map { item in
+            let key =
+                moving.contains(item.counterpart) ? "similar.apply.alsoGoes" : "similar.apply.stays"
+            return item.path + "\n    " + String(format: Strings.string(key), item.counterpart)
+        }.joined(separator: "\n")
     }
 
     @objc private func applyNow(_ sender: Any?) {
