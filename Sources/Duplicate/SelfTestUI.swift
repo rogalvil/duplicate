@@ -122,11 +122,12 @@ extension SelfTest {
         let similar = SimilarPairWindowController(
             scan: fixture.similar, stateDirectory: fixture.state)
         defer { similar.window?.close() }
-        for (row, pair) in fixture.similar.pairs.enumerated() {
-            similar.selectPairForSelftest(row)
+        // One render per group, named by its kind: the images are a group of three, the clips a group of two.
+        for (row, group) in SimilarGrouping.groups(of: fixture.similar.pairs).enumerated() {
+            similar.selectGroupForSelftest(row)
             await similar.awaitFactsForSelftest()
             try await sweep.render(
-                similar.window, as: "similar-\(pair.mediaKind == .video ? "video" : "image")")
+                similar.window, as: "similar-\(group.mediaKind == .video ? "video" : "image")")
         }
 
         // **Two sessions, so the history shows rows**: an empty table renders fine and says nothing about the
@@ -147,7 +148,8 @@ extension SelfTest {
         folders.decideForSelftest("keepA", row: 0)
         folders.simulateForSelftest()
         try await sweep.renderAsIs(folders.applySheetForSelftest?.window, as: "apply-folders")
-        similar.decideForSelftest(.keepA, row: 0)
+        similar.selectGroupForSelftest(0)
+        similar.pressConfirmForSelftest()
         similar.simulateForSelftest()
         try await sweep.renderAsIs(similar.applySheetForSelftest?.window, as: "apply-similar")
 
@@ -282,6 +284,10 @@ private struct UIFixture {
         try SyntheticImage.write(
             .rampWithCorner, width: 320, height: 240, format: .jpeg(quality: 0.6),
             to: media + "/foto chica.jpg")
+        // A third copy, so the perceptual review shows a group rather than a pair (#217).
+        try SyntheticImage.write(
+            .rampWithCorner, width: 320, height: 240, format: .jpeg(quality: 0.85),
+            to: media + "/foto mediana.jpg")
         let clip = SyntheticMovie.Specification(seconds: 6, pattern: .movingBlock)
         try await SyntheticMovie.write(clip, to: media + "/clip.mp4")
         try await SyntheticMovie.write(clip, to: media + "/clip recodificado.mp4")
@@ -316,8 +322,8 @@ private struct UIFixture {
         try SelfTest.expect(
             folders.scan.pairs.count == 1, "\(folders.scan.pairs.count) folder pairs, wanted 1")
         try SelfTest.expect(
-            similar.scan.pairCount(of: .image) == 1 && similar.scan.pairCount(of: .video) == 1,
-            "the perceptual scan found \(similar.scan.pairs.count) pairs, wanted one image and one video"
+            similar.scan.pairCount(of: .image) == 3 && similar.scan.pairCount(of: .video) == 1,
+            "the perceptual scan found \(similar.scan.pairs.count) pairs, wanted three image and one video"
         )
 
         return UIFixture(

@@ -98,6 +98,14 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   Greptile, ya con `require_code_owner_review` puesto. #210, donde el bot solo comentó, falló esa regla y entró
   como `bypass` con `--admin`, con las reglas de `protect main` evaluadas y en verde. Si en el PR de un colaborador
   el bot sí queda fuera no se sabe, y probarlo pide una segunda cuenta (#212).
+- **Un selftest que termina antes de tiempo salía con 0.** El `main` asíncrono llama a `exit(0)` cuando el run loop
+  principal se detiene, y una hoja de aplicar cerrada o terminada a media prueba, o un `performClick` sobre una
+  ventana con una hoja puesta, lo detuvo: el modo `similar-window` acababa sin `OK` ni `FAILED`, con estado 0, y
+  `--mode all` se habría saltado todos los modos siguientes con CI en verde (#217). Medido con `lldb`: el `exit` sale
+  de `swift_task_asyncMainDrainQueue`. Ahora `main.swift` trata cualquier salida antes de que `SelfTest.run` regrese
+  como `FAILED: the process exited before the selftest finished`, con estado 1. Y en un modo, **una hoja se deja
+  abierta hasta el final**: lo que se afirma sobre su lista sale de `SimilarApplySheetController.listing(for:)` sin
+  abrir otra, y una acción en una ventana con hoja se llama directo, no con `performClick`.
 - **`reviewDecision` sí sigue a los rulesets. Lo negué dos veces sin medir.** Primero tomé el `APPROVED` como
   prueba de algo que nadie había evaluado; después escribí que el campo ignoraba los rulesets. Las suites de
   #207 a #210 coinciden con `reviewDecision` en los cuatro casos. Lo que el campo no dice es *qué* regla falló ni

@@ -58,4 +58,22 @@ public struct PairFilter: Sendable, Equatable {
             return true
         }
     }
+
+    /// Indices of the groups that pass, in the review's order (#217).
+    ///
+    /// **A group passes on its weakest pair.** "Identical" then shows only groups where every pair is identical --
+    /// the set somebody can accept in one go -- and not a chain with one identical link and one at 91%. "Not decided
+    /// yet" keeps mixed groups, because their pair decisions do not add up to a decision about the group.
+    public func matchingGroupIndices(
+        in groups: [SimilarGroup],
+        state: (Int) -> SimilarGroupState
+    ) -> [Int] {
+        groups.indices.filter { index in
+            let group = groups[index]
+            if group.lowestSimilarity < minimumSimilarity { return false }
+            if let kind, group.mediaKind != kind { return false }
+            if onlyUndecided, !state(index).needsDecision { return false }
+            return true
+        }
+    }
 }

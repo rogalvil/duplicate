@@ -68,24 +68,45 @@ public struct SimilarApplyPlan: Sendable {
     ///
     /// Ordered by path bytes, so a dry run and the apply that follows it act in the same order and the journal
     /// reads the way the sheet did.
+    ///
+    /// **Each file is checked against a file that stays, when one of its pairs has one** (#217). A file can be removed
+    /// by several pairs, and the verifier re-scores it against the counterpart of the pair it was planned from -- then
+    /// refuses it if that counterpart is gone. Taking the first pair in scan order took `keep_none` pairs too, whose
+    /// counterpart is moved in the same apply: in a group of three copies keeping one, the third file could be planned
+    /// against the second, find it already in the Trash, and be refused as unreadable.
     public static func from(_ state: SimilarReviewState) -> SimilarApplyPlan {
-        let contradicted = Set(state.contradictions)
-        var seen: Set<String> = []
-        var items: [SimilarApplyItem] = []
+        let contradicted = Set(state.contradictions.map { Array($0.utf8) })
+        let plan = state.removalPlan
+        let removed = Set(plan.flatMap(\.paths).map { Array($0.utf8) })
+        var chosen: [[UInt8]: SimilarApplyItem] = [:]
+        var order: [[UInt8]] = []
 
-        for entry in state.removalPlan {
-            for path in entry.paths where !contradicted.contains(path) {
-                guard seen.insert(path).inserted else { continue }
-                items.append(
-                    SimilarApplyItem(
-                        path: path,
-                        counterpart: path == entry.pair.fileA ? entry.pair.fileB : entry.pair.fileA,
-                        pairKey: SimilarPairKey.key(for: entry.pair),
-                        mediaKind: entry.pair.mediaKind,
-                        recordedSimilarity: entry.pair.similarity
-                    ))
+        for entry in plan {
+            for path in entry.paths {
+                let key = Array(path.utf8)
+                guard !contradicted.contains(key) else { continue }
+                let counterpart = path == entry.pair.fileA ? entry.pair.fileB : entry.pair.fileA
+                let item = SimilarApplyItem(
+                    path: path,
+                    counterpart: counterpart,
+                    pairKey: SimilarPairKey.key(for: entry.pair),
+                    mediaKind: entry.pair.mediaKind,
+                    recordedSimilarity: entry.pair.similarity
+                )
+                guard let earlier = chosen[key] else {
+                    chosen[key] = item
+                    order.append(key)
+                    continue
+                }
+                // A later pair replaces an earlier one only to swap a counterpart that leaves for one that stays.
+                if removed.contains(Array(earlier.counterpart.utf8)),
+                    !removed.contains(Array(counterpart.utf8))
+                {
+                    chosen[key] = item
+                }
             }
         }
+        var items = order.compactMap { chosen[$0] }
         items.sort { PathOrder.lessThan($0.path, $1.path) }
         return SimilarApplyPlan(
             items: items,

@@ -158,27 +158,41 @@ Un escaneo de carpetas muestra pares de carpetas con casi el mismo contenido:
 
 ## 8. Imágenes y videos parecidos
 
-Un escaneo de imágenes muestra pares, con las dos lado a lado:
+Un escaneo de imágenes muestra **grupos**: todos los archivos que se parecen entre sí, juntos. Tres copias del mismo
+video son un grupo, y se deciden de una vez:
 
-![Imágenes parecidas](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/similar-image-laptop.png)
+![Imágenes parecidas](https://raw.githubusercontent.com/rogalvil/duplicate/b53f2523b8a4dc4b28f4df6e63071e56545c0be6/manual/similar-image-laptop-v2.png)
 
-- **Arriba**, filtros: qué tan parecidas, imágenes o videos o los dos, y **Sin decidir**.
-- **El encabezado** dice cuánto se parecen: en imágenes, cuántos bits de 64 difieren; en videos, qué parte de los
-  cuadros muestreados coinciden.
-- **Debajo de cada lado**, el archivo con su tamaño, fecha, resolución y, en videos, codec y duración.
+- **Arriba**, filtros: qué tan parecidas, imágenes o videos o los dos, y **Sin decidir**. Con «idénticas», solo
+  aparecen los grupos donde todos los archivos son iguales entre sí.
+- **La lista de grupos** dice qué tan parecidos son, cuántos archivos tiene cada uno y qué se decidió («conserva 1 de
+  3»).
+- **A la izquierda del grupo**, sus archivos con la casilla **Conservar**, como en la revisión de idénticos. La app
+  marca una sugerencia, pero **una sugerencia no es una decisión** hasta que confirmas. La barra espaciadora marca o
+  desmarca el archivo seleccionado.
+- **Los dos lados** comparan el mejor archivo que se conserva (izquierda) con el que seleccionas en la lista
+  (derecha). Debajo de cada uno, su tamaño, fecha, resolución y, en videos, codec y duración. La línea de abajo dice
+  cuánto se parecen esos dos: en imágenes, cuántos bits de 64 difieren; en videos, qué parte de los cuadros
+  muestreados coinciden.
 - **Sugerido** dice cuál conviene conservar y por qué: más resolución, un codec más eficiente, que uno sea un tráiler
   del otro.
-- **Conservar el primero / el segundo / los dos**, **Descartar los dos** (en rojo: es la única que quita dos
-  archivos de una vez) o **Saltar**.
-- **Aceptar los N mostrados** acepta la sugerencia para exactamente lo que está en pantalla con los filtros puestos,
-  y antes te dice cuántos archivos y bytes son.
+- **Confirmar y siguiente** (o ⏎) guarda el grupo y pasa al siguiente; **Conservar todos** deja el grupo como está;
+  **Saltar** (⇧⌘K) lo pasa sin decidir.
+- **Aceptar los N sin decidir** acepta la sugerencia de los grupos que la lista muestra y nadie ha decidido, y antes
+  te dice cuántos archivos y bytes son.
+
+**Un archivo solo se descarta si se parece a uno que se conserva.** A veces A se parece a B y B a C, pero A y C no
+se parecen: el grupo lo avisa, y si desmarcas de modo que un archivo quede sin ningún parecido entre los que se
+conservan, la app no confirma y te dice cuál es.
 
 Los videos se comparan por cuadros:
 
-![Videos parecidos](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/similar-video-laptop.png)
+![Videos parecidos](https://raw.githubusercontent.com/rogalvil/duplicate/b53f2523b8a4dc4b28f4df6e63071e56545c0be6/manual/similar-video-laptop-v2.png)
 
-Al cerrar la ventana, la app avisa si dos decisiones se contradicen: por ejemplo, un archivo que un par conserva y
-otro descarta. Esos quedan fuera al aplicar hasta que los decidas otra vez.
+Las decisiones se guardan por par, el formato que también lee el CLI. Si un escaneo trae decisiones por par que no
+cuadran entre sí (de una versión anterior de la app, o del CLI), el grupo dice «sin cuadrar» y confirmarlo las
+reemplaza. Al cerrar la ventana, la app avisa si quedó alguna contradicción; esos archivos quedan fuera al aplicar
+hasta que decidas su grupo.
 
 ## 9. Atajos
 

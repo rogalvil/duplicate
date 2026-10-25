@@ -172,14 +172,17 @@ Confirmar es lo que la vuelve decisión.
 
 | Qué | Cómo se llega | Qué hace |
 |---|---|---|
-| Filtros | arriba | % mínimo (any / 90 / 95 / identical), tipo (imágenes, videos, ambos), "Not decided yet" |
-| Accept the N shown | botón | Acepta la sugerencia de **exactamente** lo que está en pantalla, diciendo antes archivos y bytes |
-| Tabla | — | % parecido, tipo, decisión, archivo, contra cuál |
-| Encabezado | — | Imagen: bits que difieren de 64. Video: % de cuadros que coinciden, y "judged on N of 8 frames" si son menos |
-| Dos lados | — | Miniatura, nombre, ruta, metadata (tamaño, fecha, resolución, codec, duración) y "this file is no longer there" |
-| Sugerencia | — | "Suggested: … — razón" (tráiler, codec, bitrate, profundidad); el botón sugerido es el default |
-| Decidir | botones Keep the first / Keep the second / Keep both / Discard both (rojo) / Skip | Graba, guarda y avanza |
-| Al cerrar | — | Avisa contradicciones entre pares y claves `a\|\|b` que no se pueden volver a partir |
+| Grupos | — | Los pares se unen en grupos de archivos parecidos (#217): una decisión por grupo, guardada como las decisiones por par del formato |
+| Filtros | arriba | % mínimo (any / 90 / 95 / identical) sobre el par **más débil** del grupo, tipo (imágenes, videos, ambos), "Not decided yet" (incluye los grupos sin cuadrar) |
+| Accept the N undecided | botón | Acepta la sugerencia de los grupos mostrados que nadie ha decidido, saltado ni dejado sin cuadrar, diciendo antes archivos y bytes |
+| Tabla de grupos | — | % parecido (rango si los pares difieren), tipo, archivos, decisión ("keeps 1 of 3", saltado, "conflicting"), mejor archivo |
+| Archivos del grupo | — | Casilla Keep por archivo, del mejor al peor; espacio alterna el seleccionado |
+| Aviso | — | Por prioridad: un archivo que no se parece a ninguno conservado, decisiones guardadas que no cuadran, un grupo encadenado |
+| Dos lados | — | El mejor archivo conservado contra el seleccionado: miniatura, nombre, ruta, metadata (tamaño, fecha, resolución, codec, duración) y "this file is no longer there" |
+| Línea del par | — | Imagen: bits que difieren de 64. Video: % de cuadros que coinciden, y "judged on N of 8 frames" si son menos. Si los dos no son par: lo dice |
+| Sugerencia | — | "Suggested: keep … — razón" (tráiler, codec, bitrate, profundidad), del par que se muestra |
+| Decidir | botones Confirm and Next (⏎, ⌘↩) / Keep All / Skip (⇧⌘K) | Graba, guarda y avanza. Rehúsa un conjunto que descartaría un archivo sin parecido entre los conservados |
+| Al cerrar | — | Avisa contradicciones entre pares (solo pueden venir de decisiones guardadas por par) y claves `a\|\|b` que no se pueden volver a partir |
 
 ### 1.8 Simular y aplicar
 
@@ -188,7 +191,7 @@ Una hoja por detector, con la misma forma:
 | | Exactos | Carpetas | Parecidos |
 |---|---|---|---|
 | Qué dice la simulación | archivos y **bytes** que se liberarían | carpetas que se moverían | archivos y de cuántos pares |
-| Qué verifica antes de mover | re-hash contra el digest del escaneo | **contención**: cada archivo con gemelo byte-idéntico en la misma ruta relativa, ocultos, paquetes y vacíos incluidos; solo el ruido de Finder (`.DS_Store`) queda fuera | **re-puntúa** el par contra el umbral |
+| Qué verifica antes de mover | re-hash contra el digest del escaneo | **contención**: cada archivo con gemelo byte-idéntico en la misma ruta relativa, ocultos, paquetes y vacíos incluidos; solo el ruido de Finder (`.DS_Store`) queda fuera | **re-puntúa** el par contra el umbral, contra un archivo que se queda cuando alguno de sus pares lo tiene |
 | Qué excluye y nombra | — | pares anidados colapsados, contradicciones | contradicciones |
 | Durante | Verifying / Moving N of N, Stop | igual, más archivos revisados | igual |
 | Después | movidos, fallas, rehúsas, aviso de cuarentena | igual | igual |
@@ -473,7 +476,7 @@ vale lo que cuesta.
 | Función | Tamaño | Uso medido | Recomendación |
 |---|---|---|---|
 | Aviso de claves `a\|\|b` ambiguas al cerrar | ~50 líneas + textos, y una segunda implementación en el codec | **0 rutas reales**; las dos que existen son el fixture del árbol de demo. Carpetas usa la misma clave y no se revisa | conservar una implementación, quitar la del codec, y aplicarla también a carpetas |
-| "Discard both" (`keep_none`) | pequeño | 1 de 944 decisiones | conservar: el formato lo trae y el botón es barato |
+| "Discard both" (`keep_none`) | pequeño | 1 de 944 decisiones | **el botón se quitó con los grupos (#217)**: `keep_none` sale solo entre dos archivos que se descartan junto a uno que se queda. Descartar un grupo entero no se ofrece, porque ningún archivo tendría uno que se queda contra el cual verificarse; el codec lo sigue leyendo |
 | Discard the Whole Group (exacto) | ~40 | 0 de 12,842 entradas en 59 archivos | **candidato a quitar** del menú; el codec debe seguir leyéndolo |
 | Cuarentena de respaldo | ~250 | 0 de 6 entradas reales; solo SMB | conservar: es seguridad, no uso |
 | Poda de la caché perceptual | ~25 | 0% de desperdicio medido | conservar: comparte el mecanismo con la de digests |

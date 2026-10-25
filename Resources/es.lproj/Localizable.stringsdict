@@ -786,26 +786,10 @@
 			<string>Aceptar los %d sin decidir</string>
 		</dict>
 	</dict>
-	<key>similar.confirmShown</key>
-	<dict>
-		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@</string>
-		<key>n</key>
-		<dict>
-			<key>NSStringFormatSpecTypeKey</key>
-			<string>NSStringPluralRuleType</string>
-			<key>NSStringFormatValueTypeKey</key>
-			<string>d</string>
-			<key>one</key>
-			<string>Aceptar el mostrado</string>
-			<key>other</key>
-			<string>Aceptar los %d mostrados</string>
-		</dict>
-	</dict>
 	<key>similar.confirmShown.body</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@: %2$@. Ahora no se mueve nada, y los pares fuera del filtro siguen sin decidir.</string>
+		<string>%#@n@: %2$@. Ahora no se mueve nada, y los grupos fuera del filtro siguen sin decidir.</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>

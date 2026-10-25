@@ -2,30 +2,28 @@ import AppKit
 import DuplicateCore
 @preconcurrency import Quartz
 
-/// Shows the pairs of one perceptual scan, side by side.
+/// Shows the groups of one perceptual scan: which files are alike, and which of them stay.
 ///
-/// **Two thumbnails, not a list of paths, because that is the only way to judge this detector.** An exact
-/// duplicate can be decided from its digest; a perceptual pair cannot. The app is claiming two files *look*
-/// alike, and the user is the only one who can say whether that is true -- so the two pictures have to be on
-/// screen next to each other, at the same size.
+/// **Groups, not pairs** (#217). The scan stores pairs, and three copies of one video are three pairs; decided one at
+/// a time, the third pair could only contradict the first two, and the apply then left those files alone. One group of
+/// 23 copies in this user's scans was 253 pairs. A group is one decision -- a keep set, like the exact review's -- and
+/// it is saved as the CLI's pair decisions, so the file format does not change.
 ///
-/// **Deciding and moving are separate steps.** A pair at distance 5 can be two genuinely different photographs --
-/// a burst of the same scene, two frames of one video, the same product on two backgrounds -- so a choice here is
-/// only recorded in `similar-decisions`. Moving happens from the apply sheet, behind the same dry-run gate,
-/// journal and verify-before-moving the exact detector has: each pair is scored again first.
+/// **Two thumbnails, because that is the only way to judge this detector.** The left pane holds the best file the
+/// group keeps and the right one the file selected in the list, at the same size: the app claims they *look* alike,
+/// and only the user can say whether that is true.
 ///
-/// **The suggestion is shown selected and is never saved on its own.** The CLI fills a default decision for every
-/// pair before anyone has seen one; here the highlight is a proposal and the file only carries what was
-/// confirmed.
+/// **Deciding and moving are separate steps.** A choice here is only recorded in `similar-decisions`. Moving happens
+/// from the apply sheet, behind the same dry-run gate, journal and verify-before-moving the exact detector has: each
+/// file is scored again against a file that stays.
 ///
-/// Images and videos alike: a scan with videos on carries both, and so does one written by `rav duplicate
-/// similar`. A video pair shows the share of sampled frames that match instead of a bit distance.
+/// **The suggestion is shown checked and is never saved on its own**, as in the exact review: confirming is what
+/// turns it into a decision.
 @MainActor
 final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     private let scan: SimilarScan
-    private let allPairs: [SimilarPair]
-    /// The indices currently on screen, in scan order. **Narrowing decides nothing** -- this is the only thing a
+    /// The group indices on screen, in the review's order. **Narrowing decides nothing** -- this is the only thing a
     /// filter changes.
     private var visible: [Int] = []
     private var filter = PairFilter()
@@ -36,20 +34,36 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     private let confirmShownButton = NSButton()
     private let stateDirectory: StateDirectory
     private var review: SimilarReviewState
-    /// Facts already probed, by path. Filled for the pair being looked at, never for all of them.
-    private var facts: [String: MediaFacts] = [:]
-    private var probeGeneration = 0
+    /// Facts already probed, by the bytes of the path. Filled for the group being looked at, never for all of them.
+    private var facts: [[UInt8]: MediaFacts] = [:]
     private let probe = MediaProbe()
-    private let table = NSTableView()
+    private let groupTable = ReviewTableView()
+    private let fileTable = ReviewTableView()
+    /// The members of the selected group, best first: the rows of the file list.
+    private var fileOrder: [Int] = []
+    /// The member in the left pane: the best one the group keeps.
+    private var reference: Int?
+    /// The member in the right pane: the one selected in the list, or the next one.
+    private var compared: Int?
+    /// The member under the list's selection: what the space bar checks or unchecks. Usually ``compared``; the
+    /// keeper on the left when that row is selected, which is how the keyboard replaces a keeper.
+    private var cursor: Int?
+    /// Paths a probe already tried, by their bytes. **Tried, not answered**: a file that is gone or unreadable has no
+    /// facts to store, and asking again on every redraw was a loop -- the probe's own redraw asked again (#219).
+    private var probed: Set<[UInt8]> = []
+    private var probeLaunches = 0
     private let thumbnailer = QuickLookThumbnailer()
     private let leftPane = SimilarSidePane()
     private let quickLook = QuickLookCoordinator()
     private let rightPane = SimilarSidePane()
     private let headerLabel = NSTextField(labelWithString: "")
+    private let warningLabel = NSTextField(labelWithString: "")
+    private let pairLabel = NSTextField(labelWithString: "")
     private let footerLabel = NSTextField(labelWithString: "")
     private let adviceLabel = NSTextField(labelWithString: "")
     private let tallyLabel = NSTextField(labelWithString: "")
-    private var decisionButtons: [SimilarDecision: NSButton] = [:]
+    private let confirmButton = NSButton()
+    private let keepAllButton = NSButton()
     private let skipButton = NSButton()
     private let applyButton = NSButton()
     private var flow = ReviewFlow()
@@ -67,10 +81,9 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     init(scan: SimilarScan, stateDirectory: StateDirectory = StateDirectory.current()) {
         self.scan = scan
-        self.allPairs = scan.pairs
         self.stateDirectory = stateDirectory
         // Rehydrated from disk, so reopening a scan shows what was already decided -- including a document the
-        // CLI wrote, which decides every pair.
+        // CLI wrote, which decides every pair and so reads as decided groups.
         self.review = SimilarReviewState(
             scan: scan,
             priorDecisions: ScanStore(state: stateDirectory)
@@ -80,7 +93,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             decided: review.tally.decided, total: scan.pairs.count)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 940, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 960, height: 660),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -90,9 +103,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         build()
-        refreshDetail()
         rebuildVisible()
-        if !visible.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
     }
 
     @available(*, unavailable)
@@ -104,40 +115,74 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
 
     private func build() {
-        table.dataSource = self
-        table.delegate = self
-        table.usesAlternatingRowBackgroundColors = true
-        table.rowHeight = 22
-        table.allowsMultipleSelection = false
-        table.target = self
-        table.doubleAction = #selector(revealSelected(_:))
-
+        groupTable.dataSource = self
+        groupTable.delegate = self
+        groupTable.usesAlternatingRowBackgroundColors = true
+        groupTable.rowHeight = 22
+        groupTable.allowsMultipleSelection = false
+        groupTable.target = self
+        groupTable.doubleAction = #selector(revealSelected(_:))
+        groupTable.onConfirm = { [weak self] in self?.confirmGroup(nil) }
+        groupTable.onToggle = { [weak self] in self?.toggle(member: self?.compared) }
         for (identifier, key, width) in [
-            ("similarity", "similar.column.similarity", 74.0),
-            ("kind", "similar.column.kind", 70.0),
+            ("similarity", "similar.column.similarity", 90.0),
+            ("kind", "similar.column.kind", 64.0),
+            ("files", "similar.column.files", 64.0),
             ("decision", "similar.column.decision", 120.0),
-            ("a", "similar.column.a", 260.0),
-            ("b", "similar.column.b", 260.0),
+            ("name", "similar.column.a", 420.0),
         ] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
             column.title = Strings.string(key)
             column.width = width
-            table.addTableColumn(column)
+            groupTable.addTableColumn(column)
+        }
+        // Numbers line up on the right, under a header that does too.
+        groupTable.tableColumns[2].headerCell.alignment = .right
+
+        fileTable.dataSource = self
+        fileTable.delegate = self
+        fileTable.rowHeight = 20
+        fileTable.allowsMultipleSelection = false
+        fileTable.onConfirm = { [weak self] in self?.confirmGroup(nil) }
+        fileTable.onToggle = { [weak self] in self?.toggle(member: self?.cursor) }
+        for (identifier, key, width) in [
+            ("keep", "similar.column.keep", 64.0),
+            ("file", "similar.column.a", 220.0),
+        ] {
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
+            column.title = Strings.string(key)
+            column.width = width
+            fileTable.addTableColumn(column)
+        }
+        fileTable.tableColumns[0].minWidth = 44
+        fileTable.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+
+        let groupScroll = NSScrollView()
+        groupScroll.documentView = groupTable
+        groupScroll.hasVerticalScroller = true
+        groupScroll.borderType = .bezelBorder
+        groupScroll.translatesAutoresizingMaskIntoConstraints = false
+        let fileScroll = NSScrollView()
+        fileScroll.documentView = fileTable
+        fileScroll.hasVerticalScroller = true
+        fileScroll.borderType = .bezelBorder
+        fileScroll.translatesAutoresizingMaskIntoConstraints = false
+        // A table reports the sum of its columns as its intrinsic width, and through a scroll view that becomes a
+        // floor on the window. A scroll view exists to be narrower than its content.
+        for scroll in [groupScroll, fileScroll] {
+            scroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
 
-        let scroll = NSScrollView()
-        scroll.documentView = table
-        scroll.hasVerticalScroller = true
-        scroll.borderType = .bezelBorder
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        // A table reports the sum of its columns as its intrinsic width, and through a scroll view that
-        // becomes a floor on the window. A scroll view exists to be narrower than its content.
-        scroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        for label in [headerLabel, footerLabel, adviceLabel, tallyLabel] {
+        for label in [headerLabel, footerLabel, adviceLabel, tallyLabel, pairLabel, warningLabel] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             label.lineBreakMode = .byTruncatingMiddle
         }
+        headerLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        pairLabel.font = .systemFont(ofSize: 11)
+        warningLabel.font = .systemFont(ofSize: 11)
+        warningLabel.textColor = .systemOrange
+        warningLabel.lineBreakMode = .byWordWrapping
+        warningLabel.maximumNumberOfLines = 2
         footerLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         footerLabel.textColor = .secondaryLabelColor
         adviceLabel.font = .systemFont(ofSize: 11)
@@ -146,34 +191,23 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         tallyLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         tallyLabel.textColor = .secondaryLabelColor
 
-        // The four decisions, in the order a person reads them, plus skip.
-        let decisionRow = NSStackView()
-        decisionRow.orientation = .horizontal
-        decisionRow.spacing = 8
-        decisionRow.translatesAutoresizingMaskIntoConstraints = false
-        for decision in [
-            SimilarDecision.keepA, .keepB, .keepBoth, .keepNone,
-        ] {
-            let button = NSButton()
-            button.title = SimilarAdviceText.label(for: decision)
-            button.bezelStyle = .rounded
-            button.setButtonType(.pushOnPushOff)
-            button.target = self
-            button.action = #selector(decisionChosen(_:))
-            button.tag =
-                [SimilarDecision.keepA, .keepB, .keepBoth, .keepNone]
-                .firstIndex(of: decision) ?? 0
-            // **"Discard both" is the dangerous one and it looks like it.** It is the only choice here that can
-            // remove two files at once, and the CLI's own corpus used it exactly once in 943 decisions.
-            if decision == .keepNone { button.contentTintColor = .systemRed }
-            decisionButtons[decision] = button
-            decisionRow.addView(button, in: .leading)
-        }
+        // Same titles and selectors as the exact review's, so the Group menu and its shortcuts reach this window too.
+        confirmButton.title = Strings.string("menu.group.confirm")
+        confirmButton.bezelStyle = .rounded
+        confirmButton.target = self
+        confirmButton.action = #selector(confirmGroup(_:))
+        keepAllButton.title = Strings.string("similar.group.keepAll")
+        keepAllButton.bezelStyle = .rounded
+        keepAllButton.target = self
+        keepAllButton.action = #selector(keepAll(_:))
         skipButton.title = Strings.string("similar.decision.skip")
         skipButton.bezelStyle = .rounded
         skipButton.target = self
-        skipButton.action = #selector(skipPair(_:))
-        decisionRow.addView(skipButton, in: .leading)
+        skipButton.action = #selector(skipGroup(_:))
+        let decisionRow = NSStackView(views: [confirmButton, keepAllButton, skipButton])
+        decisionRow.orientation = .horizontal
+        decisionRow.spacing = 8
+        decisionRow.translatesAutoresizingMaskIntoConstraints = false
 
         similarityPopup.target = self
         similarityPopup.action = #selector(filterChanged(_:))
@@ -213,6 +247,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         countLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         confirmShownButton.bezelStyle = .rounded
+        confirmShownButton.toolTip = Strings.string("similar.confirmShown.tip")
         confirmShownButton.target = self
         confirmShownButton.action = #selector(confirmShown(_:))
 
@@ -232,20 +267,13 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         applyButton.target = self
         applyButton.action = #selector(simulateAndApply(_:))
 
-        // **The two scan-wide actions get their own line, and that is what lets the window narrow.**
-        //
-        // Measured: the five per-pair buttons want 664 points and these two want 314, so one row asked for
-        // 986 -- and a window cannot be dragged below what its widest row demands. This one would not go under
-        // 1000 while `minSize` claimed 720 and meant nothing. Reported from real use as "es lo mas que me deja
-        // achicarla", which made step 4 of the manual pass -- shrink the window and watch the metadata line
-        // truncate -- impossible to run at all.
-        //
-        // Splitting drops the floor to the wider row, 664, and the window now stops at the 720 it already
-        // advertised: the stated minimum becomes the true one instead of a decoration.
+        // **The two scan-wide actions get their own line, and that is what lets the window narrow.** One row with
+        // every button asked for 986 points, and a window cannot be dragged below what its widest row demands.
         let actionRow = NSStackView()
         actionRow.orientation = .horizontal
         actionRow.spacing = 8
         actionRow.translatesAutoresizingMaskIntoConstraints = false
+        actionRow.addView(confirmShownButton, in: .trailing)
         actionRow.addView(applyButton, in: .trailing)
 
         let panes = NSStackView(views: [leftPane, rightPane])
@@ -254,11 +282,24 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         panes.spacing = 12
         panes.translatesAutoresizingMaskIntoConstraints = false
 
-        actionRow.addView(confirmShownButton, in: .trailing)
+        // The file list holds its width; the two panes split the rest.
+        let middle = NSView()
+        middle.translatesAutoresizingMaskIntoConstraints = false
+        middle.addSubview(fileScroll)
+        middle.addSubview(panes)
+        NSLayoutConstraint.activate([
+            fileScroll.leadingAnchor.constraint(equalTo: middle.leadingAnchor),
+            fileScroll.topAnchor.constraint(equalTo: middle.topAnchor),
+            fileScroll.bottomAnchor.constraint(equalTo: middle.bottomAnchor),
+            panes.leadingAnchor.constraint(equalTo: fileScroll.trailingAnchor, constant: 12),
+            panes.trailingAnchor.constraint(equalTo: middle.trailingAnchor),
+            panes.topAnchor.constraint(equalTo: middle.topAnchor),
+            panes.bottomAnchor.constraint(equalTo: middle.bottomAnchor),
+        ])
 
         let content = NSStackView(views: [
-            filterRow, scroll, headerLabel, panes, adviceLabel, decisionRow, actionRow, tallyLabel,
-            footerLabel,
+            filterRow, groupScroll, headerLabel, warningLabel, middle, pairLabel, adviceLabel,
+            decisionRow, actionRow, tallyLabel, footerLabel,
         ])
         content.orientation = .vertical
         content.alignment = .leading
@@ -276,165 +317,228 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             filterRow.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
             filterRow.trailingAnchor.constraint(
                 lessThanOrEqualTo: content.trailingAnchor, constant: -14),
-            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
-            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
-            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 150),
-            // **A cap, not a minimum.** Without it the table takes every extra point of height and the two
-            // pictures stay at their 220-point floor -- which is what shipped: a full-width window with a
-            // thumbnail the size of a postage stamp under it. The comparison is the reason this window
-            // exists, so the list is the part that gets bounded.
-            scroll.heightAnchor.constraint(
-                lessThanOrEqualTo: container.heightAnchor, multiplier: 0.42),
-            panes.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
-            panes.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
+            // **Every full-width row is pinned**, or a leading-aligned row has no width of its own and AutoLayout
+            // keeps whatever width it last had -- the folder viewer's decision row, found by `make ui` (#211).
+            groupScroll.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
+            middle.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
+            actionRow.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
+            groupScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 110),
+            // **A cap, not a minimum.** Without it the group list takes every extra point of height and the two
+            // pictures stay at their floor -- which shipped once, with a thumbnail the size of a postage stamp. The
+            // comparison is the reason this window exists, so the lists are the parts that get bounded.
+            groupScroll.heightAnchor.constraint(
+                lessThanOrEqualTo: container.heightAnchor, multiplier: 0.3),
+            fileScroll.widthAnchor.constraint(equalToConstant: 240),
             panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
         ])
         window?.contentView = container
     }
 
-    /// The pairs on screen, in scan order. Every row index in this window is an index into this.
-    private var pairs: [SimilarPair] { visible.map { allPairs[$0] } }
+    // MARK: - What is on screen
 
-    /// The scan index behind a row, because a decision belongs to the pair and not to the row.
-    private func scanIndex(forRow row: Int) -> Int? {
-        visible.indices.contains(row) ? visible[row] : nil
+    private var selectedGroup: Int? {
+        let row = groupTable.selectedRow
+        return visible.indices.contains(row) ? visible[row] : nil
     }
 
     private func rebuildVisible() {
-        let selected = scanIndex(forRow: table.selectedRow)
-        visible = filter.matchingIndices(in: allPairs) { review.decision(at: $0) }
-        table.reloadData()
+        let selected = selectedGroup
+        visible = filter.matchingGroupIndices(in: review.groups) { review.groupState(at: $0) }
+        groupTable.reloadData()
         countLabel.stringValue = String(
             format: Strings.string("similar.filter.count"), visible.count,
-            Strings.count("count.pairs", allPairs.count))
-        confirmShownButton.title = String(
-            format: Strings.string("similar.confirmShown"), visible.count)
-        confirmShownButton.isEnabled = !visible.isEmpty
-        // The selection follows the pair, not the row: a filter that removes rows above it would otherwise move
-        // the selection to a different pair without saying so.
+            Strings.count("count.groups", review.groups.count))
+        let undecided = shownUndecidedGroups.count
+        confirmShownButton.title = String(format: Strings.string("review.acceptShown"), undecided)
+        confirmShownButton.isEnabled = undecided > 0
+        // The selection follows the group, not the row: a filter that removes rows above it would otherwise move
+        // the selection to a different group without saying so.
         if let selected, let row = visible.firstIndex(of: selected) {
-            table.selectRowIndexes([row], byExtendingSelection: false)
-        } else if !visible.isEmpty {
-            table.selectRowIndexes([0], byExtendingSelection: false)
+            groupTable.selectRowIndexes([row], byExtendingSelection: false)
+        } else if let next = visible.firstIndex(where: { $0 > (selected ?? -1) })
+            ?? visible.indices.first
+        {
+            // The group left the filter -- decided with "not decided yet" on. The next one shown after it, not the
+            // first: going back to the top after every decision is how a review loses its place.
+            groupTable.selectRowIndexes([next], byExtendingSelection: false)
+            groupTable.scrollRowToVisible(next)
         }
         refreshDetail()
     }
 
-    private var selectedRow: Int {
-        let row = table.clickedRow >= 0 ? table.clickedRow : table.selectedRow
-        return row
+    /// The groups shown that nobody has decided: what the accept button acts on.
+    private var shownUndecidedGroups: [Int] {
+        visible.filter { review.groupState(at: $0) == .undecided }
     }
 
-    private var selectedPair: SimilarPair? {
-        pairs.indices.contains(selectedRow) ? pairs[selectedRow] : nil
-    }
-
-    private func refreshDetail() {
+    private func refreshDetail(keepingCompared: Bool = false) {
         refreshFooter()
-        guard let pair = selectedPair else {
+        refreshTally()
+        guard let index = selectedGroup else {
             headerLabel.stringValue = Strings.string("similar.empty")
+            warningLabel.isHidden = true
+            pairLabel.stringValue = ""
+            adviceLabel.stringValue = ""
+            fileOrder = []
+            reference = nil
+            compared = nil
+            fileTable.reloadData()
             leftPane.showEmpty()
             rightPane.showEmpty()
+            for button in [confirmButton, keepAllButton, skipButton] { button.isEnabled = false }
             return
         }
-        // Two decimals, for the same reason as folders: 0.95 and 0.9473 are different answers and rounding
-        // both to 95% hides one of them.
-        //
-        // **And the second number is not the same quantity for the two kinds.** An image similarity is
-        // `1 - hamming/64`, so bits are the honest unit. A video similarity is the *fraction of sampled frames
-        // that matched* -- there is no 64-bit distance behind it, and printing "0 of 64 bits differ" under a
-        // video pair, which is what shipped a moment ago, states a measurement that was never taken.
-        headerLabel.stringValue = similarHeaderText(
-            pair: pair, durationA: facts[pair.fileA]?.duration,
-            durationB: facts[pair.fileB]?.duration)
-        leftPane.show(path: pair.fileA, thumbnailer: thumbnailer)
-        rightPane.show(path: pair.fileB, thumbnailer: thumbnailer)
-        // **Everything below is keyed on the scan index, not the row.** A filter makes those different numbers,
-        // and a decision belongs to the pair.
-        guard let index = scanIndex(forRow: selectedRow) else { return }
-        refreshAdvice(row: index, pair: pair)
-        refreshDecisionButtons(row: index)
-        probeFactsIfNeeded(row: index, pair: pair)
+        for button in [confirmButton, keepAllButton, skipButton] { button.isEnabled = true }
+        let group = review.groups[index]
+        let previous = keepingCompared ? compared : nil
+        let previousCursor = keepingCompared ? cursor : nil
+        fileOrder = review.rankedFiles(inGroup: index)
+        let keep = review.effectiveKeep(inGroup: index)
+        let best = fileOrder.first { keep.contains($0) } ?? fileOrder.first
+        reference = best
+        compared =
+            previous.flatMap { fileOrder.contains($0) && $0 != best ? $0 : nil }
+            ?? fileOrder.first { $0 != best }
+        cursor = previousCursor.flatMap { fileOrder.contains($0) ? $0 : nil } ?? compared
+        fileTable.reloadData()
+        if let cursor, let row = fileOrder.firstIndex(of: cursor) {
+            fileTable.selectRowIndexes([row], byExtendingSelection: false)
+            fileTable.scrollRowToVisible(row)
+        }
+
+        headerLabel.stringValue = String(
+            format: Strings.string("similar.group.header"),
+            (visible.firstIndex(of: index) ?? 0) + 1, visible.count,
+            Strings.count("count.files", group.files.count))
+        refreshWarning(index: index, keep: keep)
+        showPanes(group: group)
+        refreshAdvice(index: index)
+        probeFactsIfNeeded(index: index)
     }
 
-    /// The suggestion and its reason, or the decision already made.
-    private func refreshAdvice(row: Int, pair: SimilarPair) {
-        let effective = review.effectiveDecision(at: row)
-        switch review.decision(at: row) {
-        case .decided:
-            adviceLabel.stringValue = SimilarAdviceText.label(for: effective)
-        case .skipped:
-            adviceLabel.stringValue = Strings.string("similar.state.skipped")
-        case .undecided:
-            let why = review.suggestion(at: row).map {
-                SimilarAdviceText.explanation(for: $0.ground)
-            }
-            let label = SimilarAdviceText.label(for: effective)
-            adviceLabel.stringValue = String(
-                format: Strings.string("similar.suggested"),
-                why.map { "\(label) - \($0)" } ?? label)
+    /// What a reader has to know before confirming, most urgent first: a file confirming would refuse, then pair
+    /// decisions that do not add up, then a group whose members are not all alike to each other.
+    private func refreshWarning(index: Int, keep: Set<Int>) {
+        let group = review.groups[index]
+        var text = ""
+        if let lonely = review.unmatched(keep: keep, inGroup: index).first {
+            text = String(
+                format: Strings.string("similar.group.unmatched"),
+                (group.files[lonely] as NSString).lastPathComponent)
+        } else if review.groupState(at: index) == .mixed {
+            text = Strings.string("similar.group.mixed")
+        } else if !group.isFullyLinked {
+            text = Strings.string("similar.group.chained")
         }
-        let tally = review.tally
+        warningLabel.stringValue = text
+        warningLabel.isHidden = text.isEmpty
+    }
+
+    private func showPanes(group: SimilarGroup) {
+        if let reference {
+            let path = group.files[reference]
+            leftPane.show(path: path, thumbnailer: thumbnailer)
+            if let known = facts[Array(path.utf8)] { leftPane.show(facts: known) }
+        } else {
+            leftPane.showEmpty()
+        }
+        if let compared {
+            let path = group.files[compared]
+            rightPane.show(path: path, thumbnailer: thumbnailer)
+            if let known = facts[Array(path.utf8)] { rightPane.show(facts: known) }
+        } else {
+            rightPane.showEmpty()
+        }
+    }
+
+    /// The pair on screen and why one of the two would stay, or that the two were never compared.
+    private func refreshAdvice(index: Int) {
+        let group = review.groups[index]
+        guard let reference, let compared,
+            let link = group.link(between: reference, and: compared),
+            scan.pairs.indices.contains(link.pairIndex)
+        else {
+            pairLabel.stringValue = ""
+            adviceLabel.stringValue =
+                reference != nil && compared != nil
+                ? Strings.string("similar.group.notCompared") : ""
+            return
+        }
+        let pair = scan.pairs[link.pairIndex]
+        // The pair's own number: bits for an image, the share of matching frames for a video.
+        pairLabel.stringValue = similarHeaderText(
+            pair: pair, durationA: facts[Array(pair.fileA.utf8)]?.duration,
+            durationB: facts[Array(pair.fileB.utf8)]?.duration)
+        guard let suggestion = review.suggestion(at: link.pairIndex) else {
+            adviceLabel.stringValue = ""
+            return
+        }
+        let winner = suggestion.decision == .keepB ? link.b : link.a
+        let name = (group.files[winner] as NSString).lastPathComponent
+        adviceLabel.stringValue = String(
+            format: Strings.string("similar.suggested"),
+            String(format: Strings.string("similar.group.keepName"), name) + " - "
+                + SimilarAdviceText.explanation(for: suggestion.ground))
+    }
+
+    private func refreshTally() {
+        let tally = review.groupTally
         tallyLabel.stringValue = String(
             format: Strings.string("similar.tally"), Strings.count("count.decided", tally.decided),
             Strings.count("count.skipped", tally.skipped), tally.undecided)
     }
 
-    /// The button of the effective decision is pushed in, so the suggestion is visible as a selection.
-    private func refreshDecisionButtons(row: Int) {
-        let effective = review.effectiveDecision(at: row)
-        let isDecided = review.decision(at: row).decision != nil
-        for (decision, button) in decisionButtons {
-            // Only a real decision shows as pressed. A suggestion is drawn as the *default* -- keyboard focus --
-            // rather than as something already chosen, or the two would look identical and the file would be the
-            // only place that knew the difference.
-            button.state = isDecided && decision == effective ? .on : .off
-            button.keyEquivalent = !isDecided && decision == effective ? "\r" : ""
-        }
-    }
-
-    /// Probes the two files of the pair being looked at, then refines its suggestion.
+    /// Probes the members of the group being looked at, then refines the suggestions of its pairs.
     ///
-    /// **Lazily and cancellably.** Probing all 2,460 files of a real scan up front would repeat a large part of
-    /// the scan; the generation counter drops a probe that lands after the selection moved on.
-    private func probeFactsIfNeeded(row: Int, pair: SimilarPair) {
-        guard facts[pair.fileA] == nil || facts[pair.fileB] == nil else { return }
-        probeGeneration += 1
-        let generation = probeGeneration
-        let kind = pair.mediaKind
+    /// **Lazily.** Probing all 2,460 files of a real scan up front would repeat a large part of the scan. A group is at
+    /// most a few dozen files -- 27 videos is the largest in this user's scans.
+    ///
+    /// **What a probe read is kept even if the selection moved on**, and only the redraw depends on it (#219). Its
+    /// paths are marked as tried when it starts, so dropping a late answer -- which a generation counter here did --
+    /// lost that group's resolution, codec and duration for good, and its suggestion never used them.
+    private func probeFactsIfNeeded(index: Int) {
+        let group = review.groups[index]
+        let missing = group.files.filter { !probed.contains(Array($0.utf8)) }
+        guard !missing.isEmpty else { return }
+        for path in missing { probed.insert(Array(path.utf8)) }
+        probeLaunches += 1
+        let kind = group.mediaKind
         let probe = self.probe
-        let paths = (pair.fileA, pair.fileB)
         Task { @MainActor [weak self] in
-            let a: MediaFacts?
-            let b: MediaFacts?
-            switch kind {
-            case .image:
-                a = probe.facts(ofImage: paths.0)
-                b = probe.facts(ofImage: paths.1)
-            case .video:
-                a = await probe.facts(ofVideo: paths.0)
-                b = await probe.facts(ofVideo: paths.1)
+            var found: [(String, MediaFacts)] = []
+            for path in missing {
+                let fact: MediaFacts? =
+                    switch kind {
+                    case .image: probe.facts(ofImage: path)
+                    case .video: await probe.facts(ofVideo: path)
+                    }
+                if let fact { found.append((path, fact)) }
             }
-            guard let self, generation == self.probeGeneration else { return }
-            if let a { self.facts[paths.0] = a }
-            if let b { self.facts[paths.1] = b }
-            self.review.updateSuggestion(at: row, factsA: a, factsB: b)
-            guard self.selectedRow == row else { return }
-            self.refreshAdvice(row: row, pair: pair)
-            self.refreshDecisionButtons(row: row)
-            // The panes and the header both said something narrower before the probe answered: the panes had no
-            // resolution and a video header could not say how many frames its verdict rested on.
-            self.leftPane.show(facts: a)
-            self.rightPane.show(facts: b)
-            self.headerLabel.stringValue = similarHeaderText(
-                pair: pair, durationA: a?.duration, durationB: b?.duration)
+            guard let self else { return }
+            for (path, fact) in found { self.facts[Array(path.utf8)] = fact }
+            for link in group.links {
+                let pair = self.scan.pairs[link.pairIndex]
+                self.review.updateSuggestion(
+                    at: link.pairIndex, factsA: self.facts[Array(pair.fileA.utf8)],
+                    factsB: self.facts[Array(pair.fileB.utf8)])
+            }
+            // The group's row names its best file, which the probe can change.
+            if let row = self.visible.firstIndex(of: index) {
+                self.groupTable.reloadData(
+                    forRowIndexes: IndexSet(integer: row),
+                    columnIndexes: IndexSet(integersIn: 0..<self.groupTable.numberOfColumns))
+            }
+            // A better suggestion can reorder the list and change the file on the left, so the whole detail is
+            // redrawn -- the right pane stays on the file the reader was looking at.
+            guard self.selectedGroup == index else { return }
+            self.refreshDetail(keepingCompared: true)
         }
     }
 
     /// Warns when one file is kept by one pair and discarded by another, or when a saved key cannot be parsed.
     ///
     /// **Shown on close rather than on every click**: the conflict only matters when the set of decisions is done
-    /// with, and a sheet after each choice would make deciding impossible.
+    /// with. Deciding groups cannot produce one; pair decisions read from disk can.
     func presentContradictionsIfNeeded() {
         presentAmbiguousKeysIfNeeded()
         let conflicting = review.contradictions
@@ -470,8 +574,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     /// The counts, split by kind, and the two thresholds.
     ///
-    /// **Split because this build only produces one of the two.** A scan it wrote has no video pairs at all, so
-    /// a single total would read as "there is no video here" when it means "this app did not look".
+    /// **Split because a scan can hold either kind alone.** A single total would read as "there is no video here"
+    /// when it means "this scan did not look".
     private func refreshFooter() {
         footerLabel.stringValue = footerString()
         footerLabel.textColor = saveFailure == nil ? .secondaryLabelColor : .systemOrange
@@ -494,8 +598,6 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         return text
     }
 
-    private static let decisionOrder: [SimilarDecision] = [.keepA, .keepB, .keepBoth, .keepNone]
-
     /// The size on disk, or zero when it cannot be read.
     private static func fileSize(_ path: String) -> Int64 {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
@@ -503,6 +605,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         else { return 0 }
         return size
     }
+
+    // MARK: - Actions
 
     @objc private func filterChanged(_ sender: Any?) {
         filter = PairFilter(
@@ -514,24 +618,29 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         rebuildVisible()
     }
 
-    /// Accepts the suggestion for every pair currently shown.
+    /// Accepts the suggestion for every group shown that nobody has decided.
     ///
     /// **The sheet names what it will cost before it happens**, and the counts come from the review rather than
-    /// from the filter: the files that would move, and any that another decision keeps. Nothing moves here -- this
-    /// writes decisions, and applying is still its own step behind its own gate.
+    /// from the filter: the files that would move. Nothing moves here -- this writes decisions, and applying is
+    /// still its own step behind its own gate.
     ///
-    /// **Only the shown pairs.** That is the invariant that keeps this from becoming the "decide everything"
-    /// button the CLI has: every index handed to `confirmAll` is one this window put on screen.
+    /// **Only the shown, undecided groups.** That is the invariant that keeps this from becoming the "decide
+    /// everything" button the CLI has: every group handed to `confirmGroups` is one this window put on screen, and
+    /// a skipped, decided or mixed group carries a choice somebody made.
     @objc private func confirmShown(_ sender: Any?) {
-        let indices = visible
-        guard !indices.isEmpty, let window else { return }
+        let indices = shownUndecidedGroups
+        guard let window else { return }
+        guard !indices.isEmpty else {
+            NSSound.beep()
+            return
+        }
 
         // What accepting would plan, computed on a copy so the question can be asked before the answer is taken.
         var preview = review
-        preview.confirmAll(indices)
+        preview.confirmGroups(indices)
         let plan = SimilarApplyPlan.from(preview)
-        // **A `stat` per file, and that is the cost of saying the number.** On a batch of 2,106 it is 2,106 calls;
-        // the alternative is a sheet that says "some files" and asks for a destructive decision anyway.
+        // **A `stat` per file, and that is the cost of saying the number.** The alternative is a sheet that says
+        // "some files" and asks for a destructive decision anyway.
         let bytes = plan.items.reduce(Int64(0)) { total, item in
             total + Self.fileSize(item.path)
         }
@@ -540,7 +649,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         alert.alertStyle = .informational
         alert.messageText = String(
             format: Strings.string("similar.confirmShown.title"),
-            Strings.count("count.pairs", indices.count))
+            Strings.count("count.groups", indices.count))
         var body = String(
             format: Strings.string("similar.confirmShown.body"),
             plan.items.count, ByteSize.format(bytes))
@@ -554,54 +663,69 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         alert.addButton(withTitle: Strings.string("button.cancel"))
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            MainActor.assumeIsolated {
-                // One undo step for the whole batch: accepting 2,106 pairs and undoing them one at a time would
-                // not be an undo.
-                self.mutate { $0.confirmAll(indices) }
-            }
+            MainActor.assumeIsolated { self.accept(indices) }
         }
     }
 
-    @objc private func decisionChosen(_ sender: Any?) {
-        guard let button = sender as? NSButton,
-            SimilarPairWindowController.decisionOrder.indices.contains(button.tag),
-            pairs.indices.contains(selectedRow)
-        else { return }
-        let decision = SimilarPairWindowController.decisionOrder[button.tag]
-        guard let index = scanIndex(forRow: selectedRow) else { return }
-        // **Through `mutate`, like a skip.** This changed `review` directly, so nothing was registered: ⌘Z after a
-        // decision did nothing, and undoing a later skip restored a snapshot from before every decision made in
-        // between -- and wrote it. `mutate` also saves as it goes and rebuilds the list, which is what removes a
-        // decided pair when "not decided yet" is on.
-        let advancing = !filter.onlyUndecided
-        mutate { state in
-            state.go(to: index)
-            state.confirm(decision)
+    /// One undo step for the whole batch: accepting 800 groups and undoing them one at a time would not be an undo.
+    private func accept(_ indices: [Int]) {
+        mutate { $0.confirmGroups(indices) }
+    }
+
+    /// Records the keep set on screen and moves on. The Group menu's Confirm (⌘↩) arrives here too.
+    @objc func confirmGroup(_ sender: Any?) {
+        guard let index = selectedGroup else { return }
+        var outcome: SimilarReviewState.GroupConfirmOutcome = .noSuchGroup
+        mutate { outcome = $0.confirmGroup(index) }
+        switch outcome {
+        case .confirmed: advance(from: index)
+        // The warning line already names the file; the beep says the button heard the click and declined.
+        case .nothingKept, .unmatched, .noSuchGroup: NSSound.beep()
         }
-        if advancing { advanceSelection() }
     }
 
-    @objc private func skipPair(_ sender: Any?) {
-        guard pairs.indices.contains(selectedRow) else { return }
-        guard let index = scanIndex(forRow: selectedRow) else { return }
-        let advancing = !filter.onlyUndecided
-        mutate { state in
-            state.go(to: index)
-            state.skip()
-        }
-        if advancing { advanceSelection() }
+    /// Keeps every member: nothing in the group moves.
+    @objc func keepAll(_ sender: Any?) {
+        guard let index = selectedGroup else { return }
+        let everyone = Set(review.groups[index].files.indices)
+        mutate { _ = $0.confirmGroup(index, keep: everyone) }
+        advance(from: index)
     }
 
-    private var allColumnIndexes: IndexSet {
-        IndexSet(integersIn: 0..<table.tableColumns.count)
+    /// Passes over the group without deciding it. The Group menu's Skip (⇧⌘K) arrives here too.
+    @objc func skipGroup(_ sender: Any?) {
+        guard let index = selectedGroup else { return }
+        mutate { $0.skipGroup(index) }
+        advance(from: index)
     }
 
-    /// Moves to the next pair, which is what makes deciding a rhythm rather than a click-and-hunt.
-    private func advanceSelection() {
-        let next = selectedRow + 1
-        guard pairs.indices.contains(next) else { return }
-        table.selectRowIndexes([next], byExtendingSelection: false)
-        table.scrollRowToVisible(next)
+    /// Checks or unchecks a member: the space bar, on the row selected in the list -- or on the right pane's file
+    /// when the group list has the focus.
+    private func toggle(member: Int?) {
+        guard let member else { return }
+        toggle(file: member)
+    }
+
+    private func toggle(file: Int) {
+        guard let index = selectedGroup else { return }
+        var accepted = true
+        mutate(saving: false) { accepted = $0.toggleKeep(file, inGroup: index) }
+        if !accepted { NSSound.beep() }
+    }
+
+    @objc private func keepCheckboxToggled(_ sender: NSButton) {
+        guard fileOrder.indices.contains(sender.tag) else { return }
+        toggle(file: fileOrder[sender.tag])
+    }
+
+    /// Moves to the next group, which is what makes deciding a rhythm rather than a click-and-hunt. With "not
+    /// decided yet" on, the decided group has already left the list and the selection moved with it.
+    private func advance(from index: Int) {
+        guard !filter.onlyUndecided, let row = visible.firstIndex(of: index) else { return }
+        let next = row + 1
+        guard visible.indices.contains(next) else { return }
+        groupTable.selectRowIndexes([next], byExtendingSelection: false)
+        groupTable.scrollRowToVisible(next)
     }
 
     /// Applies a change to the review and registers its inverse with the undo manager.
@@ -612,12 +736,12 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     ///
     /// **And the undo saves too.** Decisions here are written as they are made, so an undo that only changed memory
     /// would leave the file holding a decision the window no longer shows -- and the CLI reading it.
-    private func mutate(_ body: (inout SimilarReviewState) -> Void) {
+    private func mutate(saving: Bool = true, _ body: (inout SimilarReviewState) -> Void) {
         // **Grouped explicitly rather than by event, and never while undoing.** `UndoManager` groups every
         // registration made in one turn of the run loop, which is right for typing and wrong for a batch: accepting
-        // 2,106 pairs in one call would otherwise be indistinguishable from one decision. And opening a group
-        // inside `undo()` breaks the manager's own phase tracking, so the registration an undo makes lands back on
-        // the undo stack instead of the redo stack.
+        // 800 groups in one call would otherwise be indistinguishable from one decision. And opening a group inside
+        // `undo()` breaks the manager's own phase tracking, so the registration an undo makes lands back on the undo
+        // stack instead of the redo stack.
         let grouping = !undo.isUndoing && !undo.isRedoing
         if grouping { undo.beginUndoGrouping() }
         defer { if grouping { undo.endUndoGrouping() } }
@@ -630,8 +754,16 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         undo.registerUndo(withTarget: self) { controller in
             MainActor.assumeIsolated { controller.mutate { $0 = before } }
         }
-        saveDecisions()
-        rebuildVisible()
+        if saving { saveDecisions() }
+        if saving {
+            rebuildVisible()
+        } else {
+            // A toggle changes one group's keep set: the lists stay, the detail redraws on the same file.
+            groupTable.reloadData(
+                forRowIndexes: IndexSet(integer: groupTable.selectedRow),
+                columnIndexes: IndexSet(integersIn: 0..<groupTable.numberOfColumns))
+            refreshDetail(keepingCompared: true)
+        }
     }
 
     /// Writes what has been decided, and **only** what has been decided.
@@ -640,20 +772,21 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         do {
             _ = try ScanStore(state: stateDirectory).save(document, scanID: scan.scanID)
             savedCount = document.count
+            saveFailure = nil
         } catch {
             // Reported in the footer rather than in a sheet: losing a decision matters, and a modal over every
-            // click would make deciding 4,771 pairs impossible. The localized description: `String(describing:)` is
-            // the whole `NSError`, `UserInfo` and all, which no footer can show.
+            // click would make deciding hundreds of groups impossible. The localized description:
+            // `String(describing:)` is the whole `NSError`, `UserInfo` and all, which no footer can show.
             saveFailure = error.localizedDescription
         }
     }
 
     /// Asks, once, about a decisions file that covers every pair (#155).
     ///
-    /// The exact review always asked this and this viewer never did, though the CLI writes a decision for every
-    /// pair it was shown: 17 of the 18 perceptual decision files in this user's corpus cover every pair. Shown
-    /// as decided with no word, those marks read as the user's own and pressing Simulate plans over all of them.
-    /// Starting over here also clears the file, because this viewer saves every change -- which the text says.
+    /// The CLI writes a decision for every pair it was shown: 17 of the 18 perceptual decision files in this user's
+    /// corpus cover every pair. Shown as decided with no word, those marks read as the user's own and pressing
+    /// Simulate plans over all of them. Starting over here also clears the file, because this viewer saves every
+    /// change -- which the text says.
     func presentImportWarningIfNeeded() {
         guard provenance.deservesAWarning, let window else { return }
         let alert = NSAlert()
@@ -695,9 +828,9 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             stateDirectory: stateDirectory)
         sheet.onApplied = { [weak self] _ in
             // A file that moved is a file the panes must stop showing as if it were there.
-            self?.refreshDetail()
+            self?.refreshDetail(keepingCompared: true)
         }
-        sheet.onUndone = { [weak self] in self?.refreshDetail() }
+        sheet.onUndone = { [weak self] in self?.refreshDetail(keepingCompared: true) }
         applySheet = sheet
         if let window, let sheetWindow = sheet.window {
             window.beginSheet(sheetWindow) { [weak self] _ in self?.applySheet = nil }
@@ -707,32 +840,29 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func revealSelected(_ sender: Any?) {
-        guard let pair = selectedPair else { return }
-        Reveal.item(at: pair.fileA)
+        guard let index = selectedGroup, let reference else { return }
+        Reveal.item(at: review.groups[index].files[reference])
     }
 
-    /// Opens Quick Look on **both** sides of the pair, or closes it.
+    /// Opens Quick Look on **every member** of the group, best first, or closes it.
     ///
-    /// Both, in the window's own order, because the panel's arrow keys then become the comparison: this is the
-    /// full-size version of what the two panes are showing side by side, and a panel holding one of the two
-    /// would answer half the question.
+    /// Every member, because the panel's arrow keys then become the comparison: this is the full-size version of
+    /// what the panes show two at a time.
     @objc func toggleQuickLook(_ sender: Any?) {
         _ = quickLook.toggle(paths: quickLookPaths(), controller: self)
     }
 
     private func quickLookPaths() -> [String] {
-        guard let pair = selectedPair else { return [] }
-        return [pair.fileA, pair.fileB]
+        guard let index = selectedGroup else { return [] }
+        return fileOrder.map { review.groups[index].files[$0] }
     }
 
-    /// Shows both files in Finder.
+    /// Shows every member in Finder.
     ///
-    /// **Both, and that is the honest answer to an ambiguous request.** A pair has two files and the menu item
-    /// says "in Finder"; picking one silently would be picking for the user. Finder selects several items at
-    /// once, so this is one action, not a choice they did not ask to make.
+    /// **All of them, and that is the honest answer to an ambiguous request.** A group has several files and the
+    /// menu item says "in Finder"; picking one silently would be picking for the user.
     @objc func revealSelectedFile(_ sender: Any?) {
-        guard let pair = selectedPair else { return }
-        let urls = [pair.fileA, pair.fileB]
+        let urls = quickLookPaths()
             .filter { FileManager.default.fileExists(atPath: $0) }
             .map { URL(filePath: $0) }
         guard !urls.isEmpty else { return }
@@ -747,13 +877,15 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: - Selftest hooks
 
-    var pairRowCount: Int { table.numberOfRows }
+    var groupRowCount: Int { groupTable.numberOfRows }
     var headerText: String { headerLabel.stringValue }
+    var pairText: String { pairLabel.stringValue }
+    var warningText: String { warningLabel.isHidden ? "" : warningLabel.stringValue }
 
     var leftMetadataForSelftest: (text: String, hidden: Bool) { leftPane.metadataForSelftest }
     var rightMetadataForSelftest: (text: String, hidden: Bool) { rightPane.metadataForSelftest }
 
-    /// Waits for the media probe of the selected pair, so an assertion is not a race against a decode.
+    /// Waits for the media probe of the selected group, so an assertion is not a race against a decode.
     ///
     /// Waits for the **resolution**, not for any text: the size and the date come from a `stat` the pane does
     /// itself, so a wait on "not empty" returns immediately and asserts nothing about the probe.
@@ -775,6 +907,10 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     var adviceText: String { adviceLabel.stringValue }
     var tallyText: String { tallyLabel.stringValue }
     var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
+    var groupTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.groupTally }
+    var groupStatesForSelftest: [SimilarGroupState] {
+        review.groups.indices.map { review.groupState(at: $0) }
+    }
     var warnsAboutImportedForSelftest: Bool { provenance.deservesAWarning }
     func discardImportedForSelftest() { clearImportedDecisions() }
     var contradictionsForSelftest: [String] { review.contradictions }
@@ -784,63 +920,88 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     var applySheetForSelftest: SimilarApplySheetController? { applySheet }
 
     func simulateForSelftest() { simulateAndApply(nil) }
+    /// What the sheet would list, without opening one.
+    var applyPlanForSelftest: SimilarApplyPlan { SimilarApplyPlan.from(review) }
 
     var shownCountForSelftest: Int { visible.count }
     var countText: String { countLabel.stringValue }
+    var acceptShownButtonForSelftest: (title: String, enabled: Bool) {
+        (confirmShownButton.title, confirmShownButton.isEnabled)
+    }
 
     func setFilterForSelftest(minimumSimilarity: Double = 0, onlyUndecided: Bool = false) {
         filter = PairFilter(minimumSimilarity: minimumSimilarity, onlyUndecided: onlyUndecided)
         rebuildVisible()
     }
 
-    func confirmShownForSelftest() {
-        let indices = visible
-        mutate { $0.confirmAll(indices) }
-    }
+    /// What the accept button does once its sheet is answered. The sheet is modal and cannot be clicked from here,
+    /// so the groups come from the same property the button reads.
+    func confirmShownForSelftest() { accept(shownUndecidedGroups) }
 
     func undoForSelftest() { undo.undo() }
     var canUndoForSelftest: Bool { undo.canUndo }
 
-    func decideForSelftest(_ decision: SimilarDecision, row: Int) {
-        table.selectRowIndexes([row], byExtendingSelection: false)
-        guard let button = decisionButtons[decision] else { return }
-        decisionChosen(button)
-    }
-
-    func skipForSelftest(row: Int) {
-        table.selectRowIndexes([row], byExtendingSelection: false)
-        skipPair(nil)
-    }
-
-    func selectPairForSelftest(_ row: Int) {
-        guard pairs.indices.contains(row) else { return }
-        table.selectRowIndexes([row], byExtendingSelection: false)
+    func selectGroupForSelftest(_ row: Int) {
+        guard visible.indices.contains(row) else { return }
+        groupTable.selectRowIndexes([row], byExtendingSelection: false)
         refreshDetail()
     }
 
-    func cellTextForSelftest(row: Int, column: String) -> String? {
-        guard pairs.indices.contains(row) else { return nil }
-        let identifier = NSUserInterfaceItemIdentifier(column)
-        guard let tableColumn = table.tableColumns.first(where: { $0.identifier == identifier })
-        else { return nil }
-        return text(for: pairs[row], column: tableColumn)
+    /// The file list as drawn: each member's path and whether its box is checked.
+    var fileRowsForSelftest: [(path: String, kept: Bool)] {
+        guard let index = selectedGroup else { return [] }
+        let keep = review.effectiveKeep(inGroup: index)
+        return fileOrder.map { (review.groups[index].files[$0], keep.contains($0)) }
     }
 
-    private func text(for pair: SimilarPair, column: NSTableColumn) -> String {
-        switch column.identifier.rawValue {
-        case "similarity": return String(format: "%.2f%%", pair.similarity * 100)
+    /// Clicks the checkbox of a row, through the same action a real click sends.
+    func clickKeepForSelftest(row: Int) {
+        let probe = NSButton()
+        probe.tag = row
+        keepCheckboxToggled(probe)
+    }
+
+    func pressConfirmForSelftest() { confirmButton.performClick(nil) }
+
+    /// Selects a row of the file list the way a click or an arrow key does, delegate included.
+    func selectFileForSelftest(_ row: Int) {
+        guard fileOrder.indices.contains(row) else { return }
+        fileTable.selectRowIndexes([row], byExtendingSelection: false)
+        tableViewSelectionDidChange(
+            Notification(name: NSTableView.selectionDidChangeNotification, object: fileTable))
+    }
+
+    /// The space bar in the file list, through the closure the table calls.
+    func pressSpaceInFileListForSelftest() { fileTable.onToggle?() }
+
+    /// How many probes this window started. One per group: a file that cannot be read is not asked again.
+    var probeLaunchesForSelftest: Int { probeLaunches }
+    func pressSkipForSelftest() { skipButton.performClick(nil) }
+
+    private func groupText(for index: Int, column: String) -> String {
+        let group = review.groups[index]
+        switch column {
+        case "similarity":
+            // Two decimals, for the same reason as folders: 0.95 and 0.9473 are different answers and rounding
+            // both to 95% hides one of them. A range when the pairs disagree.
+            let low = String(format: "%.2f%%", group.lowestSimilarity * 100)
+            guard group.highestSimilarity != group.lowestSimilarity else { return low }
+            return low + "\u{2013}" + String(format: "%.2f%%", group.highestSimilarity * 100)
         case "kind":
             return Strings.string(
-                pair.mediaKind == .image ? "similar.kind.image" : "similar.kind.video")
-        case "a": return (pair.fileA as NSString).lastPathComponent
-        case "b": return (pair.fileB as NSString).lastPathComponent
+                group.mediaKind == .image ? "similar.kind.image" : "similar.kind.video")
+        case "files": return "\(group.files.count)"
+        case "name":
+            let best = review.rankedFiles(inGroup: index).first ?? 0
+            return (group.files[best] as NSString).lastPathComponent
         case "decision":
-            guard let row = pairs.firstIndex(of: pair), let index = scanIndex(forRow: row) else {
-                return ""
-            }
-            switch review.decision(at: index) {
-            case .decided(let decision): return SimilarAdviceText.label(for: decision)
+            switch review.groupState(at: index) {
+            case .decided(let keep):
+                return String(
+                    format: Strings.string("similar.group.state.keeps"), keep.count,
+                    group.files.count)
             case .skipped: return Strings.string("similar.state.skipped")
+            case .mixed: return Strings.string("similar.group.state.mixed")
             case .undecided: return Strings.string("similar.state.undecided")
             }
         default: return ""
@@ -849,19 +1010,68 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 }
 
 extension SimilarPairWindowController: NSTableViewDataSource, NSTableViewDelegate {
-    func numberOfRows(in tableView: NSTableView) -> Int { pairs.count }
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        tableView === fileTable ? fileOrder.count : visible.count
+    }
 
     func tableView(
         _ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int
     ) -> NSView? {
-        guard let tableColumn, pairs.indices.contains(row) else { return nil }
+        guard let tableColumn else { return nil }
         let identifier = tableColumn.identifier
-        let cell =
-            tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
+        if tableView === fileTable {
+            return fileCell(column: identifier.rawValue, row: row)
+        }
+        guard visible.indices.contains(row) else { return nil }
+        let cell = labelCell(in: tableView, identifier: identifier)
+        let index = visible[row]
+        cell.textField?.stringValue = groupText(for: index, column: identifier.rawValue)
+        cell.textField?.alignment = identifier.rawValue == "files" ? .right : .natural
+        cell.textField?.toolTip =
+            identifier.rawValue == "name"
+            ? review.groups[index].files.joined(separator: "\n") : nil
+        return cell
+    }
+
+    private func fileCell(column: String, row: Int) -> NSView? {
+        guard let index = selectedGroup, fileOrder.indices.contains(row) else { return nil }
+        let group = review.groups[index]
+        let member = fileOrder[row]
+        let keep = review.effectiveKeep(inGroup: index)
+        if column == "keep" {
+            let button =
+                fileTable.makeView(withIdentifier: .init("keep"), owner: self) as? NSButton
+                ?? {
+                    let created = NSButton(
+                        checkboxWithTitle: "", target: self,
+                        action: #selector(keepCheckboxToggled(_:)))
+                    created.identifier = .init("keep")
+                    return created
+                }()
+            button.state = keep.contains(member) ? .on : .off
+            button.tag = row
+            return button
+        }
+        let cell = labelCell(in: fileTable, identifier: .init(column))
+        let path = group.files[member]
+        cell.textField?.stringValue = (path as NSString).lastPathComponent
+        cell.textField?.toolTip = path
+        cell.textField?.textColor = keep.contains(member) ? .labelColor : .secondaryLabelColor
+        return cell
+    }
+
+    private func labelCell(
+        in tableView: NSTableView, identifier: NSUserInterfaceItemIdentifier
+    )
+        -> NSTableCellView
+    {
+        tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
             ?? {
                 let created = NSTableCellView()
                 created.identifier = identifier
                 let field = NSTextField(labelWithString: "")
+                // **Middle truncation.** Copies of one file share a long prefix and differ at the end -- `clip.mp4`
+                // against `clip (1).mp4` -- so cutting either end hides the one thing that tells them apart.
                 field.lineBreakMode = .byTruncatingMiddle
                 field.translatesAutoresizingMaskIntoConstraints = false
                 created.addSubview(field)
@@ -873,15 +1083,25 @@ extension SimilarPairWindowController: NSTableViewDataSource, NSTableViewDelegat
                 ])
                 return created
             }()
-        cell.textField?.stringValue = text(for: pairs[row], column: tableColumn)
-        cell.textField?.toolTip =
-            identifier.rawValue == "a"
-            ? pairs[row].fileA : (identifier.rawValue == "b" ? pairs[row].fileB : nil)
-        return cell
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        refreshDetail()
+        guard let table = notification.object as? NSTableView else { return }
+        if table === fileTable {
+            // A row is the file the space bar acts on, and the file to compare: the right pane follows it, unless
+            // it is the keeper already on the left. **The row stays selected even then**, or the keyboard could never
+            // reach the keeper to uncheck it (#219): the list used to bounce the selection back to the right pane's.
+            let row = fileTable.selectedRow
+            guard fileOrder.indices.contains(row), let index = selectedGroup else { return }
+            let member = fileOrder[row]
+            cursor = member
+            guard member != compared, member != reference else { return }
+            compared = member
+            showPanes(group: review.groups[index])
+            refreshAdvice(index: index)
+        } else {
+            refreshDetail()
+        }
     }
 }
 
@@ -925,7 +1145,6 @@ final class SimilarSidePane: NSView {
         // **No height-equals-width constraint.** One of those on a wide pane demanded 1,100 points of height,
         // pushed the rest of the layout off screen and made the window refuse to shrink -- a required
         // constraint is required. The image is scaled proportionally instead.
-        imageView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         imageView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
         nameLabel.font = .systemFont(ofSize: 12, weight: .medium)
@@ -941,7 +1160,15 @@ final class SimilarSidePane: NSView {
         metadataLabel.maximumNumberOfLines = 2
         for label in [nameLabel, pathLabel, stateLabel, metadataLabel] {
             label.lineBreakMode = .byTruncatingMiddle
-            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+        // **Nothing in a pane decides how wide the window is.** Below the priority `fittingSize` presses with, so
+        // the thumbnail and a full path give way to the window instead of setting its minimum. At `.defaultLow`
+        // each pane was as wide as its thumbnail -- 218 points, an image's pixels read as points -- and with the
+        // group's file list beside the panes (#217) the viewer demanded 728 points against the 720 it advertises.
+        let yielding = NSLayoutConstraint.Priority(
+            NSLayoutConstraint.Priority.fittingSizeCompression.rawValue - 1)
+        for view in [imageView, nameLabel, pathLabel, stateLabel, metadataLabel] as [NSView] {
+            view.setContentCompressionResistancePriority(yielding, for: .horizontal)
         }
 
         let stack = NSStackView(views: [

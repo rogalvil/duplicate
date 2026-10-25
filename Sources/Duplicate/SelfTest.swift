@@ -24,6 +24,9 @@ import Synchronization
 /// Output is English: this is developer-facing diagnostics, not user-facing UI.
 @MainActor
 enum SelfTest {
+    /// Set once ``run(arguments:)`` returns. Read by the exit guard in `main.swift`: an exit before this is a failure.
+    nonisolated(unsafe) static var hasFinished = false
+
     static func run(arguments: [String]) async -> Int32 {
         let mode = value(for: "--mode", in: arguments) ?? "all"
 
@@ -5004,15 +5007,18 @@ enum SelfTest {
             "the footer reads \(library.footerText) for two scans"
         )
 
-        // 4. The viewer shows both sides, and they are **different files**.
+        // 4. The viewer lists **groups**, one per set of alike files (#217), and shows two of a group side by side.
+        // Each group of this fixture is one pair, so the count cannot tell groups from pairs; step 7b can.
+        let groups = SimilarGrouping.groups(of: reloaded.pairs)
         let viewer = SimilarPairWindowController(scan: reloaded, stateDirectory: state)
         defer { viewer.window?.close() }
         try expect(
-            viewer.pairRowCount == reloaded.pairs.count,
-            "the viewer lists \(viewer.pairRowCount) of \(reloaded.pairs.count) pairs"
+            viewer.groupRowCount == groups.count,
+            "the viewer lists \(viewer.groupRowCount) rows for \(groups.count) groups"
         )
-        viewer.selectPairForSelftest(0)
-        try expect(!viewer.headerText.contains("similar.header"), "the header shows a key literal")
+        viewer.selectGroupForSelftest(0)
+        try expect(!viewer.headerText.contains("similar."), "the header shows a key literal")
+        try expect(!viewer.pairText.contains("similar."), "the pair line shows a key literal")
 
         // **How many frames a video verdict rests on.** The sampler's floor of 0.1 s puts some timestamps past
         // the end of a short clip: at half a second, four of the eight do not exist, and the CLI compares on the
@@ -5068,6 +5074,29 @@ enum SelfTest {
             "the line lost what it said across a toggle")
         print("  the panes name the size, the date and the resolution: \(probed)")
 
+        // **A probe that lands after the selection moved still keeps what it read** (#219). Its paths are marked as tried
+        // when it starts, and a newer probe's generation made it drop its answer, so the clips' resolution, codec and
+        // duration never arrived -- and their suggestion never used them. The video group goes first, so opening the
+        // window starts its probe and selecting the images starts a newer one before it answers.
+        // Teeth: return before storing the facts when the probe is not the newest, and the resolution never arrives.
+        let videoFirst = SimilarScan(
+            scanID: "20260813-180000-000000", root: tree, createdAt: "t", imageThreshold: 5,
+            videoThreshold: 0.7,
+            pairs: reloaded.pairs.filter { $0.mediaKind == .video }
+                + reloaded.pairs.filter { $0.mediaKind == .image })
+        let switcherState = StateDirectory(
+            environment: ["XDG_STATE_HOME": root + "/switch-state"], homePath: root)
+        let switcher = SimilarPairWindowController(scan: videoFirst, stateDirectory: switcherState)
+        defer { switcher.window?.close() }
+        switcher.selectGroupForSelftest(1)
+        await switcher.awaitFactsForSelftest()
+        try? await Task.sleep(for: .milliseconds(1500))
+        switcher.selectGroupForSelftest(0)
+        try expect(
+            switcher.leftMetadataForSelftest.text.contains("\u{00D7}"),
+            "the clips' probe was overtaken and its answer lost: \(switcher.leftMetadataForSelftest.text)"
+        )
+
         // **Quick Look and Reveal, the two things this viewer could not do.** A thumbnail capped at 280 points
         // is enough to tell two photographs apart and not always enough to decide between them -- the difference
         // the detector found can be finer than the picture it draws -- and until now there was no way to look
@@ -5076,11 +5105,15 @@ enum SelfTest {
         // mode and assert against a window it does not own.
         //
         // Teeth: return `[]` from `quickLookPaths` and both fail; hand it one side of the pair and the count does.
+        //
+        // Teeth: return `[]` from `quickLookPaths` and both fail; hand it the two panes and a larger group would not.
         let looked = viewer.quickLookPathsForSelftest
-        try expect(looked.count == 2, "Quick Look would show \(looked.count) of the pair's 2 files")
         try expect(
-            reloaded.pairs.contains { Set([$0.fileA, $0.fileB]) == Set(looked) },
-            "Quick Look would show \(looked), which is not any pair in the scan")
+            looked.count == groups[0].files.count,
+            "Quick Look would show \(looked.count) of the group's \(groups[0].files.count) files")
+        try expect(
+            Set(looked) == Set(groups[0].files),
+            "Quick Look would show \(looked), which is not the selected group")
 
         // And a decided pair whose key cannot be split back apart is reported, not written quietly. Measured, no
         // path in this corpus contains `||`, which is the argument for warning rather than trusting.
@@ -5097,18 +5130,21 @@ enum SelfTest {
             viewer.leftPaneText != viewer.rightPaneText,
             "both panes show \(viewer.leftPaneText)"
         )
-        // Row 0, whichever pair that is now -- both score 1.0 and the tie is broken by path bytes, so naming
-        // the image pair here would break again the next time a fixture is added.
-        let firstRow = try expectSome(reloaded.pairs.first, "no pairs at all")
-        try expect(viewer.leftPaneText == firstRow.fileA, "the left pane is not file_a")
-        try expect(viewer.rightPaneText == firstRow.fileB, "the right pane is not file_b")
+        // The two panes are two members of the selected group: the one it keeps on the left.
+        try expect(
+            Set([viewer.leftPaneText, viewer.rightPaneText]).isSubset(of: Set(groups[0].files)),
+            "the panes show \(viewer.leftPaneText) and \(viewer.rightPaneText), not group 0")
+        try expect(
+            viewer.fileRowsForSelftest.first { $0.kept }?.path == viewer.leftPaneText,
+            "the left pane is not the first file the group keeps")
 
-        // **Select by kind, not by index.** Three assertions in this mode assumed row 0 was an image pair, and
-        // all three broke the moment a video landed in the fixture -- the sort is by similarity, and both pairs
-        // are 1.0.
+        // **Select by kind, not by index.** Three assertions in this mode once assumed row 0 was an image, and all
+        // three broke the moment a video landed in the fixture.
         let imageRow = try expectSome(
-            reloaded.pairs.firstIndex { $0.mediaKind == .image }, "no image pair in the document")
-        viewer.selectPairForSelftest(imageRow)
+            groups.firstIndex { $0.mediaKind == .image }, "no image group in the document")
+        let videoRow = try expectSome(
+            groups.firstIndex { $0.mediaKind == .video }, "no video group in the document")
+        viewer.selectGroupForSelftest(imageRow)
         try expect(!viewer.footerText.isEmpty, "the footer is empty")
 
         // 5. A second document appearing on disk reaches the table **without anyone asking it to**.
@@ -5125,11 +5161,11 @@ enum SelfTest {
             until: { library.similarRowCount == 3 },
             what: "the watcher to notice a third perceptual scan")
 
-        // 6. The header states the right quantity for the kind, and a missing file says so.
+        // 6. The pair line states the right quantity for the kind, and a missing file says so.
         // Teeth: use the image header for a video pair and this fails naming the bits.
         try expect(
-            viewer.headerText.contains("64"),
-            "an image pair's header does not mention the 64 bits: \(viewer.headerText)"
+            viewer.pairText.contains("64"),
+            "an image pair's line does not mention the 64 bits: \(viewer.pairText)"
         )
         let videoScan = SimilarScan(
             scanID: instant.identifier, root: tree, createdAt: instant.timestamp,
@@ -5142,12 +5178,12 @@ enum SelfTest {
         )
         let videoViewer = SimilarPairWindowController(scan: videoScan, stateDirectory: state)
         defer { videoViewer.window?.close() }
-        videoViewer.selectPairForSelftest(0)
+        videoViewer.selectGroupForSelftest(0)
         // A video similarity is a fraction of sampled frames. There is no 64-bit distance behind it, and
         // printing one would state a measurement that was never taken.
         try expect(
-            !videoViewer.headerText.contains("64"),
-            "a video pair's header claims a bit distance: \(videoViewer.headerText)"
+            !videoViewer.pairText.isEmpty && !videoViewer.pairText.contains("64"),
+            "a video pair's line claims a bit distance: \(videoViewer.pairText)"
         )
         // And a file that is gone is named as gone rather than left as a blank rectangle -- measured on the
         // real corpus, one side of the very first pair no longer exists.
@@ -5155,26 +5191,39 @@ enum SelfTest {
             !videoViewer.leftStateForSelftest.isEmpty,
             "a missing file's pane says nothing"
         )
+        // **And a file that cannot be read is asked once** (#219). Only an answer was remembered, so the probe's own
+        // redraw asked again for the two missing clips, forever, rebuilding the tables each time.
+        // Teeth: probe the files without facts instead of the files not tried, and the count climbs.
+        try? await Task.sleep(for: .milliseconds(500))
+        try expect(
+            videoViewer.probeLaunchesForSelftest == 1,
+            "the viewer started \(videoViewer.probeLaunchesForSelftest) probes over two missing files"
+        )
 
-        // 7. Deciding from the window writes only what was decided, and the suggestion is not a decision.
-        // Teeth: have `decisionChosen` confirm every pair and the tally reads 2 decided instead of 1.
+        // 7. Confirming writes only the group on screen, and the suggestion is not a decision.
+        // Teeth: have `confirmGroup` confirm every group and the tally reads 2 decided instead of 1.
         try expect(
             viewer.reviewTallyForSelftest.decided == 0,
             "\(viewer.reviewTallyForSelftest.decided) pairs were decided before anyone clicked")
         try expect(
-            !viewer.adviceText.isEmpty, "the advice line is empty for an undecided pair")
-        viewer.decideForSelftest(.keepA, row: imageRow)
+            !viewer.adviceText.isEmpty, "the advice line is empty for an undecided group")
+        let imagePair = reloaded.pairs[groups[imageRow].pairIndices[0]]
+        let shownKept = viewer.fileRowsForSelftest.filter(\.kept).map(\.path)
+        try expect(shownKept.count == 1, "a group of two copies suggests keeping \(shownKept)")
+        let keptPath = shownKept[0]
+        viewer.pressConfirmForSelftest()
         try expect(
-            viewer.reviewTallyForSelftest.decided == 1,
-            "after one click the tally reads \(viewer.reviewTallyForSelftest)")
+            viewer.groupTallyForSelftest == (decided: 1, skipped: 0, undecided: 1),
+            "after one click the groups read \(viewer.groupTallyForSelftest)")
 
         let savedDecisions = try store.loadSimilarDecisions(scanID: reloaded.scanID)
         try expect(
             savedDecisions.count == 1,
-            "\(savedDecisions.count) decisions on disk after deciding one pair")
+            "\(savedDecisions.count) decisions on disk after deciding one group of one pair")
         try expect(
-            savedDecisions.byKey[SimilarPairKey.key(for: reloaded.pairs[imageRow])] == .keepA,
-            "the decision on disk is not the one that was clicked")
+            savedDecisions.byKey[SimilarPairKey.key(for: imagePair)]
+                == (keptPath == imagePair.fileA ? .keepA : .keepB),
+            "the decision on disk does not keep the file that was checked, \(keptPath)")
 
         // **And ⌘Z takes that decision back** (#147), on screen and in the file. The undo further down is of a skip,
         // which was always registered; a decision bypassed `mutate` and registered nothing, so that check passed
@@ -5188,21 +5237,152 @@ enum SelfTest {
         try expect(
             try store.loadSimilarDecisions(scanID: reloaded.scanID).count == 0,
             "⌘Z took the decision off the screen and left it in the file")
-        viewer.decideForSelftest(.keepA, row: imageRow)
+        viewer.selectGroupForSelftest(imageRow)
+        viewer.pressConfirmForSelftest()
 
         // Skipping records neither, so "passed over" and "never seen" stay different.
-        let otherRow = imageRow == 0 ? 1 : 0
-        viewer.skipForSelftest(row: otherRow)
+        viewer.selectGroupForSelftest(videoRow)
+        viewer.pressSkipForSelftest()
+        try expect(
+            viewer.groupTallyForSelftest == (decided: 1, skipped: 1, undecided: 0),
+            "the groups after a skip read \(viewer.groupTallyForSelftest)")
         try expect(
             viewer.reviewTallyForSelftest == (decided: 1, skipped: 1, undecided: 0),
-            "the tally after a skip is \(viewer.reviewTallyForSelftest)")
+            "the pairs after a skip read \(viewer.reviewTallyForSelftest)")
         try expect(
             try store.loadSimilarDecisions(scanID: reloaded.scanID).count == 1,
             "a skip reached the decisions file")
 
+        // 7b. **Three copies are one decision** (#217) -- the case pairs could not decide. Keeping A over B and over C
+        // left B against C, where keeping either contradicted the first two, and the apply then left both alone.
+        // Teeth: write only the first link in `confirmGroup` and the file holds 1 key instead of 3.
+        let copies = root + "/copies"
+        try FileManager.default.createDirectory(atPath: copies, withIntermediateDirectories: true)
+        var copyPaths: [String] = []
+        for (name, quality) in [
+            ("toma.jpg", 0.95), ("toma copia.jpg", 0.9), ("toma (1).jpg", 0.85),
+        ] {
+            copyPaths.append(
+                try SyntheticImage.write(
+                    .rampWithCorner, width: 96, height: 96, format: .jpeg(quality: quality),
+                    to: copies + "/" + name))
+        }
+        let ordered = PathOrder.sorted(copyPaths)
+        func alike(_ a: Int, _ b: Int, _ similarity: Double = 1.0) -> SimilarPair {
+            SimilarPair(
+                fileA: ordered[a], fileB: ordered[b], similarity: similarity, mediaKind: .image)
+        }
+        let threeScan = SimilarScan(
+            scanID: "20260813-160000-000000", root: copies, createdAt: "t", imageThreshold: 5,
+            videoThreshold: 0.7, pairs: [alike(0, 1), alike(0, 2), alike(1, 2)])
+        let threeState = StateDirectory(
+            environment: ["XDG_STATE_HOME": root + "/three-state"], homePath: root)
+        let threeStore = ScanStore(state: threeState)
+        try threeStore.save(threeScan)
+        let three = SimilarPairWindowController(scan: threeScan, stateDirectory: threeState)
+        defer { three.window?.close() }
+        try expect(
+            three.groupRowCount == 1, "three copies are \(three.groupRowCount) rows, not one group")
+        three.selectGroupForSelftest(0)
+        await three.awaitFactsForSelftest()
+        try expect(
+            three.fileRowsForSelftest.count == 3,
+            "the group lists \(three.fileRowsForSelftest.count) of its 3 files")
+        let suggested = three.fileRowsForSelftest.filter(\.kept).map(\.path)
+        try expect(
+            suggested == [copies + "/toma.jpg"],
+            "the group suggests keeping \(suggested), not the one file that is not named as a copy")
+        three.pressConfirmForSelftest()
+        let threeSaved = try threeStore.loadSimilarDecisions(scanID: threeScan.scanID)
+        try expect(
+            threeSaved.count == 3, "confirming the group wrote \(threeSaved.count) of its 3 keys")
+        try expect(
+            three.contradictionsForSelftest.isEmpty,
+            "a confirmed group contradicts itself over \(three.contradictionsForSelftest)")
+        // **And each file that goes is checked against the one that stays.** The pair between the two copies is
+        // "discard both"; planned from that pair, the second copy would be verified against the first, find it
+        // already in the Trash, and be refused.
+        // Teeth: drop the counterpart preference from `SimilarApplyPlan.from` and one line reads "also goes".
+        let threeListing = SimilarApplySheetController.listing(for: three.applyPlanForSelftest)
+        let staysLine = String(
+            format: Strings.string("similar.apply.stays"), copies + "/toma.jpg")
+        try expect(
+            threeListing.components(separatedBy: staysLine).count - 1 == 2,
+            "the two copies are not both checked against the file that stays: \(threeListing)")
+
+        // A second box checked keeps two files, and the pair between them says so.
+        // Teeth: ignore `pendingKeep` in `effectiveKeep` and the click changes nothing.
+        three.undoForSelftest()
+        three.selectGroupForSelftest(0)
+        let unchecked = try expectSome(
+            three.fileRowsForSelftest.firstIndex { !$0.kept }, "every file is already kept")
+        three.clickKeepForSelftest(row: unchecked)
+        try expect(
+            three.fileRowsForSelftest.count(where: \.kept) == 2,
+            "a click on a box left \(three.fileRowsForSelftest.count(where: \.kept)) files kept")
+        three.pressConfirmForSelftest()
+        try expect(
+            try threeStore.loadSimilarDecisions(scanID: threeScan.scanID).byKey.values
+                .count(where: { $0 == .keepBoth }) == 1,
+            "keeping two of three copies did not save keep_both for the pair between them")
+
+        // **The keyboard reaches the keeper** (#219). The list bounced a selection on the left pane's file back to the
+        // right pane's, so the space bar could only toggle the other file and replacing a keeper took the mouse.
+        // Teeth: put the bounce back in `tableViewSelectionDidChange` and the keeper stays checked.
+        three.selectGroupForSelftest(0)
+        let keeperPath = three.leftPaneText
+        let keeperRow = try expectSome(
+            three.fileRowsForSelftest.firstIndex { $0.path == keeperPath },
+            "the left pane's file is not in the list")
+        three.selectFileForSelftest(keeperRow)
+        three.pressSpaceInFileListForSelftest()
+        try expect(
+            three.fileRowsForSelftest.first { $0.path == keeperPath }?.kept == false,
+            "the space bar on the keeper's row left \(keeperPath) checked")
+
+        // **A chain refuses to discard a file alike to nothing it keeps.** A~B and B~C, keeping only C: A would go
+        // on the strength of B, which goes too, and the apply would have nothing that stays to check A against.
+        // Teeth: drop the `unmatched` guard from `confirmGroup` and the file holds two keys.
+        let chainScan = SimilarScan(
+            scanID: "20260813-170000-000000", root: copies, createdAt: "t", imageThreshold: 5,
+            videoThreshold: 0.7, pairs: [alike(0, 1, 0.95), alike(1, 2, 0.95)])
+        let chainState = StateDirectory(
+            environment: ["XDG_STATE_HOME": root + "/chain-state"], homePath: root)
+        let chainStore = ScanStore(state: chainState)
+        try chainStore.save(chainScan)
+        let chain = SimilarPairWindowController(scan: chainScan, stateDirectory: chainState)
+        defer { chain.window?.close() }
+        chain.selectGroupForSelftest(0)
+        try expect(
+            chain.warningText == Strings.string("similar.group.chained"),
+            "a chain does not say that its files are not all alike: '\(chain.warningText)'")
+        let lastFile = ordered[2]
+        if let row = chain.fileRowsForSelftest.firstIndex(where: { $0.path == lastFile && !$0.kept }
+        ) {
+            chain.clickKeepForSelftest(row: row)
+        }
+        for (row, entry) in chain.fileRowsForSelftest.enumerated()
+        where entry.kept && entry.path != lastFile {
+            chain.clickKeepForSelftest(row: row)
+        }
+        try expect(
+            chain.fileRowsForSelftest.filter(\.kept).map(\.path) == [lastFile],
+            "the chain keeps \(chain.fileRowsForSelftest.filter(\.kept).map(\.path)) instead of only the last file"
+        )
+        try expect(
+            chain.warningText.contains((ordered[0] as NSString).lastPathComponent),
+            "the warning does not name the file nothing kept is alike to: '\(chain.warningText)'")
+        chain.pressConfirmForSelftest()
+        try expect(
+            try chainStore.loadSimilarDecisions(scanID: chainScan.scanID).count == 0,
+            "an unsafe keep set was saved")
+        try expect(
+            chain.groupStatesForSelftest == [.undecided],
+            "the refused group reads \(chain.groupStatesForSelftest)")
+
         // 8. Narrowing, and accepting only what is shown.
-        // Teeth: have `confirmShown` pass every index instead of the visible ones and the untouched pair below
-        // comes back decided.
+        // Teeth: have `shownUndecidedGroups` return every group instead of the visible ones and the impossible filter
+        // below decides the untouched group.
         // ⌘Z takes a decision back, on disk as well as on screen.
         //
         // **One step, not a stack, and that is what a harness can honestly check.** `UndoManager` groups by turns
@@ -5223,7 +5403,8 @@ enum SelfTest {
                 == viewer.reviewTallyForSelftest.decided,
             "the decisions file holds a different number of decisions than the window shows")
         // Put the decision back, so the sheet below has something to plan.
-        viewer.decideForSelftest(.keepA, row: imageRow)
+        viewer.selectGroupForSelftest(imageRow)
+        viewer.pressConfirmForSelftest()
 
         // A second window over the same scan, which also exercises rehydration: the one decision saved above
         // comes back decided and the pair that was only skipped comes back undecided, because a skip is not
@@ -5236,15 +5417,15 @@ enum SelfTest {
 
         batch.setFilterForSelftest(minimumSimilarity: 1.0)
         try expect(
-            batch.shownCountForSelftest == reloaded.pairs.count(where: { $0.similarity >= 1.0 }),
-            "the 100% filter shows \(batch.shownCountForSelftest) of \(reloaded.pairCount)")
+            batch.shownCountForSelftest == groups.count(where: { $0.lowestSimilarity >= 1.0 }),
+            "the 100% filter shows \(batch.shownCountForSelftest) of \(groups.count) groups")
         try expect(
-            batch.countText.contains("\(reloaded.pairCount)"),
-            "the count line does not say how many pairs there are: \(batch.countText)")
+            batch.countText.contains(Strings.count("count.groups", groups.count)),
+            "the count line does not say how many groups there are: \(batch.countText)")
 
-        // **A filter that hides a pair must not decide it.**
+        // **A filter that hides a group must not decide it.**
         batch.setFilterForSelftest(minimumSimilarity: 2.0)
-        try expect(batch.shownCountForSelftest == 0, "an impossible filter still shows pairs")
+        try expect(batch.shownCountForSelftest == 0, "an impossible filter still shows groups")
         batch.confirmShownForSelftest()
         try expect(
             batch.reviewTallyForSelftest.decided == 1,
@@ -5254,6 +5435,12 @@ enum SelfTest {
         batch.setFilterForSelftest(onlyUndecided: true)
         let undecidedShown = batch.shownCountForSelftest
         try expect(undecidedShown >= 1, "nothing was left undecided to accept")
+        // The button counts the groups it would accept, from the table this process serves.
+        try expect(
+            batch.acceptShownButtonForSelftest
+                == (String(format: Strings.string("review.acceptShown"), undecidedShown), true),
+            "the accept button reads \(batch.acceptShownButtonForSelftest) over \(undecidedShown) groups"
+        )
         batch.confirmShownForSelftest()
         try expect(
             batch.reviewTallyForSelftest.undecided == 0,
@@ -5286,7 +5473,7 @@ enum SelfTest {
         try expect(
             sheet.listText.contains(
                 String(
-                    format: Strings.string("similar.apply.stays"), reloaded.pairs[imageRow].fileA)),
+                    format: Strings.string("similar.apply.stays"), keptPath)),
             "the sheet does not name the file that stays: \(sheet.listText)")
         // After "discard both" the other file goes too, and saying it stays would be a lie about the one decision
         // that removes two files. Another decision keeping one of them makes it stay again.
@@ -5352,12 +5539,12 @@ enum SelfTest {
             "  a perceptual scan of 3 images and 2 clips: \(reloaded.pairCount) pairs "
                 + "(\(reloaded.pairCount(of: .image)) image, \(reloaded.pairCount(of: .video)) video), "
                 + "\(result.classCount) hash classes, \(result.examinedPairs) class pairs examined")
-        print("  the library lists it and the viewer shows two different files side by side")
+        print("  the library lists it and the viewer shows two files of a group side by side")
         print(
-            "  one click decided one pair and wrote one key; a skip wrote none")
+            "  one click decided one group and wrote its key; a skip wrote none")
         print("  the sheet simulates what would move and says every pair is re-checked first")
         print(
-            "  narrowing decided nothing; accepting \(undecidedShown) shown pairs wrote exactly those"
+            "  narrowing decided nothing; accepting \(undecidedShown) shown groups wrote exactly those"
         )
 
         // **A decisions file covering every pair is questioned, as the exact review always did** (#155). The CLI
@@ -5440,7 +5627,10 @@ enum SelfTest {
             try? FileManager.default.setAttributes(
                 [.posixPermissions: 0o755], ofItemAtPath: similarDecisionsDirectory)
         }
-        viewer.decideForSelftest(.keepB, row: imageRow)
+        // The action itself, not a click: the viewer still carries the sheet from step 9, and a `performClick` on a
+        // window with a sheet attached ends the process (see `hasFinished`).
+        viewer.selectGroupForSelftest(imageRow)
+        viewer.keepAll(nil)
         try expect(
             viewer.footerText.hasPrefix(Strings.string("review.saveFailed.title")),
             "a failed save is not at the start of the footer, where truncation cannot hide it: \(viewer.footerText)"

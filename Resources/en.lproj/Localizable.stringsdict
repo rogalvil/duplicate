@@ -786,26 +786,10 @@
 			<string>Accept the %d undecided</string>
 		</dict>
 	</dict>
-	<key>similar.confirmShown</key>
-	<dict>
-		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@</string>
-		<key>n</key>
-		<dict>
-			<key>NSStringFormatSpecTypeKey</key>
-			<string>NSStringPluralRuleType</string>
-			<key>NSStringFormatValueTypeKey</key>
-			<string>d</string>
-			<key>one</key>
-			<string>Accept the 1 shown</string>
-			<key>other</key>
-			<string>Accept the %d shown</string>
-		</dict>
-	</dict>
 	<key>similar.confirmShown.body</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ when you apply: %2$@. Nothing moves now, and the pairs outside the filter stay undecided.</string>
+		<string>%#@n@ when you apply: %2$@. Nothing moves now, and the groups outside the filter stay undecided.</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
