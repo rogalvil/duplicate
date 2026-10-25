@@ -313,6 +313,23 @@ struct SimilarApplyRunnerTests {
     private let instant = ScanIdentifier.Instant(
         year: 2026, month: 8, day: 18, hour: 12, minute: 0, second: 0, microsecond: 0)
 
+    /// A file the Trash refused lands in quarantine, and the report counts it, so the sheet can say where.
+    @Test("A file moved to quarantine is counted as quarantined")
+    func countsQuarantined() async throws {
+        let scratch = try ApplyScratch()
+        defer { scratch.remove() }
+        let a = try scratch.image("a.png", .rampWithCorner)
+        let b = try scratch.image("b.png", .rampWithCorner)
+        var review = SimilarReviewState(scan: scan([pair(a, b)], root: scratch.tree))
+        review.confirm(.keepA)
+        let report = try await SimilarApplyRunner(state: scratch.state).run(
+            SimilarApplyPlan.from(review), sessionID: instant.identifier, instant: instant,
+            disposer: QuarantineDisposer(
+                root: scratch.root + "/quarantine", sessionID: instant.identifier))
+        #expect(report.moved.count == 1)
+        #expect(report.quarantinedCount == 1)
+    }
+
     /// **What cannot be recorded is not moved** (#175), for the reason the exact runner gives.
     @Test("A journal that cannot be written moves nothing")
     func refusesWithoutAJournal() async throws {

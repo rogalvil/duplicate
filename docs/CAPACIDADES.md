@@ -186,7 +186,7 @@ Una hoja por detector, con la misma forma:
 | Qué verifica antes de mover | re-hash contra el digest del escaneo | **contención**: cada archivo con gemelo byte-idéntico en la misma ruta relativa | **re-puntúa** el par contra el umbral |
 | Qué excluye y nombra | — | pares anidados colapsados, contradicciones | contradicciones |
 | Durante | Verifying / Moving N of N, Stop | igual, más archivos revisados | igual |
-| Después | movidos, fallas, rehúsas, aviso de cuarentena | igual, sin aviso de cuarentena | igual, sin aviso de cuarentena |
+| Después | movidos, fallas, rehúsas, aviso de cuarentena | igual | igual |
 | Deshacer desde la hoja | Undo This Session | igual | igual |
 
 En los tres: aplicar exige una simulación **vigente** (editar una decisión la invalida); va a la Papelera real,
@@ -236,11 +236,11 @@ tocar cualquiera de los tres.
 | Doble clic | revela el archivo | abre A | revela **solo A** (⌘R revela los dos) |
 | Guardar | ⌘S, al simular, al cerrar; **sin decisiones no escribe**, así que el archivo anterior sobrevive | automático, escribe vacío a propósito, **una falla no se ve** | automático, la falla sale en el pie |
 | Agrupa el deshacer a mano | **no** (por evento) | sí | sí |
-| Avisa decisiones importadas del CLI | sí | no | **no** — y 17 de 18 `similar-decisions` reales vienen completas del CLI |
+| Avisa decisiones importadas del CLI | sí | no hace falta: el CLI nunca escribe `folder-decisions` | sí (17 de 18 `similar-decisions` reales vienen completas del CLI) |
 | Pregunta al cerrar | sí | no | no (sí avisa contradicciones) |
 | Simular | botón y ⇧⌘D | botón | botón |
 | ⌘Q protegido durante el apply | sí, por la hoja | sí, por la hoja | sí, por la hoja |
-| Nota de cuarentena tras el apply | sí | **no** | **no** |
+| Nota de cuarentena tras el apply | sí | sí | sí |
 | Biblioteca: ordenar, filtrar, badge "Reviewed" | sí | **no** | **no** |
 | Biblioteca: menú contextual | sí | sí | sí |
 | Aviso de carpetas sin permiso al escanear | sí | sí | sí |
@@ -366,7 +366,7 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p3 | #155 | El aviso de decisiones importadas y la nota de cuarentena solo existen en el exacto |
+| p1 | #180 | Las hojas de aplicar no muestran su lista de archivos: el `NSTextView` mide 0 de ancho, como el detalle de #135 |
 | p3 | #156 | Undo the Last Session elige la sesión más nueva aunque ya esté devuelta |
 | p3 | #157 | Lógica de Core que solo prueba el selftest, contra la regla de que todo Core lleva su test: la exclusión de `~/Library`, la fase `.grouping`, `HashCache.loadAndRepair`, las etapas y la cancelación del apply de carpetas |
 | p3 | #158 | Use the hash cache no tiene efecto en parecidos |

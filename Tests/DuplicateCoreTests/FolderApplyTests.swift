@@ -247,6 +247,26 @@ struct FolderApplyPlanTests {
 @Suite("FolderApplyRunner")
 struct FolderApplyRunnerTests {
 
+    /// A folder the Trash refused lands in quarantine, and the report counts it, so the sheet can say where.
+    @Test("A folder moved to quarantine is counted as quarantined")
+    func countsQuarantined() async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        for folder in ["keep", "gone"] { try scratch.write("\(folder)/one.txt", "first") }
+        var review = FolderReviewState(
+            scan: folderScan(
+                [folderPair(scratch.tree + "/keep", scratch.tree + "/gone")], root: scratch.tree))
+        review.keep(scratch.tree + "/keep")
+        let report = try await FolderApplyRunner(
+            state: scratch.state, cacheURL: URL(filePath: scratch.root + "/hashes.v1")
+        ).run(
+            FolderApplyPlan.from(review), sessionID: noon.identifier, instant: noon,
+            disposer: QuarantineDisposer(
+                root: scratch.root + "/quarantine", sessionID: noon.identifier))
+        #expect(report.moved.count == 1)
+        #expect(report.quarantinedCount == 1)
+    }
+
     /// **What cannot be recorded is not moved** (#175), for the reason the exact runner gives.
     @Test("A journal that cannot be written moves no folder")
     func refusesWithoutAJournal() async throws {

@@ -25,6 +25,8 @@ public struct FolderDisposalReport: Sendable {
     public let journalPath: String?
 
     public var movedBytes: Int64 { moved.reduce(0) { $0 + $1.byteCount } }
+    /// Moved into quarantine because the Trash refused, so not where "Put Back" can find them.
+    public var quarantinedCount: Int { moved.filter { $0.mechanism == .quarantine }.count }
 }
 
 /// Moves the folders a review decided to remove, one at a time, proving first that nothing is lost.

@@ -38,6 +38,8 @@ public struct SimilarDisposalReport: Sendable {
     public let journalPath: String?
 
     public var movedBytes: Int64 { moved.reduce(0) { $0 + $1.byteCount } }
+    /// Moved into quarantine because the Trash refused, so not where "Put Back" can find them.
+    public var quarantinedCount: Int { moved.filter { $0.mechanism == .quarantine }.count }
 }
 
 /// Moves the files a perceptual review decided to remove, one at a time, verifying each first.

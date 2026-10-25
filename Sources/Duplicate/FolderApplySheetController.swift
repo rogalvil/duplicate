@@ -292,6 +292,13 @@ final class FolderApplySheetController: NSWindowController {
                 }
             }
             if result.stoppedEarly { lines.append(Strings.string("apply.done.stoppedEarly")) }
+            // Where the Trash refused: those are in quarantine, where Finder's "Put Back" cannot find them. Said
+            // only in the exact sheet until now (#155).
+            if result.quarantinedCount > 0 {
+                lines.append(
+                    String(
+                        format: Strings.string("apply.done.quarantined"), result.quarantinedCount))
+            }
             for outcome in result.moved.prefix(200) { lines.append(outcome.originalPath) }
             listView.string = lines.joined(separator: "\n")
 
@@ -382,6 +389,9 @@ final class FolderApplySheetController: NSWindowController {
     }
 
     func applyForSelftest() { applyNow(nil) }
+    /// Shows a report as the end of a run does, for a report a mode produced itself: the sheet's own apply goes
+    /// to the Trash first, and a test cannot make the Trash refuse.
+    func finishForSelftest(_ report: FolderDisposalReport) { finish(.success(report)) }
     func undoForSelftest() { undoNow(nil) }
 
     /// Waits for an undo started by ``undoForSelftest()``.

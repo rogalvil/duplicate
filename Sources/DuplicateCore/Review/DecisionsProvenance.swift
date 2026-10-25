@@ -58,9 +58,18 @@ public enum DecisionsProvenance: Sendable, Equatable {
         guard !priorDecisions.isEmpty, !scan.groups.isEmpty else { return .none }
         let keys = Set(scan.groups.map(\.key))
         let matching = priorDecisions.keys.filter { keys.contains($0) }.count
-        guard matching > 0 else { return .none }
-        return matching >= scan.groups.count
-            ? .coversEveryGroup(groups: scan.groups.count)
-            : .partial(decided: matching, groups: scan.groups.count)
+        return classify(decided: matching, total: scan.groups.count)
+    }
+
+    /// Classifies by count, for a review keyed by pair rather than by group.
+    ///
+    /// The perceptual viewer needs the same question asked: the CLI writes a decision for every pair it was
+    /// shown, and 17 of the 18 perceptual decision files in this user's corpus cover every pair of their scan.
+    /// The caller counts only decisions that match something in the scan, as the overload above does.
+    public static func classify(decided: Int, total: Int) -> DecisionsProvenance {
+        guard decided > 0, total > 0 else { return .none }
+        return decided >= total
+            ? .coversEveryGroup(groups: total)
+            : .partial(decided: decided, groups: total)
     }
 }
