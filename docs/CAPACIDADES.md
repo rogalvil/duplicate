@@ -175,9 +175,9 @@ Confirmar es lo que la vuelve decisión.
 | Filtros | arriba | % mínimo (any / 90 / 95 / identical) sobre el par **más débil** del grupo, tipo (imágenes, videos, ambos), "Not decided yet" (incluye los grupos sin cuadrar) |
 | Accept the N undecided | botón | Acepta la sugerencia de los grupos mostrados que nadie ha decidido, saltado ni dejado sin cuadrar, diciendo antes archivos y bytes |
 | Tabla de grupos | — | % parecido (rango si los pares difieren), tipo, archivos, decisión ("keeps 1 of 3", saltado, "conflicting"), mejor archivo |
-| Archivos del grupo | — | Casilla Keep por archivo, del mejor al peor; espacio alterna el seleccionado |
+| Archivos del grupo | — | Casilla Keep por archivo, del mejor al peor; espacio alterna el seleccionado; doble clic lo abre (#226) |
 | Aviso | — | Por prioridad: un archivo que no se parece a ninguno conservado, decisiones guardadas que no cuadran, un grupo encadenado |
-| Dos lados | — | El mejor archivo conservado contra el seleccionado: miniatura, nombre, ruta, metadata (tamaño, fecha, resolución, codec, duración) y "this file is no longer there" |
+| Dos lados | — | El mejor archivo conservado contra el seleccionado: miniatura, nombre, ruta, metadata (tamaño, fecha, resolución, codec, duración) y "this file is no longer there". Botones **Open** y **Show in Finder** por lado, apagados si el archivo ya no está (#226) |
 | Línea del par | — | Imagen: bits que difieren de 64. Video: % de cuadros que coinciden, y "judged on N of 8 frames" si son menos. Si los dos no son par: lo dice |
 | Sugerencia | — | "Suggested: keep … — razón", del par que se muestra. **Calidad antes que el nombre** (#223): consejo de video (tráiler, codec, bitrate), luego resolución y bytes, luego el nombre que parece copia, luego profundidad. «Accept the N undecided» pesa por tamaño en disco los grupos que nadie abrió |
 | Decidir | botones Confirm and Next (⏎, ⌘↩) / Keep All / Skip (⇧⌘K) | Graba, guarda y avanza. Rehúsa un conjunto que descartaría un archivo sin parecido entre los conservados |

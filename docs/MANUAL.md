@@ -163,7 +163,7 @@ Un escaneo de carpetas muestra pares de carpetas con casi el mismo contenido:
 Un escaneo de imágenes muestra **grupos**: todos los archivos que se parecen entre sí, juntos. Tres copias del mismo
 video son un grupo, y se deciden de una vez:
 
-![Imágenes parecidas](https://raw.githubusercontent.com/rogalvil/duplicate/b53f2523b8a4dc4b28f4df6e63071e56545c0be6/manual/similar-image-laptop-v2.png)
+![Imágenes parecidas](https://raw.githubusercontent.com/rogalvil/duplicate/09b3e2cd08301337165c14d92cb599f442a8f634/manual/similar-image-laptop-v3.png)
 
 - **Arriba**, filtros: qué tan parecidas, imágenes o videos o los dos, y **Sin decidir**. Con «idénticas», solo
   aparecen los grupos donde todos los archivos son iguales entre sí.
@@ -173,7 +173,8 @@ video son un grupo, y se deciden de una vez:
   marca una sugerencia, pero **una sugerencia no es una decisión** hasta que confirmas. La barra espaciadora marca o
   desmarca el archivo seleccionado.
 - **Los dos lados** comparan el mejor archivo que se conserva (izquierda) con el que seleccionas en la lista
-  (derecha). Debajo de cada uno, su tamaño, fecha, resolución y, en videos, codec y duración. La línea de abajo dice
+  (derecha). Debajo de cada uno, **Abrir** lo abre en su app (Vista Previa, QuickTime) y **Mostrar en Finder** lo
+  selecciona en su carpeta; un doble clic en un archivo de la lista también lo abre. Debajo de cada uno, su tamaño, fecha, resolución y, en videos, codec y duración. La línea de abajo dice
   cuánto se parecen esos dos: en imágenes, cuántos bits de 64 difieren; en videos, qué parte de los cuadros
   muestreados coinciden.
 - **Sugerido** dice cuál conviene conservar y por qué. **La calidad pesa primero**: un codec más eficiente, que uno
@@ -190,7 +191,7 @@ conservan, la app no confirma y te dice cuál es.
 
 Los videos se comparan por cuadros:
 
-![Videos parecidos](https://raw.githubusercontent.com/rogalvil/duplicate/a29d029c93a6e68ef5f532e916130bef26afadcd/manual/similar-video-laptop-v3.png)
+![Videos parecidos](https://raw.githubusercontent.com/rogalvil/duplicate/09b3e2cd08301337165c14d92cb599f442a8f634/manual/similar-video-laptop-v4.png)
 
 Las decisiones se guardan por par, el formato que también lee el CLI. Si un escaneo trae decisiones por par que no
 cuadran entre sí (de una versión anterior de la app, o del CLI), el grupo dice «sin cuadrar» y confirmarlo las

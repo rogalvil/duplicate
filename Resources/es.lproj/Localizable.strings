@@ -310,6 +310,7 @@
 "similar.header.video" = "%1$.2f%% de los cuadros muestreados coinciden";
 "similar.header.video.fewFrames" = "%1$.2f%% de los cuadros muestreados coinciden — juzgado con %2$d de %3$d cuadros";
 "similar.state.missing" = "Este archivo ya no existe.";
+"similar.pane.open" = "Abrir";
 "similar.decision.skip" = "Saltar";
 "similar.column.files" = "Archivos";
 "similar.column.keep" = "Conservar";
