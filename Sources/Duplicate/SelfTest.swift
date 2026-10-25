@@ -4733,6 +4733,10 @@ enum SelfTest {
             folderSheet.listText.contains(
                 String(format: Strings.string("apply.done.quarantined"), 1)),
             "the sheet does not say a folder went to quarantine: \(folderSheet.listText)")
+        // **A finished sheet offers nothing more to move** (#198): the exact sheet hid its button, this one left it.
+        // Teeth: drop `applyButton.isHidden = true` from this sheet's `finish` and this fails.
+        try expect(
+            folderSheet.isApplyHiddenForSelftest, "the finished sheet still shows its apply button")
 
         // **A decision that could not be saved says so** (#152). The save was a `try?`: with the decisions directory
         // read-only the window showed the pair decided and the file did not have it, and nothing on screen said so.
@@ -5361,6 +5365,10 @@ enum SelfTest {
         try expect(
             sheet.listText.contains(String(format: Strings.string("apply.done.quarantined"), 1)),
             "the sheet does not say a file went to quarantine: \(sheet.listText)")
+        // **A finished sheet offers nothing more to move** (#198): the exact sheet hid its button, this one left it.
+        // Teeth: drop `applyButton.isHidden = true` from this sheet's `finish` and this fails.
+        try expect(
+            sheet.isApplyHiddenForSelftest, "the finished sheet still shows its apply button")
 
         // **A decision that could not be saved says so, readably.** The footer carried `String(describing:)` of the
         // error -- the whole `NSError`, `UserInfo` and all -- and now carries the localized description after the
