@@ -186,6 +186,10 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
             scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
             detailScroll.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
             detailScroll.heightAnchor.constraint(equalToConstant: 150),
+            // **Pinned, or its width is ambiguous** (#211). A leading-aligned row may be anything from what its
+            // buttons need to the whole window, so AutoLayout kept whatever width it last had: shrunk and grown
+            // again, "Simulate and apply" stayed in the middle of the row, or outside the window.
+            decisionRow.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28),
         ])
         window.contentView = container
     }
