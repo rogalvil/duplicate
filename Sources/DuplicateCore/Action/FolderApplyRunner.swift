@@ -67,6 +67,8 @@ public struct FolderApplyRunner: Sendable {
         disposer: any ItemDisposing,
         onProgress: (@Sendable (ApplyProgress) -> Void)? = nil
     ) async throws -> FolderDisposalReport {
+        // Before anything moves: a run that cannot record where folders went must not move them.
+        try MoveJournal.ensureWritable(sessionID: sessionID, in: state)
         let cache = HashCache(url: cacheURL ?? HashCache.defaultURL())
         await cache.loadAndRepair()
 

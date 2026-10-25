@@ -85,6 +85,22 @@ public enum MoveJournal {
         )
     }
 
+    /// Fails unless a session's journal can be written, and is called **before anything moves**.
+    ///
+    /// The runners write the journal in batches after moving, so a journal that could not be written was found
+    /// out with up to 31 files already gone and no record of where (#175). The same rule as a digest that cannot
+    /// be computed: what cannot be recorded is not moved. Checked with `access` rather than by creating the file,
+    /// because an empty journal is a session the history would list and the pruner could never remove. A disk that
+    /// fills up during the run is still possible; a directory nobody can write to is not.
+    public static func ensureWritable(sessionID: String, in state: StateDirectory) throws {
+        try state.create(.journal)
+        let path = try state.filePath(for: .journal, id: sessionID, extension: "jsonl")
+        let target = FileManager.default.fileExists(atPath: path) ? path : state.path(for: .journal)
+        guard access(target, W_OK) == 0 else {
+            throw JournalError.cannotWrite(path: path, code: errno)
+        }
+    }
+
     /// Appends entries to a session's journal, creating it if needed.
     ///
     /// Appended one line at a time with `O_APPEND`, so a crash between entries truncates at a line

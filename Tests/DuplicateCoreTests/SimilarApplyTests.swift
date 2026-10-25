@@ -313,6 +313,32 @@ struct SimilarApplyRunnerTests {
     private let instant = ScanIdentifier.Instant(
         year: 2026, month: 8, day: 18, hour: 12, minute: 0, second: 0, microsecond: 0)
 
+    /// **What cannot be recorded is not moved** (#175), for the reason the exact runner gives.
+    @Test("A journal that cannot be written moves nothing")
+    func refusesWithoutAJournal() async throws {
+        let scratch = try ApplyScratch()
+        defer { scratch.remove() }
+        let a = try scratch.image("a.png", .rampWithCorner)
+        let b = try scratch.image("b.png", .rampWithCorner)
+        var review = SimilarReviewState(scan: scan([pair(a, b)], root: scratch.tree))
+        review.confirm(.keepA)
+        try scratch.state.create(.journal)
+        let journal = scratch.state.path(for: .journal)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: journal)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: journal)
+        }
+        let disposer = RecordingDisposer()
+
+        await #expect(throws: JournalError.self) {
+            try await SimilarApplyRunner(state: scratch.state).run(
+                SimilarApplyPlan.from(review), sessionID: instant.identifier, instant: instant,
+                disposer: disposer)
+        }
+        #expect(disposer.disposed.isEmpty)
+    }
+
     @Test("A verified item is moved and journalled")
     func movesAndJournals() async throws {
         let scratch = try ApplyScratch()

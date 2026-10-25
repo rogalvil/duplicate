@@ -247,6 +247,35 @@ struct FolderApplyPlanTests {
 @Suite("FolderApplyRunner")
 struct FolderApplyRunnerTests {
 
+    /// **What cannot be recorded is not moved** (#175), for the reason the exact runner gives.
+    @Test("A journal that cannot be written moves no folder")
+    func refusesWithoutAJournal() async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        for folder in ["keep", "gone"] { try scratch.write("\(folder)/one.txt", "first") }
+        var review = FolderReviewState(
+            scan: folderScan(
+                [folderPair(scratch.tree + "/keep", scratch.tree + "/gone")], root: scratch.tree))
+        review.keep(scratch.tree + "/keep")
+        try scratch.state.create(.journal)
+        let journal = scratch.state.path(for: .journal)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: journal)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: journal)
+        }
+        let disposer = RecordingDisposer()
+
+        await #expect(throws: JournalError.self) {
+            try await FolderApplyRunner(
+                state: scratch.state, cacheURL: URL(filePath: scratch.root + "/hashes.v1")
+            ).run(
+                FolderApplyPlan.from(review), sessionID: noon.identifier, instant: noon,
+                disposer: disposer)
+        }
+        #expect(disposer.disposed.isEmpty)
+    }
+
     @Test("A contained folder is moved and journalled with its manifest digest")
     func movesAContainedFolder() async throws {
         let scratch = try FolderScratch()
