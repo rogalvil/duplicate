@@ -70,6 +70,16 @@ public enum SessionHistory {
         }
     }
 
+    /// The newest session an undo still has something to put back in, or `nil` when there is none.
+    ///
+    /// "Undo the Last Session" took the newest journal whether or not it had already been put back, so after one
+    /// undo it offered the same session again and every file came back "already restored" (#156). Read from
+    /// ``rows(in:)``, the one reader of journals that the history and the pruner already share: two readers would
+    /// be two chances to disagree about whether a session is done.
+    public static func latestUndoable(in state: StateDirectory) -> String? {
+        rows(in: state).first { $0.hasWorkLeft }?.sessionID
+    }
+
     /// Reads every journal, newest session first. Never writes.
     public static func rows(in state: StateDirectory) -> [Row] {
         let manager = FileManager.default

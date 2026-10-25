@@ -6133,6 +6133,19 @@ enum SelfTest {
             prunable == ["20260812-100000-000000"],
             "prunable: \(prunable), wanted just the restored session")
 
+        // **"Undo the Last Session" skips what is already back** (#156). With the newer session undone too, there is
+        // nothing left to undo, and the menu has to say so instead of offering the newest journal again -- which put
+        // nothing back and reported every file "already restored".
+        // Teeth: have `latestSession` take the newest journal again and this returns the newer session.
+        try expect(
+            UndoCoordinator.latestSession(in: state) == "20260812-110000-000000",
+            "the session left to undo is \(UndoCoordinator.latestSession(in: state) ?? "none")")
+        _ = await history.undoForSelftest(0, cacheURL: URL(filePath: scratch + "/hashes.v1"))
+        try expect(
+            UndoCoordinator.latestSession(in: state) == nil,
+            "Undo the Last Session would offer \(UndoCoordinator.latestSession(in: state) ?? "none"), "
+                + "which is already back")
+
         print(
             "  2 sessions listed; the older one was undone from the window and the newer one kept its "
                 + "file and its undo")

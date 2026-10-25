@@ -74,6 +74,29 @@ struct JournalPrunerTests {
         #expect(survivor.restoredPaths == ["/tree/b1"])
     }
 
+    /// **"Undo the Last Session" skips a session already put back** (#156). It took the newest journal, so after one
+    /// undo it offered the same session again and every file came back "already restored".
+    @Test("The latest undoable session skips one already put back")
+    func latestUndoableSkipsRestored() throws {
+        let scratch = try PrunerScratch()
+        defer { scratch.remove() }
+        let older = "20260812-120000-000000"
+        let newer = "20260812-130000-000000"
+        _ = try MoveJournal.append([scratch.entry("old")], sessionID: older, in: scratch.state)
+        _ = try MoveJournal.append([scratch.entry("new")], sessionID: newer, in: scratch.state)
+        #expect(SessionHistory.latestUndoable(in: scratch.state) == newer)
+
+        _ = try MoveJournal.appendRestoration(
+            of: scratch.entry("new"), at: "2026-08-13T09:00:00.000000Z", sessionID: newer,
+            in: scratch.state)
+        #expect(SessionHistory.latestUndoable(in: scratch.state) == older)
+
+        _ = try MoveJournal.appendRestoration(
+            of: scratch.entry("old"), at: "2026-08-13T09:00:00.000000Z", sessionID: older,
+            in: scratch.state)
+        #expect(SessionHistory.latestUndoable(in: scratch.state) == nil)
+    }
+
     @Test("An empty or unparseable journal is not prunable")
     func leavesNothingToGoOn() throws {
         let scratch = try PrunerScratch()
