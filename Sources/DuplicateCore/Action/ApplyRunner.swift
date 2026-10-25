@@ -153,6 +153,8 @@ public struct ApplyRunner: Sendable {
         disposer: any ItemDisposing,
         onProgress: (@Sendable (ApplyProgress) -> Void)? = nil
     ) throws -> DisposalReport {
+        // Before anything moves: a run that cannot record where files went must not move them.
+        try MoveJournal.ensureWritable(sessionID: sessionID, in: state)
         // The path being worked on, read by the callback the disposer calls when the digest matched. A box
         // because that callback is `@Sendable` and the loop variable is not visible to it.
         let current = CurrentItem()

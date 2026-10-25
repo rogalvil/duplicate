@@ -144,3 +144,9 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **El historial no refresca la presencia de otras ventanas, y es a propósito.** Hacerlo significa arrancar un
   chequeo de disco que hace `stat` por archivo del escaneo —trabajo que nadie pidió, a espaldas del usuario, porque
   deshizo algo en otra ventana—. Una etiqueta vieja que se refresca con un botón es el error más chico.
+- **Lo que no se puede registrar no se mueve.** El journal se escribía en lotes **después** de mover, así que un
+  directorio de journal sin permiso de escritura se descubría con hasta 31 archivos ya movidos y ninguna línea que
+  dijera adónde (#175, reproducido con un test temporal: `moved to quarantine: 2 | journal files: []`). Ahora los
+  tres runners llaman a `MoveJournal.ensureWritable` antes del primer movimiento. Con `access`, no creando el
+  archivo: un journal vacío sería una sesión que el historial lista y la poda nunca puede quitar. Un disco que se
+  llena a media corrida sigue siendo posible.

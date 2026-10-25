@@ -137,6 +137,33 @@ struct ApplyPlanTests {
 @Suite("ApplyRunner")
 struct ApplyRunnerTests {
 
+    /// **What cannot be recorded is not moved** (#175). The journal was first written after a batch of moves, so
+    /// a journal directory nobody could write to left files moved and no record of where they went.
+    @Test("A journal that cannot be written moves nothing")
+    func refusesWithoutAJournal() throws {
+        let scratch = try ApplyScratch()
+        defer { scratch.remove() }
+        let a = try scratch.write("a.txt", "shared contents")
+        let b = try scratch.write("b.txt", "shared contents")
+        try scratch.state.create(.journal)
+        let journal = scratch.state.path(for: .journal)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: journal)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: journal)
+        }
+
+        let session = "20260812-120000-000000"
+        let built = try plan([a, b])
+        #expect(throws: JournalError.self) {
+            try ApplyRunner(state: scratch.state).run(
+                built, sessionID: session, instant: noon,
+                disposer: scratch.disposer(sessionID: session))
+        }
+        #expect(FileManager.default.fileExists(atPath: a))
+        #expect(FileManager.default.fileExists(atPath: b))
+    }
+
     @Test("Every file in the plan is moved, journalled, and reported")
     func movesAndJournals() async throws {
         let scratch = try ApplyScratch()

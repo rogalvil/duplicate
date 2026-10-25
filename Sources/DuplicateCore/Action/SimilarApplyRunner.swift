@@ -76,6 +76,8 @@ public struct SimilarApplyRunner: Sendable {
         disposer: any ItemDisposing,
         onProgress: (@Sendable (ApplyProgress) -> Void)? = nil
     ) async throws -> SimilarDisposalReport {
+        // Before anything moves: a run that cannot record where files went must not move them.
+        try MoveJournal.ensureWritable(sessionID: sessionID, in: state)
         var moved: [DisposalOutcome] = []
         var failures: [ApplyFailure] = []
         var refused: [(path: String, reason: SimilarRefusal)] = []
