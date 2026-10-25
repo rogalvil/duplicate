@@ -73,7 +73,8 @@ func applyProgressText(_ progress: ApplyProgress) -> String? {
     case .verifying(let filesChecked) where filesChecked > 0:
         return String(
             format: Strings.string("apply.progress.verifying.files"),
-            progress.itemsDone + 1, progress.itemCount, name, filesChecked)
+            progress.itemsDone + 1, progress.itemCount, name,
+            Strings.count("count.filesChecked", filesChecked))
     case .verifying:
         return String(
             format: Strings.string("apply.progress.verifying"),

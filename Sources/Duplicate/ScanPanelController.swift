@@ -519,7 +519,8 @@ final class ScanPanelController: NSWindowController {
                 alert.messageText = Strings.string("scan.unreadableImages.title")
                 alert.informativeText = String(
                     format: Strings.string("scan.unreadableImages.body"),
-                    result.unreadable.count, result.hashedCount)
+                    Strings.count("scan.unreadableImages.skipped", result.unreadable.count),
+                    Strings.count("scan.unreadableImages.hashed", result.hashedCount))
                 alert.addButton(withTitle: Strings.string("button.ok"))
                 _ = presentAlert(alert)
             }
@@ -691,7 +692,7 @@ final class ScanPanelController: NSWindowController {
         }
 
         var parts: [String] = [
-            String(format: Strings.string("scan.counts.files"), snapshot.filesSeen)
+            Strings.count("count.files", snapshot.filesSeen)
         ]
         if snapshot.candidates > 0 {
             parts.append(

@@ -147,8 +147,6 @@
 "scan.phase.grouping" = "Grouping";
 "scan.phase.saving" = "Saving";
 "scan.phase.finished" = "Done";
-/* %d files seen. */
-"scan.counts.files" = "%d files";
 /* %1$d of %2$d hashed. */
 "scan.counts.hashed" = "%1$d of %2$d hashed";
 /* %d served from the cache. */
@@ -172,8 +170,6 @@
 "apply.running" = "Moving files...";
 /* %1$d files moved, %2$@ freed. */
 "apply.done.clean" = "Every file moved. Sessions > Undo the last session puts them back.";
-/* %d files that went to quarantine instead. */
-"apply.done.quarantined" = "%d could not go to the Trash and were moved to the quarantine folder instead.";
 /* %d files that failed. */
 "apply.done.stoppedEarly" = "The run stopped early because failures kept coming: something is wrong beyond a single file.";
 "apply.failed.title" = "The apply could not run";
@@ -194,7 +190,8 @@
 "history.column.scan" = "Scan";
 "history.button.undo" = "Undo This Session…";
 "history.button.prune" = "Clean Up…";
-"history.footer" = "%1$d sessions - %2$d files - %3$@ - %4$d put back";
+/* %1$@, %2$@ and %4$@ are counts with their noun, from Localizable.stringsdict: count.sessions, count.files and count.putBack. %3$@ is the size. */
+"history.footer" = "%1$@ - %2$@ - %3$@ - %4$@";
 "history.state.moved" = "moved";
 "history.state.restored" = "all put back";
 "history.state.partial" = "%1$d of %2$d put back";
@@ -202,26 +199,20 @@
 "history.state.unreadable" = "journal unreadable";
 "history.scan.several" = "%1$@ and %2$d more";
 "history.undo.title" = "Put this session's files back?";
-"history.undo.body" = "%1$d files would be moved out of the Trash and back where they were, %2$@ in all. A file whose original place is now taken by something else is left alone rather than overwritten.";
 "history.undo.confirm" = "Put Back";
 "sessions.prune.title" = "Delete the record of sessions already put back?";
 "sessions.prune.confirm" = "Delete";
 "sessions.prune.nothing.title" = "Nothing to clean up";
 "sessions.prune.nothing.body" = "No session has had all of its files put back.";
 "sessions.prune.done.title" = "Cleaned up";
-"sessions.prune.done.body" = "%1$d session journals were deleted.";
 "undo.noSessions.title" = "Nothing has been applied yet";
 "undo.noSessions.body" = "There is no session to undo. The app records every file it moves, and there are no records.";
 /* %@ is the session id. */
 "undo.confirm.title" = "Undo session %@?";
 "undo.confirm.body" = "Every file this session moved will be put back where it was. A file that something else already put back, or whose original path is now occupied by different content, is left alone rather than overwritten.";
 "undo.confirm.restore" = "Put Files Back";
-/* %1$d files restored, %2$@ of content. */
-"undo.done.headline" = "Put back %1$d files, %2$@";
 "undo.clean" = "Everything this session moved is back where it was.";
 /* %d files that could not be restored. */
-/* %d files blocked by something at the original path. */
-"undo.blocked" = "%d were left alone because their original path is occupied by different content. Nothing is ever overwritten.";
 /* %d files already back. */
 "undo.allRestored" = "Everything was already back. Nothing to do.";
 "undo.nothingToDo" = "Nothing in this session can be put back. The Trash may have been emptied.";
@@ -312,8 +303,8 @@
 "library.column.similarFiles" = "Files";
 "library.column.similarThreshold" = "Threshold";
 "scan.unreadableImages.title" = "Some images could not be read";
-"scan.unreadableImages.body" = "%1$d of them were skipped. %2$d images were hashed.";
-"library.similarThreshold.value" = "%d bits";
+/* Two sentences from Localizable.stringsdict: scan.unreadableImages.skipped and scan.unreadableImages.hashed. */
+"scan.unreadableImages.body" = "%1$@ %2$@";
 "library.footer.similar" = "%1$@ - %2$@, %3$@";
 "library.empty.similar" = "No perceptual scans yet.\n\nPress Command-N and choose \"Similar images\".";
 "similar.header.image" = "%1$.2f%% alike - %2$d of 64 bits differ";
@@ -349,21 +340,15 @@
 "similar.ambiguousKey.title" = "A decision was saved under a key that cannot be read back";
 "similar.saved" = "Decisions saved";
 "similar.apply.verifyNote" = "Each pair is scored again at the moment it is moved. One that no longer looks alike is skipped.";
-"similar.apply.excluded" = "%d files are left out: another decision keeps them.";
 "similar.apply.nothing" = "Nothing to move.";
-"similar.apply.done" = "Moved %1$d files - %2$@";
-"similar.apply.refusedHeader" = "%d skipped, because the pair no longer holds up:";
 "similar.apply.refused.changed" = "now %1$.2f%% alike, under %2$.2f%%";
 "similar.apply.refused.unreadable" = "%@ could not be read";
 "similar.apply.refused.missing" = "already gone";
 "similar.review.apply" = "Simulate and apply...";
 "folders.apply.verifyNote" = "Each folder is checked when it moves: one holding a file the kept folder does not have is skipped.";
-"folders.apply.excluded" = "%d folders are left out: another decision keeps them, or keeps something inside them.";
 "folders.apply.nothing" = "Nothing to move.";
-"folders.apply.done" = "Moved %1$d folders - %2$@";
-"folders.apply.item" = "%1$@  (%2$d files)";
-"folders.apply.refusedHeader" = "%d skipped, because moving them would lose something:";
-"folders.apply.refused.wouldLose" = "%1$d files exist only here: %2$@";
+/* %2$@ is count.files, from Localizable.stringsdict. */
+"folders.apply.item" = "%1$@  (%2$@)";
 "folders.apply.refused.keeperMissing" = "the folder to keep, %@, is gone";
 "folders.decision.keepA" = "Keep the first";
 "folders.decision.keepB" = "Keep the second";
@@ -390,10 +375,10 @@
 "similar.confirmShown.contradictions" = "\n\nWarning: %d files would be kept by one pair and discarded by another. Those are excluded from the apply.";
 "button.accept" = "Accept";
 "apply.button.stop" = "Stop";
-"apply.stopped" = "Stopped after %1$d files - %2$@";
 "apply.stopped.note" = "The rest were not touched. What did move is in the Trash and this window can put it back.";
 "apply.progress.verifying" = "Verifying %1$d of %2$d: %3$@";
-"apply.progress.verifying.files" = "Verifying %1$d of %2$d: %3$@ — %4$d files checked";
+/* %4$@ is count.filesChecked, from Localizable.stringsdict. */
+"apply.progress.verifying.files" = "Verifying %1$d of %2$d: %3$@ — %4$@";
 "apply.progress.moving" = "Moving %1$d of %2$d: %3$@";
 "apply.failure.missing" = "%@ is not there any more, so nothing was moved";
 "apply.failure.contentChanged" = "%@ changed since the scan, so it was left alone";
