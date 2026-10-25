@@ -133,7 +133,8 @@ final class SessionHistoryWindowController: NSWindowController, NSTableViewDataS
         let restored = rows.reduce(0) { $0 + $1.restoredCount }
         footerLabel.stringValue = String(
             format: Strings.string("history.footer"),
-            rows.count, moved, ByteSize.format(bytes), restored
+            Strings.count("count.sessions", rows.count), Strings.count("count.files", moved),
+            ByteSize.format(bytes), Strings.count("count.putBack", restored)
         )
     }
 

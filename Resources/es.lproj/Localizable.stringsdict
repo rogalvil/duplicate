@@ -34,6 +34,22 @@
 			<string>Se movieron %1$d archivos</string>
 		</dict>
 	</dict>
+	<key>apply.done.quarantined</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 no pudo ir al basurero y se movió a la carpeta de cuarentena.</string>
+			<key>other</key>
+			<string>%d no pudieron ir al basurero y se movieron a la carpeta de cuarentena.</string>
+		</dict>
+	</dict>
 	<key>apply.headline</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -50,6 +66,22 @@
 			<string>Se moverían %1$d archivos</string>
 		</dict>
 	</dict>
+	<key>apply.stopped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ - %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Detenido tras 1 archivo</string>
+			<key>other</key>
+			<string>Detenido tras %1$d archivos</string>
+		</dict>
+	</dict>
 	<key>count.bits</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -64,6 +96,38 @@
 			<string>1 bit</string>
 			<key>other</key>
 			<string>%d bits</string>
+		</dict>
+	</dict>
+	<key>count.files</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo</string>
+			<key>other</key>
+			<string>%d archivos</string>
+		</dict>
+	</dict>
+	<key>count.filesChecked</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo revisado</string>
+			<key>other</key>
+			<string>%d archivos revisados</string>
 		</dict>
 	</dict>
 	<key>count.folderScans</key>
@@ -130,6 +194,22 @@
 			<string>%d escaneos perceptuales</string>
 		</dict>
 	</dict>
+	<key>count.putBack</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 devuelto</string>
+			<key>other</key>
+			<string>%d devueltos</string>
+		</dict>
+	</dict>
 	<key>count.scans</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -144,6 +224,22 @@
 			<string>1 escaneo</string>
 			<key>other</key>
 			<string>%d escaneos</string>
+		</dict>
+	</dict>
+	<key>count.sessions</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 sesión</string>
+			<key>other</key>
+			<string>%d sesiones</string>
 		</dict>
 	</dict>
 	<key>count.shown</key>
@@ -194,6 +290,38 @@
 			<string>%d ya están dentro de una carpeta de esta lista</string>
 		</dict>
 	</dict>
+	<key>folders.apply.done</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ - %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se movió 1 carpeta</string>
+			<key>other</key>
+			<string>Se movieron %1$d carpetas</string>
+		</dict>
+	</dict>
+	<key>folders.apply.excluded</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 carpeta queda fuera: otra decisión la conserva, o conserva algo adentro.</string>
+			<key>other</key>
+			<string>%d carpetas quedan fuera: otra decisión las conserva, o conserva algo adentro.</string>
+		</dict>
+	</dict>
 	<key>folders.apply.headline</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -208,6 +336,54 @@
 			<string>1 carpeta iría al basurero</string>
 			<key>other</key>
 			<string>%1$d carpetas irían al basurero</string>
+		</dict>
+	</dict>
+	<key>folders.apply.refused.wouldLose</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@: %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo existe solo aquí</string>
+			<key>other</key>
+			<string>%1$d archivos existen solo aquí</string>
+		</dict>
+	</dict>
+	<key>folders.apply.refusedHeader</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 saltada, porque moverla perdería algo:</string>
+			<key>other</key>
+			<string>%d saltadas, porque moverlas perdería algo:</string>
+		</dict>
+	</dict>
+	<key>folders.apply.stopped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ - %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Detenido tras 1 carpeta</string>
+			<key>other</key>
+			<string>Detenido tras %1$d carpetas</string>
 		</dict>
 	</dict>
 	<key>folders.warnLoss</key>
@@ -226,6 +402,22 @@
 			<string>Mover %2$@ perdería %1$d archivos que tiene y la otra no.</string>
 		</dict>
 	</dict>
+	<key>history.undo.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, %2$@ en total. Un archivo cuyo lugar original ya lo ocupa otra cosa se deja en paz en vez de sobrescribirse.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo saldría del basurero y volvería a donde estaba</string>
+			<key>other</key>
+			<string>%1$d archivos saldrían del basurero y volverían a donde estaban</string>
+		</dict>
+	</dict>
 	<key>scan.inaccessible.body</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -240,6 +432,38 @@
 			<string>Se saltó 1 carpeta porque macOS no dio acceso. Nada de lo que hay dentro se escaneó, así que este resultado está incompleto. Para incluirla, elígela directamente como carpeta a escanear: elegirla es lo que le da acceso a la app.</string>
 			<key>other</key>
 			<string>Se saltaron %d carpetas porque macOS no dio acceso. Nada de lo que hay dentro se escaneó, así que este resultado está incompleto. Para incluir una, elígela directamente como carpeta a escanear: elegirla es lo que le da acceso a la app.</string>
+		</dict>
+	</dict>
+	<key>scan.unreadableImages.hashed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se procesó 1 imagen.</string>
+			<key>other</key>
+			<string>Se procesaron %d imágenes.</string>
+		</dict>
+	</dict>
+	<key>scan.unreadableImages.skipped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se saltó 1.</string>
+			<key>other</key>
+			<string>Se saltaron %d.</string>
 		</dict>
 	</dict>
 	<key>sessions.prune.body.kept</key>
@@ -274,6 +498,22 @@
 			<string>%1$d sesiones tienen todos sus archivos de vuelta, así que sus journals ya no ofrecen nada. Borrarlos libera %2$@.</string>
 		</dict>
 	</dict>
+	<key>sessions.prune.done.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se borró 1 journal de sesión.</string>
+			<key>other</key>
+			<string>Se borraron %d journals de sesión.</string>
+		</dict>
+	</dict>
 	<key>sessions.prune.nothing.kept</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -306,6 +546,38 @@
 			<string>%1$d de los pares que decidiste traen "||" en una ruta, que es el separador de este formato.</string>
 		</dict>
 	</dict>
+	<key>similar.apply.done</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ - %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se movió 1 archivo</string>
+			<key>other</key>
+			<string>Se movieron %1$d archivos</string>
+		</dict>
+	</dict>
+	<key>similar.apply.excluded</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo queda fuera: otra decisión lo conserva.</string>
+			<key>other</key>
+			<string>%d archivos quedan fuera: otra decisión los conserva.</string>
+		</dict>
+	</dict>
 	<key>similar.apply.headline</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -322,6 +594,22 @@
 			<string>%1$d archivos de %2$@ irían al basurero</string>
 		</dict>
 	</dict>
+	<key>similar.apply.refusedHeader</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 saltado, porque el par ya no se sostiene:</string>
+			<key>other</key>
+			<string>%d saltados, porque el par ya no se sostiene:</string>
+		</dict>
+	</dict>
 	<key>undo.alreadyRestored</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -336,6 +624,38 @@
 			<string>1 ya estaba de vuelta</string>
 			<key>other</key>
 			<string>%d ya estaban de vuelta</string>
+		</dict>
+	</dict>
+	<key>undo.blocked</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ Nunca se sobrescribe nada.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 se dejó en paz porque su ruta original está ocupada por contenido distinto.</string>
+			<key>other</key>
+			<string>%d se dejaron en paz porque su ruta original está ocupada por contenido distinto.</string>
+		</dict>
+	</dict>
+	<key>undo.done.headline</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se devolvió 1 archivo</string>
+			<key>other</key>
+			<string>Se devolvieron %1$d archivos</string>
 		</dict>
 	</dict>
 	<key>undo.failed</key>

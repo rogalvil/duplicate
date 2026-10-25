@@ -177,7 +177,9 @@ final class FolderApplySheetController: NSWindowController {
             plan.isEmpty
             ? Strings.string("folders.apply.nothing")
             : plan.items.map {
-                String(format: Strings.string("folders.apply.item"), $0.path, $0.recordedFileCount)
+                String(
+                    format: Strings.string("folders.apply.item"), $0.path,
+                    Strings.count("count.files", $0.recordedFileCount))
             }.joined(separator: "\n")
     }
 
@@ -265,7 +267,7 @@ final class FolderApplySheetController: NSWindowController {
             report = result
             if result.wasCancelled {
                 headlineLabel.stringValue = String(
-                    format: Strings.string("apply.stopped"),
+                    format: Strings.string("folders.apply.stopped"),
                     result.moved.count, ByteSize.format(result.movedBytes))
                 detailLabel.stringValue = Strings.string("apply.stopped.note")
             } else {

@@ -1036,8 +1036,7 @@ extension LibraryWindowController: NSTableViewDataSource, NSTableViewDelegate {
             field.stringValue = summary.involvedFileCount.formatted()
         case "threshold":
             // Bits out of 64, which is the unit the CLI's img_threshold is in.
-            field.stringValue = String(
-                format: Strings.string("library.similarThreshold.value"), summary.imageThreshold)
+            field.stringValue = Strings.count("count.bits", summary.imageThreshold)
         case "state":
             if summary.hasRelativePaths {
                 field.stringValue = Strings.string("library.state.relativePaths")

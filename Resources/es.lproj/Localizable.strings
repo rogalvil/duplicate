@@ -146,8 +146,6 @@
 "scan.phase.grouping" = "Agrupando";
 "scan.phase.saving" = "Guardando";
 "scan.phase.finished" = "Terminado";
-/* %d archivos vistos. */
-"scan.counts.files" = "%d archivos";
 /* %1$d de %2$d hasheados. */
 "scan.counts.hashed" = "%1$d de %2$d hasheados";
 /* %d servidos por la caché. */
@@ -171,8 +169,6 @@
 "apply.running" = "Moviendo archivos...";
 /* %1$d archivos movidos, %2$@ liberados. */
 "apply.done.clean" = "Se movieron todos. Sesiones > Deshacer la última sesión los devuelve.";
-/* %d archivos que fueron a cuarentena. */
-"apply.done.quarantined" = "%d no pudieron ir al basurero y se movieron a la carpeta de cuarentena.";
 /* %d archivos que fallaron. */
 "apply.done.stoppedEarly" = "La corrida se detuvo temprano porque las fallas siguieron llegando: hay algo mal más allá de un archivo suelto.";
 "apply.failed.title" = "No se pudo aplicar";
@@ -193,7 +189,8 @@
 "history.column.scan" = "Escaneo";
 "history.button.undo" = "Deshacer esta sesión…";
 "history.button.prune" = "Limpiar…";
-"history.footer" = "%1$d sesiones - %2$d archivos - %3$@ - %4$d devueltos";
+/* %1$@, %2$@ y %4$@ son conteos con su sustantivo, de Localizable.stringsdict: count.sessions, count.files y count.putBack. %3$@ es el tamaño. */
+"history.footer" = "%1$@ - %2$@ - %3$@ - %4$@";
 "history.state.moved" = "movidos";
 "history.state.restored" = "todos devueltos";
 "history.state.partial" = "%1$d de %2$d devueltos";
@@ -201,26 +198,20 @@
 "history.state.unreadable" = "journal ilegible";
 "history.scan.several" = "%1$@ y %2$d más";
 "history.undo.title" = "¿Devolver los archivos de esta sesión?";
-"history.undo.body" = "%1$d archivos saldrían del basurero y volverían a donde estaban, %2$@ en total. Un archivo cuyo lugar original ya lo ocupa otra cosa se deja en paz en vez de sobrescribirse.";
 "history.undo.confirm" = "Devolver";
 "sessions.prune.title" = "¿Borrar el registro de las sesiones que ya se devolvieron?";
 "sessions.prune.confirm" = "Borrar";
 "sessions.prune.nothing.title" = "No hay nada que limpiar";
 "sessions.prune.nothing.body" = "Ninguna sesión tiene todos sus archivos de vuelta.";
 "sessions.prune.done.title" = "Limpiado";
-"sessions.prune.done.body" = "Se borraron %1$d journals de sesión.";
 "undo.noSessions.title" = "Todavía no se ha aplicado nada";
 "undo.noSessions.body" = "No hay ninguna sesión que deshacer. La app registra cada archivo que mueve, y no hay registros.";
 /* %@ es el id de la sesión. */
 "undo.confirm.title" = "¿Deshacer la sesión %@?";
 "undo.confirm.body" = "Cada archivo que esta sesión movió va a volver a donde estaba. Un archivo que algo más ya devolvió, o cuya ruta original está ocupada por contenido distinto, se deja en paz en vez de sobrescribirse.";
 "undo.confirm.restore" = "Devolver los archivos";
-/* %1$d archivos restaurados, %2$@ de contenido. */
-"undo.done.headline" = "Se devolvieron %1$d archivos, %2$@";
 "undo.clean" = "Todo lo que esta sesión movió está de vuelta donde estaba.";
 /* %d archivos que no se pudieron restaurar. */
-/* %d archivos bloqueados por algo en la ruta original. */
-"undo.blocked" = "%d se dejaron en paz porque su ruta original está ocupada por contenido distinto. Nunca se sobrescribe nada.";
 /* %d archivos que ya estaban de vuelta. */
 "undo.allRestored" = "Todo ya estaba de vuelta. Nada que hacer.";
 "undo.nothingToDo" = "Nada de esta sesión se puede devolver. El basurero pudo haberse vaciado.";
@@ -311,8 +302,8 @@
 "library.column.similarFiles" = "Archivos";
 "library.column.similarThreshold" = "Umbral";
 "scan.unreadableImages.title" = "Algunas imágenes no se pudieron leer";
-"scan.unreadableImages.body" = "Se saltaron %1$d. Se procesaron %2$d imágenes.";
-"library.similarThreshold.value" = "%d bits";
+/* Dos frases de Localizable.stringsdict: scan.unreadableImages.skipped y scan.unreadableImages.hashed. */
+"scan.unreadableImages.body" = "%1$@ %2$@";
 "library.footer.similar" = "%1$@ - %2$@, %3$@";
 "library.empty.similar" = "Todavía no hay escaneos perceptuales.\n\nAprieta Comando-N y elige \"Imágenes parecidas\".";
 "similar.header.image" = "%1$.2f%% parecidas - difieren %2$d de 64 bits";
@@ -348,21 +339,15 @@
 "similar.ambiguousKey.title" = "Una decisión se guardó con una clave que no se puede volver a leer";
 "similar.saved" = "Decisiones guardadas";
 "similar.apply.verifyNote" = "Cada par se vuelve a puntuar en el momento de moverlo. Uno que ya no se parezca se salta.";
-"similar.apply.excluded" = "%d archivos quedan fuera: otra decisión los conserva.";
 "similar.apply.nothing" = "Nada que mover.";
-"similar.apply.done" = "Se movieron %1$d archivos - %2$@";
-"similar.apply.refusedHeader" = "%d saltados, porque el par ya no se sostiene:";
 "similar.apply.refused.changed" = "ahora %1$.2f%% parecidos, por debajo de %2$.2f%%";
 "similar.apply.refused.unreadable" = "no se pudo leer %@";
 "similar.apply.refused.missing" = "ya no está";
 "similar.review.apply" = "Simular y aplicar…";
 "folders.apply.verifyNote" = "Cada carpeta se revisa al moverla: una que tenga un archivo que la conservada no tiene se salta.";
-"folders.apply.excluded" = "%d carpetas quedan fuera: otra decisión las conserva, o conserva algo adentro.";
 "folders.apply.nothing" = "Nada que mover.";
-"folders.apply.done" = "Se movieron %1$d carpetas - %2$@";
-"folders.apply.item" = "%1$@  (%2$d archivos)";
-"folders.apply.refusedHeader" = "%d saltadas, porque moverlas perdería algo:";
-"folders.apply.refused.wouldLose" = "%1$d archivos existen solo aquí: %2$@";
+/* %2$@ es count.files, de Localizable.stringsdict. */
+"folders.apply.item" = "%1$@  (%2$@)";
 "folders.apply.refused.keeperMissing" = "la carpeta a conservar, %@, ya no está";
 "folders.decision.keepA" = "Conservar la primera";
 "folders.decision.keepB" = "Conservar la segunda";
@@ -389,10 +374,10 @@
 "similar.confirmShown.contradictions" = "\n\nOjo: %d archivos los conservaría un par y los descartaría otro. Esos quedan fuera del aplicar.";
 "button.accept" = "Aceptar";
 "apply.button.stop" = "Detener";
-"apply.stopped" = "Detenido tras %1$d archivos - %2$@";
 "apply.stopped.note" = "El resto no se tocó. Lo que sí se movió está en el basurero y esta ventana lo puede devolver.";
 "apply.progress.verifying" = "Verificando %1$d de %2$d: %3$@";
-"apply.progress.verifying.files" = "Verificando %1$d de %2$d: %3$@ — %4$d archivos revisados";
+/* %4$@ es count.filesChecked, de Localizable.stringsdict. */
+"apply.progress.verifying.files" = "Verificando %1$d de %2$d: %3$@ — %4$@";
 "apply.progress.moving" = "Moviendo %1$d de %2$d: %3$@";
 "apply.failure.missing" = "%@ ya no está, así que no se movió nada";
 "apply.failure.contentChanged" = "%@ cambió desde el escaneo, así que se dejó en paz";

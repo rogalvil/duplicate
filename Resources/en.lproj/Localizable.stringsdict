@@ -34,6 +34,22 @@
 			<string>%1$d files</string>
 		</dict>
 	</dict>
+	<key>apply.done.quarantined</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 could not go to the Trash and was moved to the quarantine folder instead.</string>
+			<key>other</key>
+			<string>%d could not go to the Trash and were moved to the quarantine folder instead.</string>
+		</dict>
+	</dict>
 	<key>apply.headline</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -50,6 +66,22 @@
 			<string>%1$d files</string>
 		</dict>
 	</dict>
+	<key>apply.stopped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ - %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Stopped after 1 file</string>
+			<key>other</key>
+			<string>Stopped after %1$d files</string>
+		</dict>
+	</dict>
 	<key>count.bits</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -64,6 +96,38 @@
 			<string>1 bit</string>
 			<key>other</key>
 			<string>%d bits</string>
+		</dict>
+	</dict>
+	<key>count.files</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file</string>
+			<key>other</key>
+			<string>%d files</string>
+		</dict>
+	</dict>
+	<key>count.filesChecked</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file checked</string>
+			<key>other</key>
+			<string>%d files checked</string>
 		</dict>
 	</dict>
 	<key>count.folderScans</key>
@@ -130,6 +194,22 @@
 			<string>%d perceptual scans</string>
 		</dict>
 	</dict>
+	<key>count.putBack</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 put back</string>
+			<key>other</key>
+			<string>%d put back</string>
+		</dict>
+	</dict>
 	<key>count.scans</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -144,6 +224,22 @@
 			<string>1 scan</string>
 			<key>other</key>
 			<string>%d scans</string>
+		</dict>
+	</dict>
+	<key>count.sessions</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 session</string>
+			<key>other</key>
+			<string>%d sessions</string>
 		</dict>
 	</dict>
 	<key>count.shown</key>
@@ -194,6 +290,38 @@
 			<string>%d are already inside a folder on this list</string>
 		</dict>
 	</dict>
+	<key>folders.apply.done</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ - %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Moved 1 folder</string>
+			<key>other</key>
+			<string>Moved %1$d folders</string>
+		</dict>
+	</dict>
+	<key>folders.apply.excluded</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 folder is left out: another decision keeps it, or keeps something inside it.</string>
+			<key>other</key>
+			<string>%d folders are left out: another decision keeps them, or keeps something inside them.</string>
+		</dict>
+	</dict>
 	<key>folders.apply.headline</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -208,6 +336,54 @@
 			<string>1 folder</string>
 			<key>other</key>
 			<string>%1$d folders</string>
+		</dict>
+	</dict>
+	<key>folders.apply.refused.wouldLose</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@: %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file exists only here</string>
+			<key>other</key>
+			<string>%1$d files exist only here</string>
+		</dict>
+	</dict>
+	<key>folders.apply.refusedHeader</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 skipped, because moving it would lose something:</string>
+			<key>other</key>
+			<string>%d skipped, because moving them would lose something:</string>
+		</dict>
+	</dict>
+	<key>folders.apply.stopped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ - %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Stopped after 1 folder</string>
+			<key>other</key>
+			<string>Stopped after %1$d folders</string>
 		</dict>
 	</dict>
 	<key>folders.warnLoss</key>
@@ -226,6 +402,22 @@
 			<string>Moving %2$@ would lose %1$d files it has and the other does not.</string>
 		</dict>
 	</dict>
+	<key>history.undo.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, %2$@ in all. A file whose original place is now taken by something else is left alone rather than overwritten.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file would be moved out of the Trash and back where it was</string>
+			<key>other</key>
+			<string>%1$d files would be moved out of the Trash and back where they were</string>
+		</dict>
+	</dict>
 	<key>scan.inaccessible.body</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -240,6 +432,38 @@
 			<string>1 folder was skipped because macOS did not grant access. Anything inside it was not scanned, so this result is incomplete. To include it, choose it directly as the folder to scan: choosing it is what grants the app access.</string>
 			<key>other</key>
 			<string>%d folders were skipped because macOS did not grant access. Anything inside them was not scanned, so this result is incomplete. To include one, choose it directly as the folder to scan: choosing it is what grants the app access.</string>
+		</dict>
+	</dict>
+	<key>scan.unreadableImages.hashed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 image was hashed.</string>
+			<key>other</key>
+			<string>%d images were hashed.</string>
+		</dict>
+	</dict>
+	<key>scan.unreadableImages.skipped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 of them was skipped.</string>
+			<key>other</key>
+			<string>%d of them were skipped.</string>
 		</dict>
 	</dict>
 	<key>sessions.prune.body.kept</key>
@@ -274,6 +498,22 @@
 			<string>%1$d sessions have had every file put back, so their journals have nothing left to offer. Deleting them frees %2$@.</string>
 		</dict>
 	</dict>
+	<key>sessions.prune.done.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 session journal was deleted.</string>
+			<key>other</key>
+			<string>%d session journals were deleted.</string>
+		</dict>
+	</dict>
 	<key>sessions.prune.nothing.kept</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -306,6 +546,38 @@
 			<string>%1$d of the pairs you decided contain "||" in a path, which is the separator this format uses.</string>
 		</dict>
 	</dict>
+	<key>similar.apply.done</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ - %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Moved 1 file</string>
+			<key>other</key>
+			<string>Moved %1$d files</string>
+		</dict>
+	</dict>
+	<key>similar.apply.excluded</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file is left out: another decision keeps it.</string>
+			<key>other</key>
+			<string>%d files are left out: another decision keeps them.</string>
+		</dict>
+	</dict>
 	<key>similar.apply.headline</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -322,6 +594,22 @@
 			<string>%1$d files from %2$@ would go to the Trash</string>
 		</dict>
 	</dict>
+	<key>similar.apply.refusedHeader</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 skipped, because the pair no longer holds up:</string>
+			<key>other</key>
+			<string>%d skipped, because the pair no longer holds up:</string>
+		</dict>
+	</dict>
 	<key>undo.alreadyRestored</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -336,6 +624,38 @@
 			<string>1 was already back</string>
 			<key>other</key>
 			<string>%d were already back</string>
+		</dict>
+	</dict>
+	<key>undo.blocked</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ Nothing is ever overwritten.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 was left alone because its original path is occupied by different content.</string>
+			<key>other</key>
+			<string>%d were left alone because their original path is occupied by different content.</string>
+		</dict>
+	</dict>
+	<key>undo.done.headline</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, %2$@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Put back 1 file</string>
+			<key>other</key>
+			<string>Put back %1$d files</string>
 		</dict>
 	</dict>
 	<key>undo.failed</key>
