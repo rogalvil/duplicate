@@ -52,6 +52,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     /// facts to store, and asking again on every redraw was a loop -- the probe's own redraw asked again (#219).
     private var probed: Set<[UInt8]> = []
     private var probeLaunches = 0
+    /// Probes started and not yet answered, so a selftest can wait for one instead of sleeping.
+    private var probesInFlight = 0
     private let thumbnailer = QuickLookThumbnailer()
     private let leftPane = SimilarSidePane()
     private let quickLook = QuickLookCoordinator()
@@ -502,6 +504,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         guard !missing.isEmpty else { return }
         for path in missing { probed.insert(Array(path.utf8)) }
         probeLaunches += 1
+        probesInFlight += 1
         let kind = group.mediaKind
         let probe = self.probe
         Task { @MainActor [weak self] in
@@ -515,6 +518,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
                 if let fact { found.append((path, fact)) }
             }
             guard let self else { return }
+            self.probesInFlight -= 1
             for (path, fact) in found { self.facts[Array(path.utf8)] = fact }
             for link in group.links {
                 let pair = self.scan.pairs[link.pairIndex]
@@ -976,6 +980,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     /// How many probes this window started. One per group: a file that cannot be read is not asked again.
     var probeLaunchesForSelftest: Int { probeLaunches }
+    var probesInFlightForSelftest: Int { probesInFlight }
     func pressSkipForSelftest() { skipButton.performClick(nil) }
 
     private func groupText(for index: Int, column: String) -> String {
