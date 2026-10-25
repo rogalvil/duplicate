@@ -174,8 +174,9 @@ video son un grupo, y se deciden de una vez:
   (derecha). Debajo de cada uno, su tamaño, fecha, resolución y, en videos, codec y duración. La línea de abajo dice
   cuánto se parecen esos dos: en imágenes, cuántos bits de 64 difieren; en videos, qué parte de los cuadros
   muestreados coinciden.
-- **Sugerido** dice cuál conviene conservar y por qué: más resolución, un codec más eficiente, que uno sea un tráiler
-  del otro.
+- **Sugerido** dice cuál conviene conservar y por qué. **La calidad pesa primero**: un codec más eficiente, que uno
+  sea un tráiler del otro, más resolución o, a igual resolución, más bytes. Solo si empatan en calidad decide el
+  nombre: el que parece copia pierde.
 - **Confirmar y siguiente** (o ⏎) guarda el grupo y pasa al siguiente; **Conservar todos** deja el grupo como está;
   **Saltar** (⇧⌘K) lo pasa sin decidir.
 - **Aceptar los N sin decidir** acepta la sugerencia de los grupos que la lista muestra y nadie ha decidido, y antes

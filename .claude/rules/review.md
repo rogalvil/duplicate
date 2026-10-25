@@ -57,6 +57,14 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   pero nadie dijo "borra b" en el segundo par, e inferirlo es justo la clase de amabilidad que una acción
   destructiva no puede tener. Se reporta con `contradictions`, no se resuelve. Un test mío afirmaba lo contrario y
   estaba equivocado.
+- **En parecidos, la calidad va antes que el nombre (#223), y eso se aparta del CLI a propósito.** El CLI ponía primero
+  el nombre que parece copia, así que «foto copia.jpg» perdía contra «foto.jpg» aunque tuviera cuatro veces la
+  resolución; lo reportó el uso real. Ahora: consejo de video, resolución y bytes, nombre, profundidad. La sugerencia
+  no es formato compartido —nada llega al archivo sin confirmar—, así que divergir del CLI ahí no rompe nada.
+- **Un grupo sin abrir no tiene resolución, así que el lote pesa por tamaño.** La sonda lee cada archivo (300 ms un
+  video) y solo corre al abrir un grupo; sin eso, «Aceptar los N sin decidir» caía al nombre. El tamaño es un `stat`.
+  Y **parejo contra parejo**: si de un par solo se sondeó un archivo, los dos se pesan por tamaño, porque una
+  resolución contra un cero desconocido ganaría siempre.
 - **El desempate final de un par parecido es la profundidad, y gana el más profundo** — contraintuitivo y a
   propósito: es la regla del detector exacto, y que los dos detectores propusieran sobrevivientes distintos para
   los mismos dos archivos sería peor que una regla rara.

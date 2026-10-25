@@ -180,7 +180,7 @@ Confirmar es lo que la vuelve decisión.
 | Aviso | — | Por prioridad: un archivo que no se parece a ninguno conservado, decisiones guardadas que no cuadran, un grupo encadenado |
 | Dos lados | — | El mejor archivo conservado contra el seleccionado: miniatura, nombre, ruta, metadata (tamaño, fecha, resolución, codec, duración) y "this file is no longer there" |
 | Línea del par | — | Imagen: bits que difieren de 64. Video: % de cuadros que coinciden, y "judged on N of 8 frames" si son menos. Si los dos no son par: lo dice |
-| Sugerencia | — | "Suggested: keep … — razón" (tráiler, codec, bitrate, profundidad), del par que se muestra |
+| Sugerencia | — | "Suggested: keep … — razón", del par que se muestra. **Calidad antes que el nombre** (#223): consejo de video (tráiler, codec, bitrate), luego resolución y bytes, luego el nombre que parece copia, luego profundidad. «Accept the N undecided» pesa por tamaño en disco los grupos que nadie abrió |
 | Decidir | botones Confirm and Next (⏎, ⌘↩) / Keep All / Skip (⇧⌘K) | Graba, guarda y avanza. Rehúsa un conjunto que descartaría un archivo sin parecido entre los conservados |
 | Al cerrar | — | Avisa contradicciones entre pares (solo pueden venir de decisiones guardadas por par) y claves `a\|\|b` que no se pueden volver a partir |
 
