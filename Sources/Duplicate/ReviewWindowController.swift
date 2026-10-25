@@ -207,6 +207,9 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             MainActor.assumeIsolated { controller.mutate { $0 = before } }
         }
         flow.decisionsChanged(hasAny: false)
+        // Rebuilt, or the sidebar and the accept button keep describing the review before it started over: the
+        // button said "0" and stayed disabled over six groups that were undecided again.
+        rebuildVisibleGroups()
         selectGroup(0)
     }
 

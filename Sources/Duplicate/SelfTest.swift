@@ -3151,6 +3151,13 @@ enum SelfTest {
         )
         try expect(
             imported.reviewState.tally.undecided == 6, "the groups are not back to undecided")
+        // **And the window says so.** Starting over did not rebuild the list, so the accept button kept its "0" and
+        // stayed disabled. Found in review on #218.
+        // Teeth: drop `rebuildVisibleGroups()` from `clearAllDecisionsForImport` and the button reads 0.
+        try expect(
+            imported.acceptShownButtonForSelftest
+                == (String(format: Strings.string("review.acceptShown"), 6), true),
+            "after starting over the accept button reads \(imported.acceptShownButtonForSelftest)")
         // And the file on disk is untouched until something saves it.
         try expect(
             try store.loadDecisions(scanID: wideID).decisions.count == 6,
