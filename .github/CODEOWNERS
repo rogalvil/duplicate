@@ -1,6 +1,7 @@
 # Todo el repo es de una persona, y este archivo lo hace explícito.
 #
-# No bloquea nada: el ruleset de `main` pide cero aprobaciones, así que el dueño sigue mergeando sus
-# propios PR sin esperar a nadie. Lo que sí hace es que cualquier PR de fuera pida su revisión sola, en
-# vez de depender de que alguien se acuerde de pedirla.
+# Es lo que decide quién aprueba: el ruleset `approval for collaborators` pide la aprobación de un code
+# owner, así que la de un bot de revisión (Greptile aprueba PRs) no cuenta, y un colaborador necesita la
+# del dueño. El dueño está exento de ese ruleset y sigue mergeando sus propios PR. Además, cualquier PR de
+# fuera pide su revisión solo, sin depender de que alguien se acuerde.
 *       @rogalvil

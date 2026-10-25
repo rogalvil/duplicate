@@ -93,3 +93,6 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   nada —no puede mergear—, pero un colaborador futuro con escritura sí podría mergear sin revisión. En el ruleset
   `protect main` habría bloqueado al dueño, que no puede aprobar su propio PR, y eximirlo ahí lo habría eximido
   también del CI. Separado, el dueño solo se salta la aprobación.
+- **Y la aprobación tiene que ser de un code owner, porque un bot aprueba.** La app de Greptile deja un review
+  `APPROVED` en cada PR, y con "una aprobación cualquiera" GitHub lo contaba: el PR #207 salió con
+  `reviewDecision: APPROVED` sin que nadie lo aprobara. Con `require_code_owner_review` solo cuenta la del dueño.

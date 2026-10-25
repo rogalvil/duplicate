@@ -209,7 +209,7 @@ firmar.
 ## Git
 
 Todo pasa por PR; `main` está protegido del lado del servidor. Se exige PR, CI verde, rama al día con `main`
-y una aprobación de quien mantiene el repo. Se mezcla solo con merge commit. Actualizar con **merge**, nunca
+y la aprobación de quien mantiene el repo (el code owner; la de un bot de revisión no cuenta). Se mezcla solo con merge commit. Actualizar con **merge**, nunca
 rebase.
 
 Conventional Commits en inglés, subject de 50 caracteres o menos. Sin firma GPG, sin
