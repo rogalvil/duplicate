@@ -84,9 +84,12 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   ninguno. Medido sobre 200,000 archivos sintéticos: **298 MB de RSS pico, ~1.4 KB por archivo**, contra los ~146
   bytes que estimaba el plan. Drenando por lotes de 512: **172 MB**, 42% menos. El corpus real son 71,580
   archivos, y por eso nunca se vio — se quedaba debajo del objetivo por ser chico.
-- **Y con eso el objetivo del plan sigue sin cumplirse.** 172 MB a 200,000 archivos extrapolan a ~570 MB a
+- **Y con eso el objetivo del plan sigue sin cumplirse.** 172 MB a 200,000 archivos extrapolaban a ~570 MB a
   800,000, contra el objetivo de < 400 MB. Lo que queda es la `FileTable` y el documento del escaneo, no basura
   autoreleased.
+- **El 172 no se reproduce, y no es regresión (#161).** Medido otra vez: 219 MB a 200,000, 352 MB a 400,000 y
+  657–714 MB a 800,000. El mismo commit que midió 172 (`a050021`), compilado hoy y alternado con `main`, da 219.
+  Un número de memoria se vuelve a medir con el commit que lo produjo antes de llamar regresión a la diferencia.
 - **Launch Services arranca la app con `RLIMIT_NOFILE` blando en 256.** Quedarse sin descriptores no
   truena: sale como archivo ilegible, se cuenta como candidato saltado, y **el escaneo encuentra menos
   de lo que debía** — una falla que se ve como una respuesta más chica, no como un error. `main.swift`
