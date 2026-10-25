@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p3 | #157 | Lógica de Core que solo prueba el selftest, contra la regla de que todo Core lleva su test: la exclusión de `~/Library`, la fase `.grouping`, `HashCache.loadAndRepair`, las etapas y la cancelación del apply de carpetas |
 | p3 | #158 | Use the hash cache no tiene efecto en parecidos |
 | p3 | #159 | Los tamaños del filtro salen como "97.7 KB / 976.6 KB": umbrales decimales impresos en unidades binarias |
 | p3 | #160 | Textos viejos: el pie de carpetas dice que solo el CLI puede actuar, y el estado vacío de la biblioteca manda a `rav duplicate scan` |

@@ -379,6 +379,34 @@ struct ExclusionSetTests {
         #expect(fixture.relativePaths(result) == ["real/dup.txt"])
     }
 
+    /// **`~/Library` is pruned under the home it was given, and scanned when it is the root** (#157). Scanning `~`
+    /// once read 91 GB of browser caches and raised five permission dialogs, because nothing excluded it -- while
+    /// two documents said something did. Choosing `~/Library` itself, or something inside it, is deliberate.
+    @Test("Prunes ~/Library under a scanned home, and scans it when it is the root")
+    func prunesLibraryUnlessChosen() throws {
+        let fixture = try WalkFixture()
+        defer { fixture.remove() }
+        try fixture.file("Library/Caches/cache.bin", bytes: 16)
+        try fixture.file("Documents/a.bin", bytes: 16)
+        let home = fixture.root
+        let library = home + "/Library"
+
+        let underHome = try walker.walk(
+            root: home, policy: ScanPolicy(),
+            exclusions: ExclusionSet.forScan(
+                of: home, resolver: FixedTrashRootResolver([]), home: home))
+        #expect(fixture.names(underHome) == ["a.bin"])
+
+        let chosen = try walker.walk(
+            root: library, policy: ScanPolicy(),
+            exclusions: ExclusionSet.forScan(
+                of: library, resolver: FixedTrashRootResolver([]), home: home))
+        #expect(fixture.names(chosen) == ["cache.bin"])
+
+        #expect(ExclusionSet.libraryToExclude(scanning: library + "/Caches", home: home) == nil)
+        #expect(ExclusionSet.libraryToExclude(scanning: home, home: home) == library)
+    }
+
     @Test("Excludes a configured quarantine root as well")
     func excludesQuarantineRoot() throws {
         let fixture = try WalkFixture()

@@ -247,6 +247,40 @@ struct FolderApplyPlanTests {
 @Suite("FolderApplyRunner")
 struct FolderApplyRunnerTests {
 
+    /// **The stages, in order: verifying, then moving, then done** (#157). Verifying a pair digests every file of both
+    /// folders before anything moves -- minutes on a real tree -- so a bar that only counted items sat on "1 of 8"
+    /// while the screen said it was moving. The stage is what the sheet's line reads.
+    @Test("An apply reports verifying, then moving, then done")
+    func reportsItsStages() async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        for folder in ["keep", "gone"] {
+            try scratch.write("\(folder)/one.txt", "first")
+            try scratch.write("\(folder)/two.txt", "second")
+        }
+        var review = FolderReviewState(
+            scan: folderScan(
+                [folderPair(scratch.tree + "/keep", scratch.tree + "/gone")], root: scratch.tree))
+        review.keep(scratch.tree + "/keep")
+        let seen = Mutex<[ApplyStage]>([])
+        _ = try await FolderApplyRunner(
+            state: scratch.state, cacheURL: URL(filePath: scratch.root + "/hashes.v1")
+        ).run(
+            FolderApplyPlan.from(review), sessionID: noon.identifier, instant: noon,
+            disposer: RecordingDisposer(),
+            onProgress: { progress in seen.withLock { $0.append(progress.stage) } })
+        let stages = seen.withLock { $0 }
+        let firstMoving = try #require(
+            stages.firstIndex(of: .moving), "no moving stage in \(stages)")
+        let firstDone = try #require(stages.firstIndex(of: .done), "no done stage in \(stages)")
+        let verifying = stages.indices.filter {
+            if case .verifying = stages[$0] { return true } else { return false }
+        }
+        #expect(!verifying.isEmpty, "no verifying stage in \(stages)")
+        #expect(verifying.allSatisfy { $0 < firstMoving }, "verifying came after moving: \(stages)")
+        #expect(firstMoving < firstDone, "done came before moving: \(stages)")
+    }
+
     /// A folder the Trash refused lands in quarantine, and the report counts it, so the sheet can say where.
     @Test("A folder moved to quarantine is counted as quarantined")
     func countsQuarantined() async throws {
