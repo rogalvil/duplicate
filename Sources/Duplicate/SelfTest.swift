@@ -3741,6 +3741,10 @@ enum SelfTest {
     private static func checkScanWindow() async throws {
         let root = NSTemporaryDirectory() + "duplicate-selftest-scanwin-\(UUID().uuidString)"
         defer { try? FileManager.default.removeItem(atPath: root) }
+        // **The user's own recent folders are not this mode's to touch.** A panel built with the default store
+        // remembered every root this mode scanned: the real list filled with `/tmp` folders that no longer exist,
+        // and its cap of ten pushed the user's real ones out. Read before and compared after.
+        let realRecents = RecentRootsStore().load()
         let tree = root + "/tree"
         try FileManager.default.createDirectory(atPath: tree, withIntermediateDirectories: true)
 
@@ -3853,7 +3857,9 @@ enum SelfTest {
         // 4. **A cancelled scan writes nothing.**
         // Teeth: move the `store.save` before the finder's last cancellation check and a second document
         // appears.
-        let second = ScanPanelController(stateDirectory: state)
+        let second = ScanPanelController(
+            stateDirectory: state, recentRoots: recents,
+            cacheDirectory: URL(filePath: root + "/caches"))
         defer { second.window?.close() }
         second.setRootForSelftest(tree)
         second.startForSelftest()
@@ -3864,8 +3870,54 @@ enum SelfTest {
             "a cancelled scan left \(store.identifiers(in: .scans).count) documents behind"
         )
 
+        // **Every detector says when it could not enter a folder** (#146). The folder and perceptual sessions
+        // counted unreadable directories and nothing read the count, so a subtree the walk could not enter came out
+        // of those two scans as "nothing found" -- the result that looks exactly like success. Through the panel,
+        // end to end, with its alerts recorded instead of shown and its caches under `/tmp`.
+        // Teeth: drop `reportUnreadable` from `finishFolder` and the folder scan reports no alert.
+        let unreadableTree = root + "/unreadable"
+        for relative in ["a.bin", "copia/a.bin", "cerrada/x.bin"] {
+            let path = unreadableTree + "/" + relative
+            try FileManager.default.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true)
+            try Data("same".utf8).write(to: URL(filePath: path))
+        }
+        let closed = unreadableTree + "/cerrada"
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: closed)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: closed)
+        }
+        for detector in ["exact", "folders", "similar"] {
+            let probe = ScanPanelController(
+                stateDirectory: state, recentRoots: recents,
+                cacheDirectory: URL(filePath: root + "/caches"))
+            defer { probe.window?.close() }
+            var shown: [String] = []
+            probe.presentAlert = { alert in
+                shown.append(alert.messageText)
+                return .alertFirstButtonReturn
+            }
+            probe.setRootForSelftest(unreadableTree)
+            if detector == "folders" { probe.chooseFolderDetectorForSelftest() }
+            if detector == "similar" { probe.chooseSimilarDetectorForSelftest() }
+            probe.startForSelftest()
+            await probe.awaitCompletionForSelftest()
+            try expect(
+                shown.contains(Strings.string("scan.inaccessible.title")),
+                "a \(detector) scan that could not enter a folder said nothing about it (alerts: \(shown))"
+            )
+        }
+
+        try expect(
+            RecentRootsStore().load() == realRecents,
+            "this mode changed the user's own recent folders")
+
         print("  60 files scanned by the window into 20 groups, saved and read back")
         print("  a bad root refused before any work; a cancelled scan wrote nothing")
+        print(
+            "  all three detectors say when a folder could not be entered; the real recent folders untouched"
+        )
     }
 
     // MARK: - apply-window
