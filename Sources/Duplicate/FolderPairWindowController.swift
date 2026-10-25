@@ -208,18 +208,14 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         return pairs.indices.contains(row) ? pairs[row] : nil
     }
 
-    /// The count, the threshold, and what the two columns mean to anything that acts on them.
+    /// The count and the threshold.
     ///
-    /// `rav duplicate folders-move` keeps `folder_a` and moves `folder_b` to quarantine. This viewer decides and
-    /// applies on its own now, so the line says first that the choice here is the user's, then which side the CLI
-    /// would take if the same scan were applied there (#160). The documents are shared, so both can act. It stays
-    /// about as short as the old line: at the minimum width a longer one lost its middle to the ellipsis.
+    /// It used to add which side a command-line tool sharing these documents would quarantine; the user decides
+    /// here, and that tool is not one an app user has.
     private func footerString() -> String {
-        let text =
-            String(
-                format: Strings.string("folders.footer"), Strings.count("count.pairs", pairs.count),
-                Int(scan.threshold * 100))
-            + "  ·  " + Strings.string("folders.orientation")
+        let text = String(
+            format: Strings.string("folders.footer"), Strings.count("count.pairs", pairs.count),
+            Int(scan.threshold * 100))
         guard let saveFailure else { return text }
         // **First, and in orange.** The footer is one line truncated in the middle, and a failure at its end was
         // exactly the part the ellipsis hid.

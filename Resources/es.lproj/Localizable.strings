@@ -39,14 +39,14 @@
 /* %1$@ y %2$@ son conteos con su sustantivo, de Localizable.stringsdict: count.scans y count.shown. */
 "library.footer" = "%1$@ - %2$@";
 /* %@ es el directorio de donde se leen los escaneos. */
-"library.empty" = "Todavía no hay escaneos.\n\nAprieta Comando-N para escanear una carpeta. Los escaneos hechos con rav duplicate scan <carpeta> también aparecen aquí.\n\n%@";
+"library.empty" = "Todavía no hay escaneos.\n\nAprieta Comando-N para escanear una carpeta.\n\n%@";
 "library.empty.filtered" = "Ningún escaneo coincide con el filtro.";
 "library.action.revealFolder" = "Abrir la carpeta escaneada";
 "library.action.revealDocument" = "Mostrar el archivo del escaneo en Finder";
 "library.action.copyIdentifier" = "Copiar el id del escaneo";
 "library.relativePaths.title" = "Este escaneo registró rutas relativas";
 /* %@ es la raíz registrada. */
-"library.relativePaths.body" = "Su raíz es \"%@\", que depende de la carpeta desde donde se corrió el CLI. Esta app no puede resolverla, y adivinar apuntaría a la carpeta equivocada.";
+"library.relativePaths.body" = "Su raíz es \"%@\", una ruta relativa que depende de la carpeta desde donde se hizo el escaneo. Esta app no puede resolverla, y adivinar apuntaría a la carpeta equivocada.";
 "button.ok" = "Aceptar";
 
 /* Menú principal, agregado con la revisión */
@@ -104,12 +104,12 @@
 "review.unsaved.title" = "¿Guardar esta revisión?";
 /* %@ es count.groups, de Localizable.stringsdict. */
 "review.unsaved.body" = "Decidiste %@. Los grupos que no revisaste no se registran ni a favor ni en contra.";
-"review.unsaved.cleared" = "Quitaste todas las decisiones de este escaneo. Si no guardas, el archivo conserva las anteriores, y el CLI o la próxima vez que lo abras actuarán sobre ellas.";
+"review.unsaved.cleared" = "Quitaste todas las decisiones de este escaneo. Si no guardas, el archivo conserva las anteriores, y la próxima vez que lo abras seguirán ahí.";
 "review.unsaved.save" = "Guardar";
 "review.unsaved.discard" = "Descartar";
 "button.cancel" = "Cancelar";
 "library.action.review" = "Revisar este escaneo";
-"library.relativePaths.reviewBody" = "Su raíz es \"%@\", que depende de la carpeta desde donde se corrió el CLI. Una revisión no podría accionar esas rutas.";
+"library.relativePaths.reviewBody" = "Su raíz es \"%@\", una ruta relativa que depende de la carpeta desde donde se hizo el escaneo. Una revisión no podría accionar esas rutas.";
 
 /* Panel de vista previa */
 "preview.empty" = "Selecciona un archivo para verlo";
@@ -223,10 +223,10 @@
 /* Pie de la revisión */
 "review.button.simulate" = "Simular y aplicar...";
 "library.toolbar.review" = "Revisar";
-"scan.option.hidden.why" = "El CLI lo hace. Una carpeta de .DS_Store idénticos entierra todos los hallazgos reales.";
+"scan.option.hidden.why" = "Viene apagado: una carpeta de .DS_Store idénticos entierra todos los hallazgos reales.";
 "scan.option.packages.why" = "Sacarle un archivo a un .app o un .photoslibrary lo corrompe en silencio.";
 "scan.option.cache.why" = "Un segundo escaneo de la misma carpeta es mucho más rápido. Medido: 130 s en frío, 7 s en caliente sobre 806 GB.";
-"scan.option.minimumSize.hint" = "Lo más chico se ignora, igual que el CLI.";
+"scan.option.minimumSize.hint" = "Lo más chico se ignora.";
 "scan.recent.placeholder" = "Recientes...";
 "review.group.title" = "Grupo %d";
 "review.group.detail" = "%1$@ cada uno - %2$d archivos";
@@ -234,10 +234,10 @@
 "library.delete.title" = "¿Borrar el escaneo %@?";
 "library.delete.body" = "Solo se quita el registro del escaneo y la revisión guardada. Ningún archivo que este escaneo encontró se toca. La carpeta se puede volver a escanear cuando quieras.";
 "library.delete.confirm" = "Borrar el registro";
-"review.imported.body" = "El CLI de rav duplicate escribe una decisión para cada grupo, incluidos los que nadie abrió, rellenada con su propia corazonada. Así que estas marcas pueden no ser elecciones tuyas. Revisar de todos modos las deja como punto de partida; empezar de cero las quita. En ningún caso se escribe nada hasta que guardes o apliques.";
+"review.imported.body" = "Que todos los grupos tengan una decisión, incluidos los que nadie abrió, suele significar que se llenaron solas con una sugerencia. Así que estas marcas pueden no ser elecciones tuyas. Revisar de todos modos las deja como punto de partida; empezar de cero las quita. En ningún caso se escribe nada hasta que guardes o apliques.";
 "review.imported.keep" = "Revisar de todos modos";
 "review.imported.discard" = "Empezar de cero";
-"similar.imported.body" = "El CLI de rav duplicate escribe una decisión para cada par que muestra, incluidos los que nadie miró con calma. Así que estas marcas pueden no ser elecciones tuyas. Revisar de todos modos las deja como punto de partida; empezar de cero las quita, también del archivo, porque este visor guarda cada cambio.";
+"similar.imported.body" = "Que todos los pares tengan una decisión, incluidos los que nadie miró con calma, suele significar que se llenaron solas con una sugerencia. Así que estas marcas pueden no ser elecciones tuyas. Revisar de todos modos las deja como punto de partida; empezar de cero las quita, también del archivo, porque este visor guarda cada cambio.";
 "review.filter.anySize" = "Cualquier tamaño";
 "review.filter.atLeast" = "%@ o más";
 "review.filter.onlyUndecided" = "Sin decidir";
@@ -281,7 +281,6 @@
 "folders.onlyIn" = "Solo en %@:";
 "folders.changedHeader" = "Mismo nombre, contenido distinto:";
 "folders.identical" = "Estas dos carpetas tienen exactamente los mismos archivos.";
-"folders.orientation" = "Aquí decides tú; rav duplicate folders-move manda «Comparada con» a cuarentena";
 "folders.action.revealA" = "Abrir la primera carpeta";
 "folders.action.revealB" = "Abrir la segunda carpeta";
 "similar.window.title" = "Imágenes parecidas - %@";

@@ -693,7 +693,7 @@
 	<key>similar.ambiguousKey.body</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ El CLI leería esas claves como otro par, así que revísalos antes de correr un movimiento: %2$@</string>
+		<string>%#@n@ En el archivo de decisiones esas claves se pueden leer como otro par, así que revísalos: %2$@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>

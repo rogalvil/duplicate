@@ -693,7 +693,7 @@
 	<key>similar.ambiguousKey.body</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ The CLI would read those keys as a different pair, so check them before running a move: %2$@</string>
+		<string>%#@n@ In the decisions file those keys can be read as a different pair, so check them: %2$@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
