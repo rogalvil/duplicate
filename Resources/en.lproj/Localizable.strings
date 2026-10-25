@@ -340,6 +340,8 @@
 "similar.saved" = "Decisions saved";
 "similar.apply.verifyNote" = "Each pair is scored again at the moment it is moved. One that no longer looks alike is skipped.";
 "similar.apply.nothing" = "Nothing to move.";
+"similar.apply.stays" = "stays: %@";
+"similar.apply.alsoGoes" = "goes too: %@";
 "similar.apply.refused.changed" = "now %1$.2f%% alike, under %2$.2f%%";
 "similar.apply.refused.unreadable" = "%@ could not be read";
 "similar.apply.refused.missing" = "already gone";

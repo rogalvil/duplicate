@@ -339,6 +339,8 @@
 "similar.saved" = "Decisiones guardadas";
 "similar.apply.verifyNote" = "Cada par se vuelve a puntuar en el momento de moverlo. Uno que ya no se parezca se salta.";
 "similar.apply.nothing" = "Nada que mover.";
+"similar.apply.stays" = "se queda: %@";
+"similar.apply.alsoGoes" = "también se va: %@";
 "similar.apply.refused.changed" = "ahora %1$.2f%% parecidos, por debajo de %2$.2f%%";
 "similar.apply.refused.unreadable" = "no se pudo leer %@";
 "similar.apply.refused.missing" = "ya no está";

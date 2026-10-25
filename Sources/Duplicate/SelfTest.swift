@@ -5206,6 +5206,39 @@ enum SelfTest {
         try expect(
             sheet.headlineText.contains("1"),
             "the sheet says \(sheet.headlineText) for one decided pair")
+        // **Each file is listed with the other file of its pair, not with the pair's key** (#184). The `a||b` key is
+        // the interop format: under the path it repeated that path and named the other file nowhere.
+        // Teeth: list `pairKey` again in `SimilarApplySheetController.listing` and both of these fail.
+        try expect(!sheet.listText.contains("||"), "the sheet prints a pair key: \(sheet.listText)")
+        try expect(
+            sheet.listText.contains(
+                String(
+                    format: Strings.string("similar.apply.stays"), reloaded.pairs[imageRow].fileA)),
+            "the sheet does not name the file that stays: \(sheet.listText)")
+        // After "discard both" the other file goes too, and saying it stays would be a lie about the one decision
+        // that removes two files. Another decision keeping one of them makes it stay again.
+        // Teeth: drop the `moving.contains` check and the first pair below reads "stays".
+        let both = SimilarApplyPlan(
+            items: [
+                SimilarApplyItem(
+                    path: "/x/a.jpg", counterpart: "/x/b.jpg", pairKey: "k1", mediaKind: .image,
+                    recordedSimilarity: 1),
+                SimilarApplyItem(
+                    path: "/x/b.jpg", counterpart: "/x/a.jpg", pairKey: "k1", mediaKind: .image,
+                    recordedSimilarity: 1),
+                SimilarApplyItem(
+                    path: "/x/c.jpg", counterpart: "/x/d.jpg", pairKey: "k2", mediaKind: .image,
+                    recordedSimilarity: 1),
+            ], contradicted: ["/x/d.jpg"], imageThreshold: 5, videoThreshold: 0.7, scanID: "s")
+        let listing = SimilarApplySheetController.listing(for: both)
+        try expect(
+            listing.contains(String(format: Strings.string("similar.apply.alsoGoes"), "/x/b.jpg"))
+                && listing.contains(
+                    String(format: Strings.string("similar.apply.alsoGoes"), "/x/a.jpg")),
+            "a discarded pair says its other file stays: \(listing)")
+        try expect(
+            listing.contains(String(format: Strings.string("similar.apply.stays"), "/x/d.jpg")),
+            "a file another decision keeps is not said to stay: \(listing)")
         try expect(
             !sheet.detailText.isEmpty,
             "the sheet does not warn that every pair is re-checked when it moves")

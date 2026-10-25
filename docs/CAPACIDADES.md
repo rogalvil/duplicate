@@ -368,8 +368,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 |---|---|---|
 | p4 | #161 | Memoria: el objetivo de < 400 MB extrapola a ~570 MB a 800,000 archivos, y la corrida sobre `~` (1.3 millones) no registró el pico |
 | p4 | #162 | `ScanStore.summaries()` decodifica cada grupo de cada escaneo para sacar conteos |
-| p4 | #141 | Plural después de un uno en el resto de las frases con conteo |
-| p4 | #184 | La hoja de simular parecidos muestra la clave interna del par (`a\|\|b`) |
 
 ```bash
 gh issue list --label priority:p1     # cerca de los datos del usuario
