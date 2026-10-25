@@ -98,6 +98,38 @@
 			<string>%d bits</string>
 		</dict>
 	</dict>
+	<key>count.decided</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 decided</string>
+			<key>other</key>
+			<string>%d decided</string>
+		</dict>
+	</dict>
+	<key>count.decidedFolders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 decided</string>
+			<key>other</key>
+			<string>%d decided</string>
+		</dict>
+	</dict>
 	<key>count.files</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -144,6 +176,38 @@
 			<string>1 folder scan</string>
 			<key>other</key>
 			<string>%d folder scans</string>
+		</dict>
+	</dict>
+	<key>count.groups</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 group</string>
+			<key>other</key>
+			<string>%d groups</string>
+		</dict>
+	</dict>
+	<key>count.identicalFiles</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file identical</string>
+			<key>other</key>
+			<string>%d files identical</string>
 		</dict>
 	</dict>
 	<key>count.imagePairs</key>
@@ -256,6 +320,38 @@
 			<string>1 shown</string>
 			<key>other</key>
 			<string>%d shown</string>
+		</dict>
+	</dict>
+	<key>count.skipped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 skipped</string>
+			<key>other</key>
+			<string>%d skipped</string>
+		</dict>
+	</dict>
+	<key>count.skippedFolders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 skipped</string>
+			<key>other</key>
+			<string>%d skipped</string>
 		</dict>
 	</dict>
 	<key>count.videoPairs</key>
@@ -416,6 +512,70 @@
 			<string>1 file would be moved out of the Trash and back where it was</string>
 			<key>other</key>
 			<string>%1$d files would be moved out of the Trash and back where they were</string>
+		</dict>
+	</dict>
+	<key>review.filter.checked</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 of %2$@ still has two or more files</string>
+			<key>other</key>
+			<string>%1$d of %2$@ still have two or more files</string>
+		</dict>
+	</dict>
+	<key>review.imported.title</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>This scan already has a decision for its only group</string>
+			<key>other</key>
+			<string>This scan already has a decision for all %d groups</string>
+		</dict>
+	</dict>
+	<key>review.warning.notADuplicate</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, so there is nothing left to deduplicate here.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Only 1 of the %2$@ this group recorded still exists</string>
+			<key>other</key>
+			<string>Only %1$d of the %2$@ this group recorded still exist</string>
+		</dict>
+	</dict>
+	<key>review.warning.stale</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ since the scan.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 of the %2$@ in this group is gone or has changed</string>
+			<key>other</key>
+			<string>%1$d of the %2$@ in this group are gone or have changed</string>
 		</dict>
 	</dict>
 	<key>scan.inaccessible.body</key>
@@ -608,6 +768,106 @@
 			<string>1 skipped, because the pair no longer holds up:</string>
 			<key>other</key>
 			<string>%d skipped, because the pair no longer holds up:</string>
+		</dict>
+	</dict>
+	<key>similar.confirmShown</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Accept the 1 shown</string>
+			<key>other</key>
+			<string>Accept the %d shown</string>
+		</dict>
+	</dict>
+	<key>similar.confirmShown.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ when you apply: %2$@. Nothing moves now, and the pairs outside the filter stay undecided.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file would be moved to the Trash</string>
+			<key>other</key>
+			<string>%1$d files would be moved to the Trash</string>
+		</dict>
+	</dict>
+	<key>similar.confirmShown.contradictions</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>
+
+Warning: 1 file would be kept by one pair and discarded by another. It is excluded from the apply.</string>
+			<key>other</key>
+			<string>
+
+Warning: %d files would be kept by one pair and discarded by another. Those are excluded from the apply.</string>
+		</dict>
+	</dict>
+	<key>similar.contradiction.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@. Acting on every decision would delete a file you chose to keep elsewhere. Decide those pairs again before applying.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file is in that position: %2$@</string>
+			<key>other</key>
+			<string>%1$d files are in that position, %2$@ among them</string>
+		</dict>
+	</dict>
+	<key>similar.header.bitsDiffer</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 of 64 bits differs</string>
+			<key>other</key>
+			<string>%d of 64 bits differ</string>
+		</dict>
+	</dict>
+	<key>similar.imported.title</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>This scan already comes with a decision for its only pair</string>
+			<key>other</key>
+			<string>This scan already comes with a decision for all %d pairs</string>
 		</dict>
 	</dict>
 	<key>undo.alreadyRestored</key>

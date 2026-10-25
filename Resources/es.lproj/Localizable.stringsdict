@@ -98,6 +98,38 @@
 			<string>%d bits</string>
 		</dict>
 	</dict>
+	<key>count.decided</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 decidido</string>
+			<key>other</key>
+			<string>%d decididos</string>
+		</dict>
+	</dict>
+	<key>count.decidedFolders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 decidida</string>
+			<key>other</key>
+			<string>%d decididas</string>
+		</dict>
+	</dict>
 	<key>count.files</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
@@ -144,6 +176,38 @@
 			<string>1 escaneo de carpetas</string>
 			<key>other</key>
 			<string>%d escaneos de carpetas</string>
+		</dict>
+	</dict>
+	<key>count.groups</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 grupo</string>
+			<key>other</key>
+			<string>%d grupos</string>
+		</dict>
+	</dict>
+	<key>count.identicalFiles</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo idéntico</string>
+			<key>other</key>
+			<string>%d archivos idénticos</string>
 		</dict>
 	</dict>
 	<key>count.imagePairs</key>
@@ -256,6 +320,38 @@
 			<string>1 mostrado</string>
 			<key>other</key>
 			<string>%d mostrados</string>
+		</dict>
+	</dict>
+	<key>count.skipped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 saltado</string>
+			<key>other</key>
+			<string>%d saltados</string>
+		</dict>
+	</dict>
+	<key>count.skippedFolders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 saltada</string>
+			<key>other</key>
+			<string>%d saltadas</string>
 		</dict>
 	</dict>
 	<key>count.videoPairs</key>
@@ -416,6 +512,70 @@
 			<string>1 archivo saldría del basurero y volvería a donde estaba</string>
 			<key>other</key>
 			<string>%1$d archivos saldrían del basurero y volverían a donde estaban</string>
+		</dict>
+	</dict>
+	<key>review.filter.checked</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 de %2$@ todavía tiene dos o más archivos</string>
+			<key>other</key>
+			<string>%1$d de %2$@ todavía tienen dos o más archivos</string>
+		</dict>
+	</dict>
+	<key>review.imported.title</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Este escaneo ya trae una decisión para su único grupo</string>
+			<key>other</key>
+			<string>Este escaneo ya trae una decisión para los %d grupos</string>
+		</dict>
+	</dict>
+	<key>review.warning.notADuplicate</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, así que ya no hay nada que deduplicar aquí.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Solo 1 de los %2$@ que registró este grupo sigue existiendo</string>
+			<key>other</key>
+			<string>Solo %1$d de los %2$@ que registró este grupo siguen existiendo</string>
+		</dict>
+	</dict>
+	<key>review.warning.stale</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ desde el escaneo.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 de los %2$@ de este grupo ya no está o cambió</string>
+			<key>other</key>
+			<string>%1$d de los %2$@ de este grupo ya no están o cambiaron</string>
 		</dict>
 	</dict>
 	<key>scan.inaccessible.body</key>
@@ -608,6 +768,106 @@
 			<string>1 saltado, porque el par ya no se sostiene:</string>
 			<key>other</key>
 			<string>%d saltados, porque el par ya no se sostiene:</string>
+		</dict>
+	</dict>
+	<key>similar.confirmShown</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Aceptar el mostrado</string>
+			<key>other</key>
+			<string>Aceptar los %d mostrados</string>
+		</dict>
+	</dict>
+	<key>similar.confirmShown.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@: %2$@. Ahora no se mueve nada, y los pares fuera del filtro siguen sin decidir.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Al aplicar se movería 1 archivo al basurero</string>
+			<key>other</key>
+			<string>Al aplicar se moverían %1$d archivos al basurero</string>
+		</dict>
+	</dict>
+	<key>similar.confirmShown.contradictions</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>
+
+Ojo: 1 archivo lo conservaría un par y lo descartaría otro. Ese queda fuera del aplicar.</string>
+			<key>other</key>
+			<string>
+
+Ojo: %d archivos los conservaría un par y los descartaría otro. Esos quedan fuera del aplicar.</string>
+		</dict>
+	</dict>
+	<key>similar.contradiction.body</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@. Actuar sobre todas las decisiones borraría un archivo que elegiste conservar en otro par. Vuelve a decidir esos pares antes de aplicar.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Hay 1 archivo en esa situación: %2$@</string>
+			<key>other</key>
+			<string>Hay %1$d archivos en esa situación, entre ellos %2$@</string>
+		</dict>
+	</dict>
+	<key>similar.header.bitsDiffer</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>difiere 1 de 64 bits</string>
+			<key>other</key>
+			<string>difieren %d de 64 bits</string>
+		</dict>
+	</dict>
+	<key>similar.imported.title</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Este escaneo ya trae una decisión para su único par</string>
+			<key>other</key>
+			<string>Este escaneo ya trae una decisión para los %d pares</string>
 		</dict>
 	</dict>
 	<key>undo.alreadyRestored</key>

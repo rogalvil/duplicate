@@ -305,7 +305,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         visible = filter.matchingIndices(in: allPairs) { review.decision(at: $0) }
         table.reloadData()
         countLabel.stringValue = String(
-            format: Strings.string("similar.filter.count"), visible.count, allPairs.count)
+            format: Strings.string("similar.filter.count"), visible.count,
+            Strings.count("count.pairs", allPairs.count))
         confirmShownButton.title = String(
             format: Strings.string("similar.confirmShown"), visible.count)
         confirmShownButton.isEnabled = !visible.isEmpty
@@ -375,7 +376,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         }
         let tally = review.tally
         tallyLabel.stringValue = String(
-            format: Strings.string("similar.tally"), tally.decided, tally.skipped, tally.undecided)
+            format: Strings.string("similar.tally"), Strings.count("count.decided", tally.decided),
+            Strings.count("count.skipped", tally.skipped), tally.undecided)
     }
 
     /// The button of the effective decision is pushed in, so the suggestion is visible as a selection.
@@ -537,7 +539,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = String(
-            format: Strings.string("similar.confirmShown.title"), indices.count)
+            format: Strings.string("similar.confirmShown.title"),
+            Strings.count("count.pairs", indices.count))
         var body = String(
             format: Strings.string("similar.confirmShown.body"),
             plan.items.count, ByteSize.format(bytes))
@@ -1096,7 +1099,8 @@ func similarHeaderText(pair: SimilarPair, durationA: Double?, durationB: Double?
         return String(
             format: Strings.string("similar.header.image"),
             pair.similarity * 100,
-            Int(((1.0 - pair.similarity) * 64.0).rounded())
+            Strings.count(
+                "similar.header.bitsDiffer", Int(((1.0 - pair.similarity) * 64.0).rounded()))
         )
     case .video:
         let total = VideoFrameSampler.defaultFrameCount

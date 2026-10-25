@@ -249,10 +249,13 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
             let name = (path as NSString).lastPathComponent
             let attributes = try? FileManager.default.attributesOfItem(atPath: path)
             guard let modified = attributes?[.modificationDate] as? Date else {
-                return String(format: Strings.string("folders.meta.side.noDate"), name, count)
+                return String(
+                    format: Strings.string("folders.meta.side.noDate"), name,
+                    Strings.count("count.files", count))
             }
             return String(
-                format: Strings.string("folders.meta.side"), name, count,
+                format: Strings.string("folders.meta.side"), name,
+                Strings.count("count.files", count),
                 formatter.string(from: modified))
         }
         return describe(pair.folderA, pair.totalA) + "     "
@@ -281,7 +284,8 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         }
         headerLabel.stringValue = String(
             format: Strings.string("folders.header"),
-            Int(pair.similarity * 100), pair.matching, pair.totalA, pair.totalB
+            Int(pair.similarity * 100), Strings.count("count.identicalFiles", pair.matching),
+            pair.totalA, Strings.count("count.files", pair.totalB)
         )
 
         // The whole difference, not a sample: a folder pair is worth acting on only if you can see what
@@ -325,7 +329,9 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
         // about all of them, and clearing it took away the one number that says a decision landed.
         let tally = review.tally
         tallyLabel.stringValue = String(
-            format: Strings.string("folders.tally"), tally.decided, tally.skipped, tally.undecided)
+            format: Strings.string("folders.tally"),
+            Strings.count("count.decidedFolders", tally.decided),
+            Strings.count("count.skippedFolders", tally.skipped), tally.undecided)
         guard pairs.indices.contains(selectedRow) else {
             adviceLabel.stringValue = ""
             return
