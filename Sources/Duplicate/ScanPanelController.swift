@@ -57,12 +57,25 @@ final class ScanPanelController: NSWindowController {
     private let optionsStack: NSStackView
     private let progressStack: NSStackView
 
-    init(stateDirectory: StateDirectory, recentRoots: RecentRootsStore = RecentRootsStore()) {
+    /// Shows an alert and returns the button pressed. Modal in the app; a selftest records the alert instead,
+    /// because a modal one stops the run until someone clicks it.
+    var presentAlert: (NSAlert) -> NSApplication.ModalResponse = { $0.runModal() }
+
+    /// - Parameter cacheDirectory: where the sessions keep their caches. `nil` is the app's own, in
+    ///   `~/Library/Caches`; a selftest passes one under `/tmp`, or its scans would land in the user's.
+    init(
+        stateDirectory: StateDirectory, recentRoots: RecentRootsStore = RecentRootsStore(),
+        cacheDirectory: URL? = nil
+    ) {
         self.stateDirectory = stateDirectory
         self.recentRoots = recentRoots
-        self.session = ScanSession(store: ScanStore(state: stateDirectory))
-        self.folderSession = FolderScanSession(store: ScanStore(state: stateDirectory))
-        self.similarSession = SimilarScanSession(store: ScanStore(state: stateDirectory))
+        let digests = cacheDirectory?.appending(path: "hashes.v1")
+        self.session = ScanSession(store: ScanStore(state: stateDirectory), cacheURL: digests)
+        self.folderSession = FolderScanSession(
+            store: ScanStore(state: stateDirectory), cacheURL: digests)
+        self.similarSession = SimilarScanSession(
+            store: ScanStore(state: stateDirectory),
+            cacheURL: cacheDirectory?.appending(path: "phashes.v1"))
         self.optionsStack = NSStackView()
         self.progressStack = NSStackView()
 
@@ -495,9 +508,10 @@ final class ScanPanelController: NSWindowController {
                     format: Strings.string("scan.unreadableImages.body"),
                     result.unreadable.count, result.hashedCount)
                 alert.addButton(withTitle: Strings.string("button.ok"))
-                alert.runModal()
+                _ = presentAlert(alert)
             }
             onSimilarFinished?(result.scan)
+            reportUnreadable(count: result.inaccessible.count)
             window?.close()
         }
     }
@@ -527,9 +541,10 @@ final class ScanPanelController: NSWindowController {
                 alert.informativeText = String(
                     format: Strings.string("scan.truncated.body"), worst.fileCount, worst.basename)
                 alert.addButton(withTitle: Strings.string("button.ok"))
-                alert.runModal()
+                _ = presentAlert(alert)
             }
             onFolderFinished?(result.scan)
+            reportUnreadable(count: result.inaccessible.count)
             window?.close()
         }
     }
@@ -564,7 +579,7 @@ final class ScanPanelController: NSWindowController {
                 presentFailure(failure)
             } else {
                 onFinished?(scanResult.scan)
-                reportUnreadable(scanResult)
+                reportUnreadable(count: scanResult.outcome.walk.inaccessiblePaths.count)
                 window?.close()
             }
         }
@@ -586,16 +601,18 @@ final class ScanPanelController: NSWindowController {
     ///
     /// **The failure that must not ship silently.** An unreadable subtree produces "no duplicates found",
     /// which looks exactly like success. The count is the only thing the app can honestly report.
-    private func reportUnreadable(_ result: ScanSession.Result) {
-        guard let body = Self.unreadableWarning(count: result.outcome.walk.inaccessiblePaths.count)
-        else { return }
+    ///
+    /// **All three detectors.** The folder and perceptual sessions counted the same thing and nothing read it, so an
+    /// unreadable subtree came out of those two scans as "nothing found".
+    private func reportUnreadable(count: Int) {
+        guard let body = Self.unreadableWarning(count: count) else { return }
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = Strings.string("scan.inaccessible.title")
         alert.informativeText = body
         alert.addButton(withTitle: Strings.string("button.ok"))
         alert.addButton(withTitle: Strings.string("scan.inaccessible.openSettings"))
-        if alert.runModal() == .alertSecondButtonReturn {
+        if presentAlert(alert) == .alertSecondButtonReturn {
             // A TCC grant does not apply to a process already running, which is why the sheet says to
             // relaunch rather than implying the scan can be retried in place.
             if let url = URL(
@@ -613,7 +630,7 @@ final class ScanPanelController: NSWindowController {
         alert.messageText = Strings.string("scan.failed.title")
         alert.informativeText = message
         alert.addButton(withTitle: Strings.string("button.ok"))
-        alert.runModal()
+        _ = presentAlert(alert)
         showOptions()
         cancelButton.isEnabled = true
         cancelButton.title = Strings.string("button.cancel")

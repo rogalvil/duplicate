@@ -243,7 +243,7 @@ tocar cualquiera de los tres.
 | Nota de cuarentena tras el apply | sí | **no** | **no** |
 | Biblioteca: ordenar, filtrar, badge "Reviewed" | sí | **no** | **no** |
 | Biblioteca: menú contextual | sí | sí | sí |
-| Aviso de carpetas sin permiso al escanear | sí | **no** | **no** |
+| Aviso de carpetas sin permiso al escanear | sí | sí | sí |
 | "Terminado" solo después de guardar | sí | **no** | **no** |
 
 Casi todos los **no** de esta tabla no son decisiones: son la misma pieza escrita tres veces, arreglada en una.
@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p2 | #146 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
 | p2 | #153 | Si guardar un escaneo falla, el resultado en memoria se pierde, aunque el comentario dice que se puede revisar |
 | p3 | #154 | Carpetas y parecidos marcan "Terminado" antes de guardar: el arreglo de #131 solo llegó al exacto |
 | p3 | #155 | El aviso de decisiones importadas y la nota de cuarentena solo existen en el exacto |
@@ -463,7 +462,6 @@ test y parece una capacidad. Se cablea o se borra:
 
 | Dato | Lo calcula | Recomendación |
 |---|---|---|
-| Directorios sin permiso | escaneo de carpetas y de parecidos | **cablear** (pendiente p2) |
 | `hasDecisions` de carpetas y parecidos | la biblioteca | cablear: es el badge "Reviewed" que el exacto sí tiene |
 | `HashingError.isSkippable` | el lector de chunks | borrar o aplicar: `DuplicateFinder` trata todo error como ilegible |
 | Conteos de caché, clases, pares examinados, `scannedKinds`, `videoPairsCompared` | los escaneos | borrar, o mostrarlos en el resumen del escaneo |
