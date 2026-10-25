@@ -3199,11 +3199,35 @@ enum SelfTest {
         try expect(
             atScale.reviewState.tally.decided == 0, "narrowing the list decided something")
 
+        // **The button counts what it would accept** (#216), from the table this process serves.
+        func acceptTitle(_ count: Int) -> String {
+            String(format: Strings.string("review.acceptShown"), count)
+        }
+        try expect(
+            atScale.acceptShownButtonForSelftest == (acceptTitle(2), true),
+            "the accept button reads \(atScale.acceptShownButtonForSelftest), wanted 2 groups and enabled"
+        )
+
+        // **A skip is a choice, and accepting the shown groups passes over it.** The menu item used to decide a
+        // skipped group while its sheet counted only the untouched ones.
+        // Teeth: make `shownUndecidedGroups` return every visible group and the skipped one comes back decided; title
+        // the button with `visible.count` and it still says 2 after the skip.
+        atScale.clickSidebarRowForSelftest(1)
+        atScale.skipGroup(nil)
+        try expect(
+            atScale.acceptShownButtonForSelftest.title == acceptTitle(1),
+            "after a skip the button reads '\(atScale.acceptShownButtonForSelftest.title)'")
         atScale.confirmAllVisibleForSelftest()
         try expect(
-            atScale.reviewState.tally.decided == 2,
-            "\(atScale.reviewState.tally.decided) groups decided, wanted the 2 that were shown"
+            atScale.reviewState.tally.decided == 1,
+            "\(atScale.reviewState.tally.decided) groups decided, wanted the 1 shown and not skipped"
         )
+        try expect(
+            atScale.reviewState.decision(at: 1) == .skipped,
+            "accepting the shown groups decided the one that was skipped")
+        try expect(
+            !atScale.acceptShownButtonForSelftest.enabled,
+            "the accept button is still enabled with nothing left to accept")
         try expect(
             atScale.reviewState.decision(at: 2) == .undecided,
             "a hidden group was decided by a bulk confirm of the visible ones"

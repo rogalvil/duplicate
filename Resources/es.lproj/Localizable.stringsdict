@@ -770,6 +770,22 @@
 			<string>%d saltados, porque el par ya no se sostiene:</string>
 		</dict>
 	</dict>
+	<key>review.acceptShown</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Aceptar el grupo sin decidir</string>
+			<key>other</key>
+			<string>Aceptar los %d sin decidir</string>
+		</dict>
+	</dict>
 	<key>similar.confirmShown</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
