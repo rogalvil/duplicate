@@ -123,8 +123,10 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **Los fixtures de video son H.264 baseline y fallan ruidosamente.** Un runner `macos-15` es una VM y puede no
   tener encoder HEVC. Si ni H.264 hay, `SyntheticMovie.write` lanza: una prueba de video que pasa porque no
   hasheó nada es peor que una que falla.
-- **Un escaneo perceptual de esta app no trae pares de video**, y eso cambia lo que encuentra. Se reporta en
-  `scannedKinds` y el resumen separa los conteos de imagen y de video para que un total no lo esconda.
+- **Un escaneo perceptual de esta app sí trae pares de video**, salvo que se apague la opción de videos.
+  Esta línea decía lo contrario desde antes de que la app hasheara video, y el comentario del visor de parecidos
+  lo repetía cuando ya no era cierto. Qué tipos cubrió un escaneo se reporta en `scannedKinds`, y
+  el resumen separa los conteos de imagen y de video para que un total no lo esconda.
 - **El índice LSH necesita `T + 1` bandas, no `T`.** Es la cota de palomar: con `T` bandas, `T` bits que
   difieren pueden tocar todas, y no queda ninguna idéntica que garantice el encuentro. Medido: bajarlo a `T`
   hace que **6 de 12 semillas pierdan pares** en el test de superconjunto. Y colapsar los hashes idénticos en
