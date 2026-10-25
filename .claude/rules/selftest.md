@@ -93,9 +93,12 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   nada —no puede mergear—, pero un colaborador futuro con escritura sí podría mergear sin revisión. En el ruleset
   `protect main` habría bloqueado al dueño, que no puede aprobar su propio PR, y eximirlo ahí lo habría eximido
   también del CI. Separado, el dueño solo se salta la aprobación.
-- **Y la aprobación tiene que ser de un code owner, porque un bot aprueba.** La app de Greptile deja un review
-  `APPROVED` en cada PR. Con `require_code_owner_review` solo cuenta la de alguien en `CODEOWNERS`, o sea el dueño.
-- **`reviewDecision` no dice qué exige un ruleset.** #207 y #208 salieron `APPROVED` por el review de Greptile, con
-  y sin el requisito de code owner: el campo refleja los reviews (y la protección de rama clásica), no los
-  rulesets. Usarlo como prueba de que una aprobación "cuenta" fue un error mío. Lo que sí evalúa los rulesets es
-  `GET /rulesets/rule-suites`, y la prueba fiel necesita una cuenta sin la excepción del admin.
+- **El requisito de code owner no frena al bot en los PR del dueño.** Medido con
+  `GET /rulesets/rule-suites/<id>`: #208 y #209 pasaron `approval for collaborators` con solo el `APPROVED` de
+  Greptile, ya con `require_code_owner_review` puesto. #210, donde el bot solo comentó, falló esa regla y entró
+  como `bypass` con `--admin`, con las reglas de `protect main` evaluadas y en verde. Si en el PR de un colaborador
+  el bot sí queda fuera no se sabe, y probarlo pide una segunda cuenta (#212).
+- **`reviewDecision` sí sigue a los rulesets. Lo negué dos veces sin medir.** Primero tomé el `APPROVED` como
+  prueba de algo que nadie había evaluado; después escribí que el campo ignoraba los rulesets. Las suites de
+  #207 a #210 coinciden con `reviewDecision` en los cuatro casos. Lo que el campo no dice es *qué* regla falló ni
+  si hubo excepción: eso solo lo da `rule-suites`, que es lo que se cita como evidencia.

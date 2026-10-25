@@ -66,12 +66,18 @@ Toda clave nueva va en **las dos** tablas. `make selftest MODE=l10n` falla si di
 
 **Todo pasa por PR. `main` está protegido por dos rulesets y lo rechaza del lado del servidor.**
 `protect main`, sin bypass para nadie: se exige PR, CI verde y rama al día con `main`, solo merge commit, y no
-hay force-push ni borrado. `approval for collaborators` exige además la aprobación de un **code owner** (`.github/CODEOWNERS`), que
-caduca con un push nuevo, y exime **solo** al admin, porque GitHub no deja aprobar el PR propio. Code owner y no
-cualquiera: el bot de Greptile deja un review `APPROVED` en cada PR, y con "una aprobación cualquiera" nada
-garantizaba que no contara. Que no cuenta ahora es lo que GitHub documenta; no está probado con un colaborador real. Van separados a propósito: un bypass en
-el primero eximiría al dueño también del CI. La única excepción ya ocurrió: el commit inicial de boilerplate que
-creó la rama, porque GitHub no puede abrir un PR sin rama base.
+hay force-push ni borrado. `approval for collaborators` exige además la aprobación de un **code owner**
+(`.github/CODEOWNERS`), que caduca con un push nuevo, y exime **solo** al admin, porque GitHub no deja aprobar el PR
+propio. Van separados a propósito: un bypass en el primero eximiría al dueño también del CI. La única excepción ya
+ocurrió: el commit inicial de boilerplate que creó la rama, porque GitHub no puede abrir un PR sin rama base.
+
+**En un PR del dueño, el review `APPROVED` del bot de Greptile cumple ese segundo ruleset**, aun con el requisito de
+code owner puesto. Está medido con `GET /rulesets/rule-suites`: #208 y #209 lo pasaron sin excepción. Cuando el bot
+solo comenta, como en #210, la regla falla ("At least 1 approving review is required by reviewers with write
+access") y el PR queda `BLOCKED`. Entonces, con CI verde y la rama al día, se mergea con
+`gh pr merge <n> --merge --admin --delete-branch`. Eso salta solo esa regla: `protect main` no tiene excepción, se
+evalúa igual, y la suite queda registrada como `bypass`. No está probado si el requisito de code owner frena al bot en
+el PR de un colaborador, porque hace falta una segunda cuenta (#212).
 
 Si un PR queda atrás de `main`, actualizarlo con **merge**, nunca rebase — la rama ya está publicada
 y `non_fast_forward` prohíbe el force-push:
