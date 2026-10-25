@@ -4032,6 +4032,31 @@ enum SelfTest {
             "the library did not open a review for the unsaved scan")
         unsavedLibrary.closeWindowsForSelftest()
 
+        // **The panel starts on the detector of the tab it is opened from** (#222), and raising it again does not
+        // undo a choice made inside it: from the Images tab, "videos only" is still an Images choice.
+        // Teeth: drop `preselect(for:)` from `beginScan` and the Folders tab opens on identical files; drop the
+        // `matches` guard from `preselect` and raising the panel resets "videos only".
+        let fromFolders = LibraryWindowController(stateDirectory: state)
+        fromFolders.window?.alphaValue = 0
+        defer { fromFolders.closeWindowsForSelftest() }
+        fromFolders.showFolderScansForSelftest()
+        fromFolders.beginScan()
+        try expect(
+            fromFolders.scanPanelDetectorForSelftest == .folders,
+            "from the Folders tab the panel opens on \(String(describing: fromFolders.scanPanelDetectorForSelftest))"
+        )
+        fromFolders.showSimilarScansForSelftest()
+        fromFolders.beginScan()
+        try expect(
+            fromFolders.scanPanelDetectorForSelftest == .similar,
+            "raised from the Images tab the panel is on \(String(describing: fromFolders.scanPanelDetectorForSelftest))"
+        )
+        fromFolders.chooseScanPanelDetectorForSelftest(.similarVideos)
+        fromFolders.beginScan()
+        try expect(
+            fromFolders.scanPanelDetectorForSelftest == .similarVideos,
+            "raising the panel from the same tab undid \"videos only\"")
+
         try expect(
             RecentRootsStore().load() == realRecents,
             "this mode changed the user's own recent folders")
@@ -4866,11 +4891,15 @@ enum SelfTest {
             panel.imageThresholdForSelftest == 5,
             "the default image threshold is \(panel.imageThresholdForSelftest), wanted the CLI's 5"
         )
-        // Images and videos by default, like the CLI, and the menu only appears for this detector.
-        // Teeth: leave `mediaPopup.isHidden` alone in `detectorChanged` and it never shows.
+        // **Every choice is in "Look for"** (#222): images and videos, images only and videos only are entries of the
+        // detector menu, not a third menu that appears after choosing one -- that one was missed.
+        // Teeth: build the menu from `ScanDetector.allCases.prefix(3)` and it offers three entries.
         try expect(
-            panel.isMediaMenuVisibleForSelftest,
-            "the images-and-videos menu is hidden for this detector")
+            panel.detectorTitlesForSelftest
+                == ScanDetector.allCases.map { Strings.string($0.titleKey) }
+                && panel.detectorTitlesForSelftest.count == 5,
+            "the detector menu offers \(panel.detectorTitlesForSelftest)")
+        // Images and videos by default, like the CLI.
         let defaultMedia = try expectSome(
             panel.similarRequestForSelftest(), "no perceptual request")
         try expect(
@@ -4879,9 +4908,9 @@ enum SelfTest {
         )
         // **Each of the other two leaves out exactly one half**, and a pass over videos has no use for a distance
         // between images, so the bits menu goes grey.
-        // Teeth: build `includesImages` from anything but the menu and "videos only" still reads images; leave
-        // `refreshThresholdAvailability` out of `mediaChanged` and the bits menu stays live.
-        panel.chooseMediaForSelftest(2)
+        // Teeth: build `includesImages` from anything but the detector and "videos only" still reads images; leave
+        // `refreshThresholdAvailability` out of `detectorChanged` and the bits menu stays live.
+        panel.chooseDetectorForSelftest(.similarVideos)
         let videosOnly = try expectSome(panel.similarRequestForSelftest(), "no perceptual request")
         try expect(
             !videosOnly.includesImages && videosOnly.includesVideo,
@@ -4890,7 +4919,7 @@ enum SelfTest {
         try expect(
             !panel.isImageThresholdEnabledForSelftest,
             "the bits menu stays live for a pass over videos")
-        panel.chooseMediaForSelftest(1)
+        panel.chooseDetectorForSelftest(.similarImages)
         let imagesOnly = try expectSome(panel.similarRequestForSelftest(), "no perceptual request")
         try expect(
             imagesOnly.includesImages && !imagesOnly.includesVideo,
@@ -4899,7 +4928,7 @@ enum SelfTest {
         try expect(
             panel.isImageThresholdEnabledForSelftest,
             "the bits menu stays grey for a pass over images")
-        panel.chooseMediaForSelftest(0)
+        panel.chooseDetectorForSelftest(.similar)
 
         // **The hash-cache toggle reaches this detector too** (#158). The perceptual request was built without it,
         // so it always used the cache -- turning the toggle off changed nothing here.

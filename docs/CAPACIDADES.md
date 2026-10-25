@@ -105,10 +105,9 @@ Opciones, con su default. Ninguna se recuerda entre aperturas salvo las carpetas
 
 | Opción | Default | Aplica a |
 |---|---|---|
-| Look for: Identical files / Similar folders / Similar images | Identical files | — |
+| Look for: Identical files / Similar folders / Similar images and videos / Similar images only / Similar videos only | el de la pestaña de la biblioteca desde la que se abre (#222); si el panel ya estaba abierto, cambia solo si no está escaneando y no está ya en una entrada de esa pestaña | — |
 | Umbral de carpetas: 95 / 90 / 80 / 70 % | **90 %** | carpetas |
-| Umbral de imágenes: 0 / 2 / 5 / 10 bits | **5 bits** | parecidos |
-| Images and videos / Images only / Videos only | Images and videos | parecidos; con Videos only el umbral en bits se desactiva, porque es una distancia entre imágenes |
+| Umbral de imágenes: 0 / 2 / 5 / 10 bits | **5 bits** | parecidos; con Similar videos only se desactiva, porque es una distancia entre imágenes |
 | Recent… | hasta 10 carpetas que todavía existen | todos |
 | Choose Folder… | sin carpeta; Start gris hasta elegir | todos |
 | Include hidden files | no | todos |

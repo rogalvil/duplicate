@@ -9,17 +9,47 @@ import DuplicateCore
 /// **Progress is pulled, not pushed.** The scanner counts with atomics and this reads a snapshot on a timer
 /// at 10 Hz. The CLI's hooks fire once per file; at 800,000 files a pushed update would be 800,000 actor
 /// hops to redraw a label nobody can read more than ten times a second. Ten reads per second instead.
-/// What a perceptual scan reads, in the order the menu shows it.
-private enum MediaChoice: Int, CaseIterable {
-    case imagesAndVideos
-    case imagesOnly
-    case videosOnly
+/// Which detector the "Look for" menu runs, in the order it lists them.
+///
+/// **The perceptual detector is three entries, not one entry and a second menu.** Images and videos, images only and
+/// videos only were a third menu that appeared only after choosing the detector, and it was missed: "pensé que se
+/// añadiría una opción de solo videos" -- it had been added. One menu holds every choice, so none hides behind
+/// another.
+enum ScanDetector: Int, CaseIterable {
+    case exact
+    case folders
+    case similar
+    case similarImages
+    case similarVideos
 
     var titleKey: String {
         switch self {
-        case .imagesAndVideos: "scan.media.imagesAndVideos"
-        case .imagesOnly: "scan.media.imagesOnly"
-        case .videosOnly: "scan.media.videosOnly"
+        case .exact: "scan.detector.exact"
+        case .folders: "scan.detector.folders"
+        case .similar: "scan.detector.similar"
+        case .similarImages: "scan.detector.similarImages"
+        case .similarVideos: "scan.detector.similarVideos"
+        }
+    }
+
+    /// One of the three perceptual entries.
+    var isPerceptual: Bool { self == .similar || self == .similarImages || self == .similarVideos }
+
+    /// The detector a library tab starts the panel on: the library is showing that kind of scan.
+    init(libraryKind: LibraryWindowController.LibraryKind) {
+        switch libraryKind {
+        case .files: self = .exact
+        case .folders: self = .folders
+        case .similar: self = .similar
+        }
+    }
+
+    /// Whether this entry belongs to a library tab, so raising the panel does not undo a choice made inside it.
+    func matches(_ libraryKind: LibraryWindowController.LibraryKind) -> Bool {
+        switch libraryKind {
+        case .files: self == .exact
+        case .folders: self == .folders
+        case .similar: isPerceptual
         }
     }
 }
@@ -58,8 +88,6 @@ final class ScanPanelController: NSWindowController {
     private let folderSession: FolderScanSession
     private let similarSession: SimilarScanSession
     private let hiddenToggle = NSButton()
-    /// What the perceptual detector reads: images and videos, images only, or videos only.
-    private let mediaPopup = NSPopUpButton()
     private let packagesToggle = NSButton()
     private let cacheToggle = NSButton()
     private let minimumSizeField = NSTextField()
@@ -146,25 +174,15 @@ final class ScanPanelController: NSWindowController {
 
         detectorPopup.target = self
         detectorPopup.action = #selector(detectorChanged(_:))
-        detectorPopup.addItem(withTitle: Strings.string("scan.detector.exact"))
-        detectorPopup.addItem(withTitle: Strings.string("scan.detector.folders"))
-        detectorPopup.addItem(withTitle: Strings.string("scan.detector.similar"))
+        // **Both kinds of media by default, like the CLI, and each can be left out because they cost so differently.**
+        // Measured on a real tree: 2,779 images take 19 seconds and 617 videos take 93.
+        for choice in ScanDetector.allCases {
+            detectorPopup.addItem(withTitle: Strings.string(choice.titleKey))
+        }
         detectorPopup.selectItem(at: 0)
 
         rebuildThresholdMenu()
         thresholdPopup.isHidden = true
-
-        // **Both by default, like the CLI, and each half can be left out because they cost so differently.**
-        // Measured on a real tree: 2,779 images take 19 seconds and 617 videos take 93. A quick pass over a photo
-        // folder should not pay for the movies next to it, and a pass over the movies should not wait for the
-        // photos. One menu and not two switches, because two switches can both be off and scan nothing.
-        for choice in MediaChoice.allCases {
-            mediaPopup.addItem(withTitle: Strings.string(choice.titleKey))
-        }
-        mediaPopup.selectItem(at: MediaChoice.imagesAndVideos.rawValue)
-        mediaPopup.target = self
-        mediaPopup.action = #selector(mediaChanged(_:))
-        mediaPopup.isHidden = true
 
         // Recent roots, so a second scan of the same folder is a click rather than a walk through the open
         // panel. Hidden entirely when there are none, because an empty popup is worse than no popup.
@@ -246,7 +264,7 @@ final class ScanPanelController: NSWindowController {
         optionsStack.spacing = 10
         let detectorRow = NSStackView(views: [
             NSTextField(labelWithString: Strings.string("scan.detector")), detectorPopup,
-            thresholdPopup, mediaPopup,
+            thresholdPopup,
         ])
         detectorRow.orientation = .horizontal
         detectorRow.spacing = 8
@@ -411,15 +429,17 @@ final class ScanPanelController: NSWindowController {
             root: root, policy: policy, usesCache: cacheToggle.state == .on)
     }
 
-    /// Which detector the popup is on.
-    private enum Detector: Int {
-        case exact = 0
-        case folders = 1
-        case similar = 2
+    private var detector: ScanDetector {
+        ScanDetector(rawValue: detectorPopup.indexOfSelectedItem) ?? .exact
     }
 
-    private var detector: Detector {
-        Detector(rawValue: detectorPopup.indexOfSelectedItem) ?? .exact
+    /// Starts the panel on the detector of the library tab it was opened from (#222), unless a scan is running or the
+    /// panel is already on one of that tab's entries -- raising it must not undo "videos only" for "images and
+    /// videos".
+    func preselect(for libraryKind: LibraryWindowController.LibraryKind) {
+        guard task == nil, !detector.matches(libraryKind) else { return }
+        detectorPopup.selectItem(at: ScanDetector(libraryKind: libraryKind).rawValue)
+        detectorChanged(nil)
     }
 
     @objc private func detectorChanged(_ sender: Any?) {
@@ -428,21 +448,12 @@ final class ScanPanelController: NSWindowController {
         // for both would be two meanings behind one number, so the items are rebuilt with the detector.
         rebuildThresholdMenu()
         thresholdPopup.isHidden = detector == .exact
-        mediaPopup.isHidden = detector != .similar
-        refreshThresholdAvailability()
-    }
-
-    @objc private func mediaChanged(_ sender: Any?) {
         refreshThresholdAvailability()
     }
 
     /// The bits menu is a distance between images, so it means nothing to a pass over videos only.
     private func refreshThresholdAvailability() {
-        thresholdPopup.isEnabled = !(detector == .similar && mediaChoice == .videosOnly)
-    }
-
-    private var mediaChoice: MediaChoice {
-        MediaChoice(rawValue: mediaPopup.indexOfSelectedItem) ?? .imagesAndVideos
+        thresholdPopup.isEnabled = detector != .similarVideos
     }
 
     private func rebuildThresholdMenu() {
@@ -456,7 +467,7 @@ final class ScanPanelController: NSWindowController {
                 thresholdPopup.lastItem?.representedObject = value
             }
             thresholdPopup.selectItem(at: 1)
-        case .similar:
+        case .similar, .similarImages, .similarVideos:
             // The CLI's default is 5 bits of 64, which its own comment calls about 92% similarity.
             for value in [0, 2, 5, 10] {
                 thresholdPopup.addItem(
@@ -482,8 +493,8 @@ final class ScanPanelController: NSWindowController {
     private func similarRequest(from request: ScanSession.Request) -> SimilarScanSession.Request {
         SimilarScanSession.Request(
             root: request.root, imageThreshold: imageThreshold, policy: request.policy,
-            usesCache: request.usesCache, includesVideo: mediaChoice != .imagesOnly,
-            includesImages: mediaChoice != .videosOnly)
+            usesCache: request.usesCache, includesVideo: detector != .similarImages,
+            includesImages: detector != .similarVideos)
     }
 
     @objc private func startScan(_ sender: Any?) {
@@ -499,7 +510,7 @@ final class ScanPanelController: NSWindowController {
         startTimer()
 
         let counters = self.counters
-        if detector == .similar {
+        if detector.isPerceptual {
             let similarSession = self.similarSession
             let similarRequest = similarRequest(from: request)
             task = Task { [weak self] in
@@ -838,11 +849,12 @@ final class ScanPanelController: NSWindowController {
     var isFolderScanForSelftest: Bool { isFolderScan }
     var thresholdForSelftest: Double { threshold }
     var imageThresholdForSelftest: Int { imageThreshold }
-    var isMediaMenuVisibleForSelftest: Bool { !mediaPopup.isHidden }
     var isImageThresholdEnabledForSelftest: Bool { thresholdPopup.isEnabled }
-    func chooseMediaForSelftest(_ index: Int) {
-        mediaPopup.selectItem(at: index)
-        mediaChanged(nil)
+    var detectorForSelftest: ScanDetector { detector }
+    var detectorTitlesForSelftest: [String] { detectorPopup.itemTitles }
+    func chooseDetectorForSelftest(_ choice: ScanDetector) {
+        detectorPopup.selectItem(at: choice.rawValue)
+        detectorChanged(nil)
     }
 
     func setUsesCacheForSelftest(_ on: Bool) { cacheToggle.state = on ? .on : .off }
