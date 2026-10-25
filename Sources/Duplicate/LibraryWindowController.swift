@@ -364,6 +364,17 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         watchers.removeAll()
     }
 
+    /// Shown again after a close. `windowWillClose` stops the watchers, and the app keeps this controller to show
+    /// it again (`AppDelegate.showLibrary`): without restarting them the list stopped following new scans, and
+    /// whatever landed while it was closed never appeared either.
+    override func showWindow(_ sender: Any?) {
+        if watchers.isEmpty {
+            startWatching()
+            loadFromDisk()
+        }
+        super.showWindow(sender)
+    }
+
     // MARK: - Actions
 
     @objc private func filterChanged(_ sender: NSSearchField) {

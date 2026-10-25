@@ -2594,6 +2594,35 @@ enum SelfTest {
             what: "a decisions file to change the state column"
         )
 
+        // **Closed and shown again, it still follows the directory** (#149). The watchers stop when the window
+        // closes, and the app keeps this controller to show it again; they never restarted, so a scan that finished
+        // afterwards did not appear. Invisible, because this check has no business on someone's screen.
+        // Teeth: drop `startWatching()` from `showWindow` and the count reads 0.
+        controller.window?.alphaValue = 0
+        controller.window?.close()
+        try expect(
+            controller.watcherCount == 0, "closing left \(controller.watcherCount) watchers running"
+        )
+        controller.showWindow(nil)
+        try expect(
+            controller.watcherCount == 4,
+            "shown again with \(controller.watcherCount) watchers, wanted 4")
+        try store.save(
+            DuplicateScan(
+                scanID: "20260812-130000-000000",
+                root: "/Users/tester/Otro",
+                createdAt: "2026-08-12T13:00:00.000000Z",
+                groups: [
+                    group("f", size: 16, files: ["/Users/tester/Otro/a", "/Users/tester/Otro/b"])
+                ]
+            )
+        )
+        try await waitOnMainActor(
+            until: { controller.displayedRowCount == 5 },
+            what: "a scan written after the library was shown again to reach the table"
+        )
+        controller.window?.close()
+
         print("  4 scans listed, sorted, filtered; upper bound and review state labelled")
         print("  a scan and a decisions file written by another writer both reached the table")
 
