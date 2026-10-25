@@ -5424,7 +5424,8 @@ enum SelfTest {
         // 7c. **Quality before the name, also for a group nobody opened** (#223). The copy here is the heavier of two
         // equal pictures, so by quality it stays; by the name it went. A batch accept decides groups no probe has read,
         // so without their sizes the name decided after all.
-        // Teeth: drop `weighBySize` from the accept and the original name is kept; put the copy-name step back first
+        // Teeth: drop `weighBySize` from `accept` -- the path the sheet's Accept and this harness share -- and the
+        // original name is kept; put the copy-name step back first
         // in `SimilarDecisionDefaults` and the unit test `prefersQualityOverName` fails.
         let portraits = root + "/portraits"
         try FileManager.default.createDirectory(
@@ -5453,6 +5454,14 @@ enum SelfTest {
         let portraitViewer = SimilarPairWindowController(
             scan: portraitScan, stateDirectory: portraitState)
         defer { portraitViewer.window?.close() }
+        // **And asking changes nothing until the answer** (found in review on #225). The sheet's preview weighed the
+        // live review, so a Cancel left the box on one file over a keep set that had moved to the other.
+        // Teeth: weigh `review` instead of the copy in `previewAccept` and the heavier file is already kept here.
+        let keptBefore = portraitViewer.fileRowsForSelftest.filter(\.kept).map(\.path)
+        portraitViewer.previewAcceptForSelftest()
+        try expect(
+            portraitViewer.fileRowsForSelftest.filter(\.kept).map(\.path) == keptBefore,
+            "asking to accept changed what the window keeps, before any answer")
         portraitViewer.confirmShownForSelftest()
         let portraitDecision = try portraitStore.loadSimilarDecisions(scanID: portraitScan.scanID)
             .byKey[SimilarPairKey.key(for: portraitPair)]

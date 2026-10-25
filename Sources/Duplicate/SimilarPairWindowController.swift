@@ -646,12 +646,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             NSSound.beep()
             return
         }
-        weighBySize(indices)
-
-        // What accepting would plan, computed on a copy so the question can be asked before the answer is taken.
-        var preview = review
-        preview.confirmGroups(indices)
-        let plan = SimilarApplyPlan.from(preview)
+        let plan = previewAccept(indices)
         // **A `stat` per file, and that is the cost of saying the number.** The alternative is a sheet that says
         // "some files" and asks for a destructive decision anyway.
         let bytes = plan.items.reduce(Int64(0)) { total, item in
@@ -680,9 +675,24 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// One undo step for the whole batch: accepting 800 groups and undoing them one at a time would not be an undo.
+    /// What accepting would plan, **computed on a copy** so the question can be asked before the answer is taken --
+    /// and so Cancel leaves the window exactly as it was. Weighing the live review here changed suggestions before
+    /// the answer, and a Cancel left the old box checked over a keep set that had moved (found in review on #225).
+    private func previewAccept(_ indices: [Int]) -> SimilarApplyPlan {
+        var preview = review
+        weighBySize(indices, in: &preview)
+        preview.confirmGroups(indices)
+        return SimilarApplyPlan.from(preview)
+    }
+
+    /// What the sheet's Accept does: weigh, then decide, as **one undo step** -- accepting 800 groups and undoing them
+    /// one at a time would not be an undo. The weighing is here, on the path the button takes, so a harness that
+    /// accepts through this function cannot pass with the button's half removed.
     private func accept(_ indices: [Int]) {
-        mutate { $0.confirmGroups(indices) }
+        mutate { state in
+            weighBySize(indices, in: &state)
+            state.confirmGroups(indices)
+        }
     }
 
     /// Gives the files of these groups that no probe has read their size on disk, and refines their suggestions.
@@ -694,19 +704,19 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     ///
     /// **Like against like.** When only one file of a pair was probed, both are weighed by size alone: a resolution
     /// against an unknown that reads as zero pixels would win every time, whatever the files are.
-    private func weighBySize(_ indices: [Int]) {
+    private func weighBySize(_ indices: [Int], in state: inout SimilarReviewState) {
         func sizeOnly(_ path: String) -> MediaFacts? {
             let size = Self.fileSize(path)
             return size > 0
                 ? MediaFacts(path: path, byteCount: size, pixelWidth: 0, pixelHeight: 0) : nil
         }
         for index in indices {
-            for link in review.groups[index].links {
+            for link in state.groups[index].links {
                 let pair = scan.pairs[link.pairIndex]
                 let probedA = facts[Array(pair.fileA.utf8)]
                 let probedB = facts[Array(pair.fileB.utf8)]
                 guard probedA == nil || probedB == nil else { continue }
-                review.updateSuggestion(
+                state.updateSuggestion(
                     at: link.pairIndex, factsA: sizeOnly(pair.fileA), factsB: sizeOnly(pair.fileB))
             }
         }
@@ -976,11 +986,9 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     /// What the accept button does once its sheet is answered. The sheet is modal and cannot be clicked from here,
     /// so the groups come from the same property the button reads.
-    func confirmShownForSelftest() {
-        let indices = shownUndecidedGroups
-        weighBySize(indices)
-        accept(indices)
-    }
+    func confirmShownForSelftest() { accept(shownUndecidedGroups) }
+    /// What the button computes before its sheet asks, without asking.
+    func previewAcceptForSelftest() { _ = previewAccept(shownUndecidedGroups) }
 
     func undoForSelftest() { undo.undo() }
     var canUndoForSelftest: Bool { undo.canUndo }
