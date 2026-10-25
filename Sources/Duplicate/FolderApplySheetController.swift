@@ -258,6 +258,9 @@ final class FolderApplySheetController: NSWindowController {
         progressLabel.isHidden = true
         cancelButton.isEnabled = true
         cancelButton.title = Strings.string("button.close")
+        // Gone, not greyed, as in the exact sheet (#198): a finished sheet that still offers to move to the Trash
+        // reads as if something were left to move.
+        applyButton.isHidden = true
 
         switch outcome {
         case .failure(let error):
@@ -381,6 +384,7 @@ final class FolderApplySheetController: NSWindowController {
         return listView.frame.width
     }
     var isApplyEnabled: Bool { applyButton.isEnabled }
+    var isApplyHiddenForSelftest: Bool { applyButton.isHidden }
     var isUndoVisible: Bool { !undoButton.isHidden }
     var requiredContentSize: NSSize {
         window?.contentView?.layoutSubtreeIfNeeded()
