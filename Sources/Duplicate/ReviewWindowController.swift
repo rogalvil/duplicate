@@ -493,12 +493,13 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         if let presence, !presence.isStillADuplicate {
             warningLabel.stringValue = String(
                 format: Strings.string("review.warning.notADuplicate"),
-                presence.presentCount, presence.files.count
+                presence.presentCount, Strings.count("count.files", presence.files.count)
             )
         } else if let presence, presence.isStale {
             warningLabel.stringValue = String(
                 format: Strings.string("review.warning.stale"),
-                presence.missingCount + presence.changedCount, presence.files.count
+                presence.missingCount + presence.changedCount,
+                Strings.count("count.files", presence.files.count)
             )
             // The one warning the CLI's own UX document specified and never implemented.
         } else if presentation.keptCount == 0, presentation.decision != .discardAll {
@@ -520,7 +521,8 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         let tally = state.tally
         tallyLabel.stringValue = String(
             format: Strings.string("review.tally"),
-            tally.decided, tally.skipped, tally.undecided,
+            Strings.count("count.decided", tally.decided),
+            Strings.count("count.skipped", tally.skipped), tally.undecided,
             ByteSize.format(state.plannedReclaimBytes)
         )
         // The buttons say the same thing the menu items do, from one source: nothing decided means nothing
@@ -553,7 +555,8 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
             stillDuplicate: stillDuplicate
         )
         var summary = String(
-            format: Strings.string("review.filter.count"), visible.count, state.groupCount)
+            format: Strings.string("review.filter.count"), visible.count,
+            Strings.count("count.groups", state.groupCount))
         if let diskSummary { summary += "  \u{00B7}  " + diskSummary }
         filterCountLabel.stringValue = summary
         groupTable.reloadData()
@@ -585,10 +588,16 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         stillThereToggle.isEnabled = true
         diskSummary = String(
             format: Strings.string("review.filter.checkedAgo"),
-            snapshot.stillDuplicateCount,
-            snapshot.checkedCount,
+            Self.checkedSummary(snapshot.stillDuplicateCount, of: snapshot.checkedCount),
             Self.age(of: snapshot.checkedAt)
         )
+    }
+
+    /// "3 of 5 groups still have two or more files", with the verb agreeing with the first count.
+    private static func checkedSummary(_ stillDuplicate: Int, of checked: Int) -> String {
+        String(
+            format: Strings.string("review.filter.checked"), stillDuplicate,
+            Strings.count("count.groups", checked))
     }
 
     /// How long ago a timestamp was, in words.
@@ -647,10 +656,8 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
                 _ = try? self.presenceCache.save(snapshot, scanID: self.state.scan.scanID)
 
                 self.stillThereToggle.isEnabled = true
-                self.diskSummary = String(
-                    format: Strings.string("review.filter.checked"),
-                    outcome.stillDuplicateCount, outcome.checkedCount
-                )
+                self.diskSummary = Self.checkedSummary(
+                    outcome.stillDuplicateCount, of: outcome.checkedCount)
                 self.rebuildVisibleGroups()
             }
         }
@@ -673,7 +680,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
                 }
                 self.filterCountLabel.stringValue = String(
                     format: Strings.string("review.filter.checking"),
-                    progress.value, self.state.groupCount
+                    progress.value, Strings.count("count.groups", self.state.groupCount)
                 )
             }
         }
@@ -714,7 +721,8 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = String(
-            format: Strings.string("review.bulk.title"), untouched.count)
+            format: Strings.string("review.bulk.title"),
+            Strings.count("count.groups", untouched.count))
         alert.informativeText = String(
             format: Strings.string("review.bulk.body"), ByteSize.format(bytes))
         alert.addButton(withTitle: Strings.string("review.bulk.confirm"))
@@ -1454,7 +1462,9 @@ extension ReviewWindowController: NSWindowDelegate {
         alert.informativeText =
             state.decisionsForSaving.isEmpty
             ? Strings.string("review.unsaved.cleared")
-            : String(format: Strings.string("review.unsaved.body"), state.tally.decided)
+            : String(
+                format: Strings.string("review.unsaved.body"),
+                Strings.count("count.groups", state.tally.decided))
         alert.addButton(withTitle: Strings.string("review.unsaved.save"))
         alert.addButton(withTitle: Strings.string("button.cancel"))
         alert.addButton(withTitle: Strings.string("review.unsaved.discard"))

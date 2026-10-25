@@ -92,8 +92,8 @@
 "review.warning.keepNothing" = "A group has to keep at least one file. To remove every copy, use Group > Discard the Whole Group.";
 "review.warning.sharedStorage" = "One file shares its storage with the file you are keeping, so removing it would free nothing. It is not offered.";
 "review.warning.lastGroup" = "That was the last group.";
-/* %1$d decided, %2$d skipped, %3$d never seen, %4$@ freed. */
-"review.tally" = "%1$d decided - %2$d skipped - %3$d not looked at - %4$@ would be freed";
+/* %1$@ and %2$@ are count.decided and count.skipped, from Localizable.stringsdict; %3$d never looked at, %4$@ freed. */
+"review.tally" = "%1$@ - %2$@ - %3$d not looked at - %4$@ would be freed";
 "review.note.sameStorage" = "same storage as the keeper";
 "review.note.copyName" = "looks like a copy";
 "review.discardAll.title" = "Discard every copy in this group?";
@@ -103,8 +103,8 @@
 "review.saveFailed.title" = "The decisions could not be saved";
 "review.saveFailed.body" = "%@";
 "review.unsaved.title" = "Save this review?";
-/* %d is how many groups were decided. */
-"review.unsaved.body" = "You decided %d groups. Groups you did not look at are not recorded either way.";
+/* %@ is count.groups, from Localizable.stringsdict. */
+"review.unsaved.body" = "You decided %@. Groups you did not look at are not recorded either way.";
 "review.unsaved.cleared" = "You removed every decision for this scan. If you do not save, the file keeps the earlier ones, and the CLI or the next opening will act on them.";
 "review.unsaved.save" = "Save";
 "review.unsaved.discard" = "Discard";
@@ -123,10 +123,6 @@
 "review.note.changed" = "changed since the scan";
 "review.note.unreadable" = "cannot be read";
 "review.note.notAFile" = "not a file any more";
-/* %1$d files still here, %2$d the scan recorded. */
-"review.warning.notADuplicate" = "Only %1$d of the %2$d files this group recorded still exist, so there is nothing left to deduplicate here.";
-/* %1$d files gone or changed, %2$d the scan recorded. */
-"review.warning.stale" = "%1$d of the %2$d files in this group are gone or have changed since the scan.";
 
 /* Scan window */
 "scan.window.title" = "New Scan";
@@ -239,25 +235,26 @@
 "library.delete.title" = "Delete scan %@?";
 "library.delete.body" = "Only the scan record and its saved review are removed. No file this scan found is touched. The folder can be scanned again at any time.";
 "library.delete.confirm" = "Delete the Record";
-"review.imported.title" = "This scan already has a decision for all %d groups";
 "review.imported.body" = "The rav duplicate CLI writes a decision for every group, including ones nobody opened, filled in with its own guess. So these check marks may not be choices you made. Reviewing again keeps them as a starting point; starting over clears them. Nothing is written either way until you save or apply.";
 "review.imported.keep" = "Keep Them";
 "review.imported.discard" = "Start Over";
-"similar.imported.title" = "This scan already comes with a decision for all %d pairs";
 "similar.imported.body" = "The rav duplicate CLI writes a decision for every pair it shows, including the ones nobody looked at closely. So these marks may not be your choices. Reviewing anyway keeps them as a starting point; starting over removes them, from the file too, because this viewer saves every change.";
 "review.filter.anySize" = "Any size";
 "review.filter.atLeast" = "%@ and up";
 "review.filter.onlyUndecided" = "Not decided yet";
-"review.filter.count" = "Showing %1$d of %2$d groups";
+/* %2$@ is count.groups, from Localizable.stringsdict. */
+"review.filter.count" = "Showing %1$d of %2$@";
 "menu.group.confirmSelected" = "Accept the Suggestion for Selected Groups...";
-"review.bulk.title" = "Accept the suggestion for %d groups?";
+/* %@ is count.groups, from Localizable.stringsdict. */
+"review.bulk.title" = "Accept the suggestion for %@?";
 "review.bulk.body" = "For groups you have not opened, the suggestion is this app's guess: keep the file that is deepest in the folder tree and does not look like a copy. Accepting it here records a decision for each of them, freeing up to %@. Nothing moves until you simulate and apply, and undo puts everything back.";
 "review.bulk.confirm" = "Accept for All of Them";
 "review.filter.stillThere" = "Still on disk";
 "review.filter.checkDisk" = "Check the disk";
-"review.filter.checking" = "Checking %1$d of %2$d groups...";
-"review.filter.checked" = "%1$d of %2$d still have two or more files";
-"review.filter.checkedAgo" = "%1$d of %2$d still have two or more files, checked %3$@";
+/* %2$@ is count.groups, from Localizable.stringsdict. */
+"review.filter.checking" = "Checking %1$d of %2$@...";
+/* %1$@ is review.filter.checked, already formatted; %2$@ is how long ago. */
+"review.filter.checkedAgo" = "%1$@, checked %2$@";
 "scan.detector" = "Look for";
 "scan.detector.exact" = "Identical files";
 "scan.detector.folders" = "Similar folders";
@@ -278,7 +275,8 @@
 "folders.column.b" = "Compared with";
 "folders.column.matching" = "Same files";
 "folders.column.difference" = "Differences";
-"folders.header" = "%1$d%% alike - %2$d files identical - %3$d against %4$d files";
+/* %2$@ is count.identicalFiles and %4$@ is count.files, from Localizable.stringsdict. */
+"folders.header" = "%1$d%% alike - %2$@ - %3$d against %4$@";
 "folders.footer" = "%1$@ at %2$d%% or more";
 "folders.empty" = "No pair selected";
 "folders.onlyIn" = "Only in %@:";
@@ -307,7 +305,8 @@
 "scan.unreadableImages.body" = "%1$@ %2$@";
 "library.footer.similar" = "%1$@ - %2$@, %3$@";
 "library.empty.similar" = "No perceptual scans yet.\n\nPress Command-N and choose \"Similar images\".";
-"similar.header.image" = "%1$.2f%% alike - %2$d of 64 bits differ";
+/* %2$@ is similar.header.bitsDiffer, from Localizable.stringsdict. */
+"similar.header.image" = "%1$.2f%% alike - %2$@";
 "similar.header.video" = "%1$.2f%% of the sampled frames match";
 "similar.header.video.fewFrames" = "%1$.2f%% of sampled frames match — judged on %2$d of %3$d frames";
 "similar.state.missing" = "This file is no longer there.";
@@ -320,7 +319,8 @@
 "similar.column.decision" = "Decision";
 "similar.state.undecided" = "";
 "similar.state.skipped" = "skipped";
-"similar.tally" = "%1$d decided - %2$d skipped - %3$d not looked at";
+/* %1$@ and %2$@ are count.decided and count.skipped, from Localizable.stringsdict. */
+"similar.tally" = "%1$@ - %2$@ - %3$d not looked at";
 "similar.suggested" = "Suggested: %@";
 "similar.why.copyName" = "the other name looks like a copy";
 "similar.why.quality" = "more pixels, or the same pixels in more bytes";
@@ -336,7 +336,6 @@
 "similar.why.resolutionLower" = "lower resolution (%1$d x %2$d against %3$d x %4$d)";
 "similar.why.qualityRatio" = "%@x the normalised quality";
 "similar.contradiction.title" = "One file is kept by one pair and discarded by another";
-"similar.contradiction.body" = "%1$d files are in that position, %2$@ among them. Acting on every decision would delete a file you chose to keep elsewhere. Decide those pairs again before applying.";
 "similar.ambiguousKey.title" = "A decision was saved under a key that cannot be read back";
 "similar.saved" = "Decisions saved";
 "similar.apply.verifyNote" = "Each pair is scored again at the moment it is moved. One that no longer looks alike is skipped.";
@@ -355,11 +354,14 @@
 "folders.decision.keepBoth" = "Keep both";
 "folders.decision.skip" = "Skip";
 "folders.column.decision" = "Decision";
-"folders.tally" = "%1$d decided - %2$d skipped - %3$d not looked at";
+/* %1$@ and %2$@ are count.decidedFolders and count.skippedFolders, from Localizable.stringsdict. */
+"folders.tally" = "%1$@ - %2$@ - %3$d not looked at";
 "folders.warnNoLoss" = "Everything in %@ is in the other folder too.";
 "folders.review.apply" = "Simulate and apply...";
-"folders.meta.side" = "%1$@: %2$d files, %3$@";
-"folders.meta.side.noDate" = "%1$@: %2$d files, date unreadable";
+/* %2$@ is count.files, from Localizable.stringsdict; %3$@ is the date. */
+"folders.meta.side" = "%1$@: %2$@, %3$@";
+/* %2$@ is count.files, from Localizable.stringsdict. */
+"folders.meta.side.noDate" = "%1$@: %2$@, date unreadable";
 "similar.filter.similarity" = "Alike at least";
 "similar.filter.similarity.any" = "any";
 "similar.filter.similarity.value" = "%d%%";
@@ -368,11 +370,10 @@
 "similar.filter.kind.image" = "Images only";
 "similar.filter.kind.video" = "Videos only";
 "similar.filter.undecided" = "Not decided yet";
-"similar.filter.count" = "%1$d of %2$d pairs shown";
-"similar.confirmShown" = "Accept the %d shown";
-"similar.confirmShown.title" = "Accept the suggestion for %d pairs?";
-"similar.confirmShown.body" = "%1$d files would be moved to the Trash when you apply: %2$@. Nothing moves now, and the pairs outside the filter stay undecided.";
-"similar.confirmShown.contradictions" = "\n\nWarning: %d files would be kept by one pair and discarded by another. Those are excluded from the apply.";
+/* %2$@ is count.pairs, from Localizable.stringsdict. */
+"similar.filter.count" = "Showing %1$d of %2$@";
+/* %@ is count.pairs, from Localizable.stringsdict. */
+"similar.confirmShown.title" = "Accept the suggestion for %@?";
 "button.accept" = "Accept";
 "apply.button.stop" = "Stop";
 "apply.stopped.note" = "The rest were not touched. What did move is in the Trash and this window can put it back.";

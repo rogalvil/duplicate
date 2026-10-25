@@ -3579,7 +3579,8 @@ enum SelfTest {
         try expect(
             controller.warningText
                 == String(
-                    format: Strings.string("review.warning.notADuplicate"), 0, 2),
+                    format: Strings.string("review.warning.notADuplicate"), 0,
+                    Strings.count("count.files", 2)),
             "the warning reads \(controller.warningText)"
         )
         controller.selectFileForSelftest(0)
