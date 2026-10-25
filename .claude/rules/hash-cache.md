@@ -50,6 +50,15 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   rápida es la menos contaminada y promediar mezcla señal con interferencia. Mejor de tres, como en la línea base
   de video.
 - **RSS pico entre 21.7 y 54.8 MB**, contra el objetivo de < 400 MB. Sobra un orden de magnitud.
+- **Pero esa cifra es del corpus real, y a escala el camino de la app es otro número (#161).** El modo `corpus`
+  medía `DuplicateFinder` solo y daba 657–714 MB a 800,000 archivos; el escaneo de la app, con la caché cargada y
+  persistida, daba **897–955 MB**. Una medición de memoria vale lo que vale el camino donde se tomó:
+  `corpus --session-cache` mide el de la app.
+- **El diccionario de la caché es la estructura más grande del proceso a escala.** 800,000 claves de 40 B con
+  digests de 32 B, y Swift lo dimensiona a la siguiente potencia de dos sobre `n / 0.75`: 2²¹ casillas, ~150 MB
+  calculados (medido: cargar la caché caliente lleva el proceso de 29 a 354 MB).
+  Crecerlo de a una inserción además rehashea varias veces con el viejo y el nuevo vivos; `reserve(_:)` lo
+  dimensiona una vez antes de que el escaneo guarde.
 - **La etapa de prefijo, por fin medida sobre el caso que existe para atender.** 80 archivos de 64 MiB del mismo
   tamaño con colas distintas: con la sonda **0 B leídos y 0.03 s**; sin ella **5.0 GB y 1.75 s**. **58×.** Y el
   contador no cuenta los 16 KiB por archivo que la sonda sí lee (1.25 MB en total), así que ese "0 B" es del

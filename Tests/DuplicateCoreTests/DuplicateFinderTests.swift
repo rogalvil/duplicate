@@ -200,6 +200,23 @@ struct DuplicateFinderTests {
         #expect(outcome.walk.inaccessiblePaths.count == 1)
     }
 
+    /// **The outcome keeps what the walk could not see, not every file it saw** (#161). The full list rode along
+    /// to the end of the scan for nothing to read, and at 800,000 files it was part of a 657-714 MB peak.
+    @Test("The outcome does not carry the walk's entries")
+    func dropsTheWalkEntries() async throws {
+        let fixture = try WalkFixture()
+        defer { fixture.remove() }
+        try fixture.file("a.bin", bytes: 10)
+        try fixture.file("b.bin", bytes: 10)
+        try fixture.file(".hidden", bytes: 10)
+
+        let outcome = try await DuplicateFinder().find(root: fixture.root, instant: testInstant)
+        #expect(outcome.scan.groups.count == 1)
+        #expect(outcome.walk.entries.isEmpty)
+        #expect(outcome.walk.visitedCount >= 3)
+        #expect(outcome.walk.skipped[.hidden] == 1)
+    }
+
     @Test("Stamps the identifier and timestamp from the injected instant")
     func stampsInjectedInstant() async throws {
         // Injected rather than read from the clock, because a Date() in the middle of a pipeline makes

@@ -6409,6 +6409,36 @@ enum SelfTest {
             atPath: scratch, withIntermediateDirectories: true)
         let state = StateDirectory(environment: ["XDG_STATE_HOME": scratch], homePath: scratch)
 
+        // **The app's own path, cache and document included** (#161). The finder alone is what this mode timed, and
+        // it said 657-714 MB at 800,000 files; the scan the app runs -- the hash cache loaded and persisted, the
+        // document written -- peaked at 897-955 MB on the same tree. A memory number is only worth what the path
+        // it was measured on is worth. Pass the cache file twice to measure a warm scan.
+        if let cachePath = value(for: "--session-cache", in: arguments) {
+            let clock = ContinuousClock()
+            let started = clock.now
+            let result = try await ScanSession(
+                store: ScanStore(state: state), cacheURL: URL(filePath: cachePath)
+            ).run(
+                ScanSession.Request(root: root),
+                instant: ScanIdentifier.Instant(
+                    year: 2026, month: 10, day: 25, hour: 0, minute: 0, second: 0, microsecond: 0))
+            let elapsed = clock.now - started
+            let seconds =
+                Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+            var usage = rusage()
+            getrusage(RUSAGE_SELF, &usage)
+            try expect(result.saveFailure == nil, "the session could not save its document")
+            try expect(
+                result.outcome.scan.groups.allSatisfy { $0.files.count >= 2 },
+                "a group with fewer than two files was emitted")
+            print(
+                "  session: \(result.outcome.scan.groups.count) groups, "
+                    + "\(result.outcome.cacheHits) cache hits, "
+                    + "\(String(format: "%.2f", seconds))s wall, "
+                    + "peak RSS \(ByteSize.format(Int64(usage.ru_maxrss)))")
+            return
+        }
+
         // The perceptual detector, for checking what a demo tree actually contains before someone is asked to
         // verify it by hand. Read-only over the corpus; the document goes to a temporary state directory.
         if arguments.contains("--similar") {

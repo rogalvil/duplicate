@@ -184,6 +184,29 @@ struct HashCacheTests {
         #expect(await reader.report.recordsRead == 1)
     }
 
+    /// Reserving is about memory only (#161): what is stored, written and read back must not move.
+    @Test("Reserving room changes nothing that is stored")
+    func reservingIsInvisible() async throws {
+        let scratch = try CacheScratch()
+        defer { scratch.remove() }
+
+        let writer = HashCache(url: scratch.url)
+        await writer.load()
+        await writer.store(digest("a"), for: entry())
+        await writer.reserve(1000)
+        await writer.reserve(0)
+        await writer.store(digest("b"), for: entry(inode: 43))
+        #expect(await writer.statistics.live == 2)
+        #expect(await writer.statistics.pending == 2)
+        #expect(try await writer.persist() == 2)
+
+        let reader = HashCache(url: scratch.url)
+        await reader.load()
+        #expect(await reader.digest(for: entry()) == digest("a"))
+        #expect(await reader.digest(for: entry(inode: 43)) == digest("b"))
+        #expect(await reader.report.recordsRead == 2)
+    }
+
     @Test("Any change to the key is a miss")
     func anyKeyChangeMisses() async throws {
         let scratch = try CacheScratch()
