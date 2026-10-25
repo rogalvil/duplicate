@@ -197,7 +197,7 @@ veinte fallas seguidas detienen; cancelar devuelve reporte de lo que sí se movi
 
 | Qué | Cómo se llega | Qué hace |
 |---|---|---|
-| Undo the Last Session… | menú Sessions | Restaura la sesión con id más alto — **aunque ya esté devuelta** |
+| Undo the Last Session… | menú Sessions | Restaura la sesión más nueva que todavía tiene algo que devolver; si no queda ninguna, lo dice |
 | Session History… | menú Sessions | Una fila por apply: fecha, archivos, tamaño, estado (moved / all put back / N of M put back), escaneo |
 | Undo This Session… | botón en el historial | Deshace **cualquier** sesión, no solo la última |
 | Clean Up… / Clean Up Undone Sessions… | botón o menú | Borra journals cuyos archivos ya volvieron **todos**; nunca uno ilegible o vacío |
@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p3 | #156 | Undo the Last Session elige la sesión más nueva aunque ya esté devuelta |
 | p3 | #157 | Lógica de Core que solo prueba el selftest, contra la regla de que todo Core lleva su test: la exclusión de `~/Library`, la fase `.grouping`, `HashCache.loadAndRepair`, las etapas y la cancelación del apply de carpetas |
 | p3 | #158 | Use the hash cache no tiene efecto en parecidos |
 | p3 | #159 | Los tamaños del filtro salen como "97.7 KB / 976.6 KB": umbrales decimales impresos en unidades binarias |
@@ -395,7 +394,7 @@ Vistas desde quien usa la app, no desde el código: dos o más caminos para el m
 
 | Función | Los caminos | Recomendación |
 |---|---|---|
-| Deshacer un apply | Sessions > Undo the Last Session · Session History > Undo This Session · botón Undo This Session en la hoja de aplicar | **Quitar "Undo the Last Session"**: el historial hace lo mismo con más contexto, y el del menú elige la sesión más nueva aunque ya esté devuelta |
+| Deshacer un apply | Sessions > Undo the Last Session · Session History > Undo This Session · botón Undo This Session en la hoja de aplicar | **Quitar "Undo the Last Session"**: el historial hace lo mismo con más contexto (desde #156 el del menú ya no elige una sesión devuelta, pero sigue sin decir cuál va a deshacer más allá de su id) |
 | Limpiar sesiones devueltas | menú Sessions · botón Clean Up en el historial | conservar los dos: es la misma acción y el botón está junto a lo que limpia |
 | Guardar decisiones | ⌘S y al cerrar en la exacta · automático en carpetas y parecidos | **elegir uno**: dos modelos para lo mismo, y cada uno ya falla distinto (sección 2) |
 | Aceptar sugerencias en lote | menú sobre los grupos *seleccionados* en la exacta · botón sobre lo *visible* en parecidos · nada en carpetas | **elegir uno** y llevarlo a los tres; el de parecidos —lo visible, con el conteo dicho antes— es el que el diseño defiende |

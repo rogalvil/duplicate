@@ -18,18 +18,9 @@ enum UndoCoordinator {
         let detail: String
     }
 
-    /// The most recent session with a journal, or `nil` when none exists.
+    /// The most recent session that still has something to put back, or `nil` when none does.
     static func latestSession(in state: StateDirectory) -> String? {
-        let directory = state.path(for: .journal)
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory) else {
-            return nil
-        }
-        return
-            names
-            .filter { $0.hasSuffix(".jsonl") }
-            .map { String($0.dropLast(6)) }
-            .filter(ScanIdentifier.isValid)
-            .max()
+        SessionHistory.latestUndoable(in: state)
     }
 
     /// Plans and runs an undo for one session.
