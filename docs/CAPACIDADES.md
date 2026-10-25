@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 | Prioridad | Issue | Qué |
 |---|---|---|
 | p2 | #146 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
-| p2 | #149 | La biblioteca deja de actualizarse sola si se cierra y se reabre con otra ventana abierta |
 | p2 | #150 | El menú contextual de la biblioteca no hace nada en Folders ni en Images: no hay forma de borrar esos escaneos desde la app (verificado: no actúa sobre otro escaneo, no hace nada) |
 | p2 | #151 | Quitar todas las decisiones de una revisión exacta no reescribe el archivo: el anterior sobrevive, y el CLI o una reapertura actúan sobre decisiones retiradas |
 | p2 | #152 | En carpetas, una falla al guardar decisiones se traga con `try?` |
@@ -409,7 +408,7 @@ Vistas desde quien usa la app, no desde el código: dos o más caminos para el m
 | Aceptar sugerencias en lote | menú sobre los grupos *seleccionados* en la exacta · botón sobre lo *visible* en parecidos · nada en carpetas | **elegir uno** y llevarlo a los tres; el de parecidos —lo visible, con el conteo dicho antes— es el que el diseño defiende |
 | Ver si un archivo sigue ahí | botón Check the disk y filtro "Still on disk" en la exacta · aviso automático "no longer there" en parecidos · fecha ilegible en carpetas | un solo mecanismo para los tres |
 | Vista previa de un archivo | un panel en la exacta · otro distinto, escrito aparte, en parecidos | un solo panel |
-| Actualizar la biblioteca | botón Refresh · actualización automática por vigilancia de directorios | conservar Refresh solo mientras la vigilancia tenga huecos (pendiente p2) |
+| Actualizar la biblioteca | botón Refresh · actualización automática por vigilancia de directorios | conservar Refresh solo mientras la vigilancia tenga huecos: el de reabrir la ventana se cerró con #149; queda el documento reescrito en su lugar, que un watcher de directorio no ve |
 | Simular | botón y ⇧⌘D en la exacta · solo botón en las otras dos | igualar |
 | Revelar en Finder | doble clic (un archivo) · ⌘R (los dos, en parecidos) | igualar: que el doble clic haga lo mismo que ⌘R |
 
