@@ -9,17 +9,17 @@ import DuplicateCore
 /// alike, and the user is the only one who can say whether that is true -- so the two pictures have to be on
 /// screen next to each other, at the same size.
 ///
-/// **It decides, and it does not delete.** A pair at distance 5 can be two genuinely different photographs -- a
-/// burst of the same scene, two frames of one video, the same product on two backgrounds -- so the four choices
-/// here are recorded in `similar-decisions` and nothing is moved. Applying them is its own change, with the same
-/// dry-run gate, journal and re-hash-before-moving the exact detector has.
+/// **Deciding and moving are separate steps.** A pair at distance 5 can be two genuinely different photographs --
+/// a burst of the same scene, two frames of one video, the same product on two backgrounds -- so a choice here is
+/// only recorded in `similar-decisions`. Moving happens from the apply sheet, behind the same dry-run gate,
+/// journal and verify-before-moving the exact detector has: each pair is scored again first.
 ///
 /// **The suggestion is shown selected and is never saved on its own.** The CLI fills a default decision for every
 /// pair before anyone has seen one; here the highlight is a proposal and the file only carries what was
 /// confirmed.
 ///
-/// It shows video pairs too, even though this build cannot produce them: a scan written by `rav duplicate
-/// similar` carries them, and refusing to display what the document holds would be its own kind of lie.
+/// Images and videos alike: a scan with videos on carries both, and so does one written by `rav duplicate
+/// similar`. A video pair shows the share of sampled frames that match instead of a bit distance.
 @MainActor
 final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
