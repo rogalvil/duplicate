@@ -19,8 +19,8 @@ caché, y deshacer. Para usarla no hace falta nada más.
 | Detector perceptual de imagen: escanear desde la app, listar y ver los pares | **funciona** |
 | Detector perceptual de video: escanear, listar y ver los pares | **funciona** |
 | Caché de hashes perceptuales | **funciona** — 177 s a 0.5 s en el mismo árbol |
-| Decidir pares parecidos en el visor, con el consejo, **lote por filtro** y ⌘Z | **funciona** |
-| Aplicar un par parecido a la Papelera desde la app, verificado y deshacible | **funciona** |
+| Decidir imágenes y videos parecidos **por grupo** en el visor, con el consejo, **lote por filtro** y ⌘Z | **funciona** |
+| Aplicar archivos parecidos a la Papelera desde la app, cada uno verificado contra el que se queda, y deshacible | **funciona** |
 | Progreso con etapa durante el apply: verificar y mover se distinguen | **funciona** |
 | Cancelar dentro del hasheo de un archivo grande, no solo entre archivos | **funciona** |
 | Metadata bajo la vista previa: tamaño, fecha, resolución, codec — y fecha por carpeta | **funciona** |

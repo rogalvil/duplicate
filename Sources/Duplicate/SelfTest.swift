@@ -5008,7 +5008,7 @@ enum SelfTest {
         )
 
         // 4. The viewer lists **groups**, one per set of alike files (#217), and shows two of a group side by side.
-        // Teeth: list `scan.pairs` again instead of `review.groups` and the count reads the pairs.
+        // Each group of this fixture is one pair, so the count cannot tell groups from pairs; step 7b can.
         let groups = SimilarGrouping.groups(of: reloaded.pairs)
         let viewer = SimilarPairWindowController(scan: reloaded, stateDirectory: state)
         defer { viewer.window?.close() }

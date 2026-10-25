@@ -27,14 +27,27 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   ya dejó atrás — exactamente lo que una captura real del detector exacto destapó.
 - **La selección se restaura por par, no por fila.** Un filtro que quita filas de arriba movería la selección a
   otro par sin avisar.
-- **Una sugerencia se dibuja como el *default*, no como algo ya elegido.** Si el botón de la sugerencia sale
-  presionado igual que una decisión real, las dos se ven idénticas y el único que sabe la diferencia es el
-  archivo. Aquí la sugerencia toma el `keyEquivalent` de Return y ninguna se ve pulsada hasta que alguien
-  decide.
+- **Una sugerencia no se dibuja como algo ya decidido.** Cuando el visor de parecidos decidía con botones, la
+  sugerencia tomaba el `keyEquivalent` de Return y ninguno se veía pulsado hasta que alguien decidía: si el botón
+  sugerido saliera presionado igual que una decisión real, el único que sabría la diferencia sería el archivo. Con
+  los grupos (#217) la sugerencia es la casilla marcada, como en la revisión exacta, y la columna de decisión solo dice
+  «conserva 1 de 3» para un grupo confirmado.
 - **Las contradicciones se avisan al cerrar, no en cada clic.** El conflicto solo importa cuando el conjunto de
   decisiones está terminado, y una hoja tras cada elección haría imposible decidir 4,771 pares.
-- **"Descartar los dos" va en rojo.** Es la única opción del visor que puede quitar dos archivos de una, y en el
-  corpus real se usó **una vez en 943 decisiones**.
+- **Los parecidos se revisan por grupo, y el archivo sigue siendo por par (#217).** Tres copias de un video son tres
+  pares, y decididos uno a uno el tercero solo podía contradecir a los dos primeros. Medido en los 84 escaneos de este
+  usuario: 8,288 pares de video en 1,254 grupos, y uno de 23 copias eran 253 pares. Un grupo es un conjunto que se
+  conserva, escrito como `keep_a`/`keep_b`/`keep_both`/`keep_none` por par, así que no se puede contradecir y el CLI lo
+  lee igual.
+- **Un archivo solo se descarta junto a uno que se queda y al que se parece.** 46 de 683 grupos de imágenes de tres o
+  más están encadenados (A~B~C sin A~C). Conservar solo A descartaría C por B, que también se va, y el verificador,
+  que puntúa cada archivo contra su contraparte, no tendría nada que se quede contra qué medirlo. Por eso el plan
+  prefiere una contraparte conservada, y "descartar todo el grupo" no se ofrece.
+- **Las claves de los grupos son bytes.** Un `String` uniría una ruta NFC y una NFD en un solo nodo, o sea dos archivos
+  revisados bajo un nombre.
+- **"Descartar los dos" ya no es un botón (#217).** Iba en rojo porque era la única opción que quitaba dos archivos
+  de una, y en el corpus real se usó **una vez en 943 decisiones**. Con los grupos, `keep_none` solo sale entre dos
+  archivos que se descartan junto a uno que se queda; el codec lo sigue leyendo.
 - **Un archivo puede estar en varios pares, y eso es lo normal, no un borde**: 4,771 pares sobre 2,460 archivos
   en el corpus real. Un plan que listara la misma ruta dos veces intentaría moverla dos veces, y el segundo
   intento fallaría sobre un archivo que ya está en la Papelera — un error reportado por algo que funcionó.
