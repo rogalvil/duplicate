@@ -439,6 +439,25 @@ struct SimilarScanSessionVideoTests {
         #expect(result.scannedKinds == [.image])
     }
 
+    /// The other half of the same trade: a pass over the videos does not pay for the photos next to them.
+    @Test("Images can be turned off, and then only videos are read")
+    func skipsImagesWhenAsked() async throws {
+        let scratch = try SimilarScratch()
+        defer { scratch.remove() }
+        try scratch.writeImage("a.png", .rampWithCorner)
+        try scratch.writeImage("b.png", .rampWithCorner)
+        _ = try await writeMovie(scratch, "one.mp4", .movingBlock)
+        _ = try await writeMovie(scratch, "two.mp4", .movingBlock)
+
+        let result = try await scratch.session().run(
+            SimilarScanSession.Request(root: scratch.tree, includesImages: false), instant: noon)
+        #expect(
+            result.hashedCount == 2, "hashed \(result.hashedCount) files, wanted the two videos")
+        #expect(result.videoCount == 2)
+        #expect(result.scan.pairs.map(\.mediaKind) == [.video])
+        #expect(result.scannedKinds == [.video])
+    }
+
     /// **The orientation rule, on the side where it changes the number.** `video_similarity` is asymmetric, so
     /// which file is A decides the answer; taking it from the walk would make the same pair score differently
     /// on another machine.

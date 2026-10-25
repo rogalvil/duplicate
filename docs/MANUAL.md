@@ -57,10 +57,12 @@ La lista se actualiza sola: un escaneo nuevo aparece sin apretar nada.
 
 | Archivos idénticos | Carpetas parecidas | Imágenes parecidas |
 |---|---|---|
-| ![Panel, archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/scan-exact-min.png) | ![Panel, carpetas](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/scan-folders-min.png) | ![Panel, imágenes](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/scan-similar-min.png) |
+| ![Panel, archivos idénticos](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/scan-exact-min.png) | ![Panel, carpetas](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/scan-folders-min.png) | ![Panel, imágenes](https://raw.githubusercontent.com/rogalvil/duplicate/58e6fd83fd4025ab2d3ef4509ce6a7d270480f6d/manual/scan-similar-min-v2.png) |
 
-1. **Buscar**: el tipo. Carpetas pide además qué tan parecidas (90 % por default); imágenes, cuántos bits de 64
-   pueden diferir (5 por default) y si incluye videos, que es más lento.
+1. **Buscar**: el tipo. Carpetas pide además qué tan parecidas (90 % por default). Imágenes pide cuántos bits de
+   64 pueden diferir (5 por default) y qué revisar: **Imágenes y videos**, **Solo imágenes** o **Solo videos**.
+   Los videos son la parte lenta, así que separarlos sirve para una pasada rápida por las fotos o por las películas.
+   Con **Solo videos** el menú de bits se apaga: es una distancia entre imágenes.
 2. **Elegir carpeta…**: la carpeta a revisar. **Recientes…** guarda las últimas diez.
 3. Las opciones, todas apagadas salvo la caché:
    - **Incluir archivos ocultos**: apagado, porque cientos de `.DS_Store` idénticos tapan lo que importa.

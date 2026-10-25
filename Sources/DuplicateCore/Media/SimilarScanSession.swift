@@ -34,8 +34,8 @@ public struct SimilarScanSession: Sendable {
         public var root: String
         /// Maximum Hamming distance out of 64. The CLI's default is 5.
         public var imageThreshold: Int
-        /// Recorded in the document even though no video is scanned yet, because the CLI's reader expects the
-        /// field and a scan at a different video threshold is a different scan.
+        /// The share of sampled frames that must match. Recorded in the document either way, because a reader
+        /// of the format expects the field and a scan at a different video threshold is a different scan.
         public var videoThreshold: Double
         public var policy: ScanPolicy
         /// Whether to read and write the perceptual cache.
@@ -45,6 +45,9 @@ public struct SimilarScanSession: Sendable {
         /// On by default, like the CLI. Off is worth offering because video is the expensive half: on this
         /// user's test tree, 2,779 images take 19 seconds and 617 videos take 93.
         public var includesVideo: Bool
+        /// Whether to hash images. Off for a pass over videos only, which then pays nothing for the photos
+        /// sitting next to them -- the other half of the same trade as ``includesVideo``.
+        public var includesImages: Bool
 
         public init(
             root: String,
@@ -52,7 +55,8 @@ public struct SimilarScanSession: Sendable {
             videoThreshold: Double = 0.70,
             policy: ScanPolicy = ScanPolicy(),
             usesCache: Bool = true,
-            includesVideo: Bool = true
+            includesVideo: Bool = true,
+            includesImages: Bool = true
         ) {
             self.root = root
             self.imageThreshold = imageThreshold
@@ -60,6 +64,7 @@ public struct SimilarScanSession: Sendable {
             self.policy = policy
             self.usesCache = usesCache
             self.includesVideo = includesVideo
+            self.includesImages = includesImages
         }
     }
 
@@ -122,10 +127,12 @@ public struct SimilarScanSession: Sendable {
             root: request.root, policy: request.policy, exclusions: exclusions)
         try Task.checkCancellation()
 
-        let images = walk.entries.filter {
-            SimilarScanSession.imageExtensions.contains(
-                ($0.path as NSString).pathExtension.lowercased())
-        }
+        let images =
+            request.includesImages
+            ? walk.entries.filter {
+                SimilarScanSession.imageExtensions.contains(
+                    ($0.path as NSString).pathExtension.lowercased())
+            } : []
         let videos =
             request.includesVideo
             ? walk.entries.filter {
@@ -276,7 +283,12 @@ public struct SimilarScanSession: Sendable {
             classCount: candidates.classes.count,
             examinedPairs: candidates.pairs.count,
             totalPairs: hashes.count * (hashes.count - 1) / 2,
-            scannedKinds: request.includesVideo ? [.image, .video] : [.image],
+            scannedKinds: Set(
+                [
+                    request.includesImages ? MediaKind.image : nil,
+                    request.includesVideo ? .video : nil,
+                ]
+                .compactMap { $0 }),
             savedPath: savedPath,
             saveFailure: saveFailure
         )

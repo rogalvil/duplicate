@@ -4832,12 +4832,40 @@ enum SelfTest {
             panel.imageThresholdForSelftest == 5,
             "the default image threshold is \(panel.imageThresholdForSelftest), wanted the CLI's 5"
         )
-        // Video is on by default like the CLI, and the toggle only appears for this detector.
-        // Teeth: leave `videoToggle.isHidden` alone in `detectorChanged` and it never shows.
-        try expect(panel.includesVideoForSelftest, "video is off by default")
+        // Images and videos by default, like the CLI, and the menu only appears for this detector.
+        // Teeth: leave `mediaPopup.isHidden` alone in `detectorChanged` and it never shows.
         try expect(
-            panel.isVideoToggleVisibleForSelftest,
-            "the video toggle is hidden for the video detector")
+            panel.isMediaMenuVisibleForSelftest,
+            "the images-and-videos menu is hidden for this detector")
+        let defaultMedia = try expectSome(
+            panel.similarRequestForSelftest(), "no perceptual request")
+        try expect(
+            defaultMedia.includesImages && defaultMedia.includesVideo,
+            "the default reads images \(defaultMedia.includesImages) and videos \(defaultMedia.includesVideo)"
+        )
+        // **Each of the other two leaves out exactly one half**, and a pass over videos has no use for a distance
+        // between images, so the bits menu goes grey.
+        // Teeth: build `includesImages` from anything but the menu and "videos only" still reads images; leave
+        // `refreshThresholdAvailability` out of `mediaChanged` and the bits menu stays live.
+        panel.chooseMediaForSelftest(2)
+        let videosOnly = try expectSome(panel.similarRequestForSelftest(), "no perceptual request")
+        try expect(
+            !videosOnly.includesImages && videosOnly.includesVideo,
+            "videos only reads images \(videosOnly.includesImages) and videos \(videosOnly.includesVideo)"
+        )
+        try expect(
+            !panel.isImageThresholdEnabledForSelftest,
+            "the bits menu stays live for a pass over videos")
+        panel.chooseMediaForSelftest(1)
+        let imagesOnly = try expectSome(panel.similarRequestForSelftest(), "no perceptual request")
+        try expect(
+            imagesOnly.includesImages && !imagesOnly.includesVideo,
+            "images only reads images \(imagesOnly.includesImages) and videos \(imagesOnly.includesVideo)"
+        )
+        try expect(
+            panel.isImageThresholdEnabledForSelftest,
+            "the bits menu stays grey for a pass over images")
+        panel.chooseMediaForSelftest(0)
 
         // **The hash-cache toggle reaches this detector too** (#158). The perceptual request was built without it,
         // so it always used the cache -- turning the toggle off changed nothing here.
