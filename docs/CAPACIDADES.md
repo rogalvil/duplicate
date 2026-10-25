@@ -228,7 +228,7 @@ tocar cualquiera de los tres.
 | Cómo se decide | casillas + Confirm (menú y atajos) | botones | botones |
 | Filtros | tamaño, sin decidir, sigue en disco | **ninguno** | %, tipo, sin decidir |
 | Aceptar en lote | menú, sobre grupos seleccionados | **no** | botón, sobre lo visible |
-| ⌘Z | todo | todo | **solo Skip y el lote** |
+| ⌘Z | todo | todo | todo |
 | Saltar | solo ⇧⌘K | botón | botón |
 | Borrar la decisión | menú | **no** | **no** |
 | Anterior / siguiente | ⌘[ ⌘] | flechas de la tabla | flechas de la tabla |
@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 | Prioridad | Issue | Qué |
 |---|---|---|
 | p2 | #146 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
-| p2 | #147 | En el visor de parecidos ⌘Z no deshace una decisión, y deshacer un Skip borra las decisiones tomadas después |
 | p2 | #148 | En la revisión exacta con filtro, Previous Group se atasca y confirmar puede saltar al primer grupo visible |
 | p2 | #149 | La biblioteca deja de actualizarse sola si se cierra y se reabre con otra ventana abierta |
 | p2 | #150 | El menú contextual de la biblioteca no hace nada en Folders ni en Images: no hay forma de borrar esos escaneos desde la app (verificado: no actúa sobre otro escaneo, no hace nada) |

@@ -552,21 +552,16 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         else { return }
         let decision = SimilarPairWindowController.decisionOrder[button.tag]
         guard let index = scanIndex(forRow: selectedRow) else { return }
-        review.go(to: index)
-        review.confirm(decision)
-        // Saved as it goes, for the same reason the exact review does: a decision the user made and an app that
-        // forgot it are indistinguishable from the outside.
-        saveDecisions()
-        // **Rebuilt, not reloaded.** With "not decided yet" on, deciding a pair removes it from the list; leaving
-        // the row where it was would show a pair the state has already moved past -- which a real screenshot of
-        // the exact review caught once, the sidebar highlighting group 31 while the header said 32 of 880.
-        if filter.onlyUndecided {
-            rebuildVisible()
-        } else {
-            table.reloadData(forRowIndexes: [selectedRow], columnIndexes: allColumnIndexes)
-            advanceSelection()
-            refreshDetail()
+        // **Through `mutate`, like a skip.** This changed `review` directly, so nothing was registered: ⌘Z after a
+        // decision did nothing, and undoing a later skip restored a snapshot from before every decision made in
+        // between -- and wrote it. `mutate` also saves as it goes and rebuilds the list, which is what removes a
+        // decided pair when "not decided yet" is on.
+        let advancing = !filter.onlyUndecided
+        mutate { state in
+            state.go(to: index)
+            state.confirm(decision)
         }
+        if advancing { advanceSelection() }
     }
 
     @objc private func skipPair(_ sender: Any?) {
