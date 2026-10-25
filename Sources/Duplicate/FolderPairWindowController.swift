@@ -210,9 +210,10 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
 
     /// The count, the threshold, and what the two columns mean to anything that acts on them.
     ///
-    /// `rav duplicate folders-move` keeps `folder_a` and moves `folder_b` to quarantine. This viewer is
-    /// read-only, so the CLI is the only thing that can act on a pair today -- which makes "which side gets
-    /// destroyed" information the reader needs here, not a footnote for the docs.
+    /// `rav duplicate folders-move` keeps `folder_a` and moves `folder_b` to quarantine. This viewer decides and
+    /// applies on its own now, so the line says first that the choice here is the user's, then which side the CLI
+    /// would take if the same scan were applied there (#160). The documents are shared, so both can act. It stays
+    /// about as short as the old line: at the minimum width a longer one lost its middle to the ellipsis.
     private func footerString() -> String {
         let text =
             String(

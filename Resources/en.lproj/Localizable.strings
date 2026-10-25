@@ -40,7 +40,7 @@
 /* %1$@ and %2$@ are counts with their noun, from Localizable.stringsdict: count.scans and count.shown. */
 "library.footer" = "%1$@ - %2$@";
 /* %@ is the directory scans are read from. */
-"library.empty" = "No scans yet.\n\nRun rav duplicate scan <folder> and it will appear here.\n\n%@";
+"library.empty" = "No scans yet.\n\nPress Command-N to scan a folder. Scans made with rav duplicate scan <folder> appear here too.\n\n%@";
 "library.empty.filtered" = "No scan matches this filter.";
 "library.action.revealFolder" = "Open Scanned Folder";
 "library.action.revealDocument" = "Show Scan File in Finder";
@@ -293,7 +293,7 @@
 "folders.onlyIn" = "Only in %@:";
 "folders.changedHeader" = "Same name, different contents:";
 "folders.identical" = "These two folders hold exactly the same files.";
-"folders.orientation" = "\"Compared with\" is the side rav duplicate folders-move quarantines";
+"folders.orientation" = "You decide here; rav duplicate folders-move quarantines \"Compared with\"";
 "folders.action.revealA" = "Open the First Folder";
 "folders.action.revealB" = "Open the Second Folder";
 "similar.window.title" = "Similar images - %@";

@@ -39,7 +39,7 @@
 /* %1$@ y %2$@ son conteos con su sustantivo, de Localizable.stringsdict: count.scans y count.shown. */
 "library.footer" = "%1$@ - %2$@";
 /* %@ es el directorio de donde se leen los escaneos. */
-"library.empty" = "Todavía no hay escaneos.\n\nCorre rav duplicate scan <carpeta> y aparecerá aquí.\n\n%@";
+"library.empty" = "Todavía no hay escaneos.\n\nAprieta Comando-N para escanear una carpeta. Los escaneos hechos con rav duplicate scan <carpeta> también aparecen aquí.\n\n%@";
 "library.empty.filtered" = "Ningún escaneo coincide con el filtro.";
 "library.action.revealFolder" = "Abrir la carpeta escaneada";
 "library.action.revealDocument" = "Mostrar el archivo del escaneo en Finder";
@@ -292,7 +292,7 @@
 "folders.onlyIn" = "Solo en %@:";
 "folders.changedHeader" = "Mismo nombre, contenido distinto:";
 "folders.identical" = "Estas dos carpetas tienen exactamente los mismos archivos.";
-"folders.orientation" = "«Comparada con» es el lado que rav duplicate folders-move manda a cuarentena";
+"folders.orientation" = "Aquí decides tú; rav duplicate folders-move manda «Comparada con» a cuarentena";
 "folders.action.revealA" = "Abrir la primera carpeta";
 "folders.action.revealB" = "Abrir la segunda carpeta";
 "similar.window.title" = "Imágenes parecidas - %@";
