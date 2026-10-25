@@ -155,6 +155,8 @@
 /* %d segundos transcurridos. */
 "scan.counts.elapsed" = "%ds";
 "scan.failed.title" = "El escaneo no pudo terminar";
+"scan.saveFailed.title" = "El escaneo terminó, pero no se pudo guardar";
+"scan.saveFailed.body" = "%@\n\nSe abre de todos modos para que lo revises. No queda en la biblioteca: al cerrar su ventana, el resultado se pierde.";
 "scan.inaccessible.title" = "Algunas carpetas no se pudieron leer";
 /* %d carpetas a las que no se pudo entrar. */
 "scan.inaccessible.body" = "Se saltaron %d carpetas porque macOS no dio acceso. Nada de lo que hay dentro se escaneó, así que este resultado está incompleto. Un permiso otorgado ahora no aplica a una app que ya está corriendo: hay que relanzarla.";

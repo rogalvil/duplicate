@@ -259,7 +259,7 @@ public struct SimilarScanSession: Sendable {
         do {
             savedPath = try store.save(scan)
         } catch {
-            saveFailure = String(describing: error)
+            saveFailure = error.localizedDescription
         }
 
         return Result(

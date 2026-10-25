@@ -433,6 +433,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
             return
         }
         let panel = ScanPanelController(stateDirectory: stateDirectory)
+        panel.onUnsaved = { [weak self] scan in self?.openUnsaved(scan) }
         panel.onFolderFinished = { [weak self] _ in
             guard let self else { return }
             // Land on the detector that just produced something, or the new scan is invisible.
@@ -561,17 +562,39 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
             presentLoadFailure(summary, error: error)
             return
         }
+        showReview(of: scan)
+    }
+
+    /// Opens the review of an exact scan already in memory, or raises the one already open.
+    private func showReview(of scan: DuplicateScan) {
+        if let existing = reviewWindows[scan.scanID] {
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
         let controller = ReviewWindowController(scan: scan, stateDirectory: stateDirectory)
-        reviewWindows[summary.scanID] = controller
+        reviewWindows[scan.scanID] = controller
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: controller.window,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reviewWindows[summary.scanID] = nil }
+            MainActor.assumeIsolated { self?.reviewWindows[scan.scanID] = nil }
         }
         controller.showWindow(nil)
         controller.presentImportWarningIfNeeded()
+    }
+
+    /// Opens a scan that finished but could not be saved, from memory.
+    ///
+    /// **Its only chance to be seen.** It is in no list -- the library lists documents, and this one never reached
+    /// disk -- so the review opens straight away, and closing it is the end of it (#153).
+    func openUnsaved(_ scan: ScanPanelController.UnsavedScan) {
+        switch scan {
+        case .exact(let scan): showReview(of: scan)
+        case .folders(let scan): showFolderPairs(of: scan)
+        case .similar(let scan): showSimilarPairs(of: scan)
+        }
     }
 
     /// Opens a perceptual scan's pairs, side by side.
@@ -586,8 +609,18 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         }
         guard let scan = try? ScanStore(state: stateDirectory).loadSimilarScan(id: summary.scanID)
         else { return }
+        showSimilarPairs(of: scan)
+    }
+
+    /// Opens the viewer of a perceptual scan already in memory, or raises the one already open.
+    private func showSimilarPairs(of scan: SimilarScan) {
+        if let existing = similarWindows[scan.scanID] {
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
         let controller = SimilarPairWindowController(scan: scan, stateDirectory: stateDirectory)
-        similarWindows[summary.scanID] = controller
+        similarWindows[scan.scanID] = controller
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: controller.window, queue: .main
         ) { [weak self] _ in
@@ -595,7 +628,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
                 // The conflict between overlapping pairs is worth one sheet, when the set of decisions is done
                 // with -- not after every click.
                 controller.presentContradictionsIfNeeded()
-                self?.similarWindows[summary.scanID] = nil
+                self?.similarWindows[scan.scanID] = nil
             }
         }
         controller.showWindow(nil)
@@ -613,12 +646,22 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         }
         guard let scan = try? ScanStore(state: stateDirectory).loadFolderScan(id: summary.scanID)
         else { return }
+        showFolderPairs(of: scan)
+    }
+
+    /// Opens the viewer of a folder scan already in memory, or raises the one already open.
+    private func showFolderPairs(of scan: FolderScan) {
+        if let existing = folderWindows[scan.scanID] {
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
         let controller = FolderPairWindowController(scan: scan, stateDirectory: stateDirectory)
-        folderWindows[summary.scanID] = controller
+        folderWindows[scan.scanID] = controller
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: controller.window, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.folderWindows[summary.scanID] = nil }
+            MainActor.assumeIsolated { self?.folderWindows[scan.scanID] = nil }
         }
         controller.showWindow(nil)
     }
@@ -807,6 +850,19 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     func removeForSelftest(row: Int) {
         tableView.selectRowIndexes([row], byExtendingSelection: false)
         if let target = clickedTarget() { remove(target) }
+    }
+
+    var hasUnsavedHandlerForSelftest: Bool { scanPanel?.onUnsaved != nil }
+    var openReviewIDsForSelftest: Set<String> {
+        Set(reviewWindows.keys).union(folderWindows.keys).union(similarWindows.keys)
+    }
+    func closeWindowsForSelftest() {
+        scanPanel?.window?.close()
+        for window in reviewWindows.values.map(\.window) + folderWindows.values.map(\.window)
+            + similarWindows.values.map(\.window)
+        {
+            window?.close()
+        }
     }
 
     func showFolderScansForSelftest() {

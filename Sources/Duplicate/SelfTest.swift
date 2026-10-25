@@ -3905,9 +3905,78 @@ enum SelfTest {
             await probe.awaitCompletionForSelftest()
             try expect(
                 shown.contains(Strings.string("scan.inaccessible.title")),
-                "a \(detector) scan that could not enter a folder said nothing about it (alerts: \(shown))"
+                "the \(detector) scan that could not enter a folder said nothing about it (alerts: \(shown))"
             )
         }
+
+        // **A scan that could not be saved still opens** (#153). Each detector's finish returned after the alert,
+        // so the result of a scan that may have taken twenty minutes was gone -- while the comment there promised
+        // the user could still review it. Now it is handed over from memory, and the library opens it.
+        // Teeth: return after the alert again in `finish` and the exact scan never reaches `onUnsaved`.
+        for (detector, slot) in [
+            ("exact", StateDirectory.Slot.scans), ("folders", .folderScans),
+            ("similar", .similarScans),
+        ] {
+            try state.create(slot)
+            let slotPath = state.path(for: slot)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o555], ofItemAtPath: slotPath)
+            defer {
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o755], ofItemAtPath: slotPath)
+            }
+            let probe = ScanPanelController(
+                stateDirectory: state, recentRoots: recents,
+                cacheDirectory: URL(filePath: root + "/caches"))
+            defer { probe.window?.close() }
+            var shown: [String] = []
+            var handedOver: String?
+            var finished = false
+            probe.presentAlert = { alert in
+                shown.append(alert.messageText)
+                return .alertFirstButtonReturn
+            }
+            probe.onUnsaved = { scan in
+                switch scan {
+                case .exact: handedOver = "exact"
+                case .folders: handedOver = "folders"
+                case .similar: handedOver = "similar"
+                }
+            }
+            probe.onFinished = { _ in finished = true }
+            probe.onFolderFinished = { _ in finished = true }
+            probe.onSimilarFinished = { _ in finished = true }
+            probe.setRootForSelftest(tree)
+            if detector == "folders" { probe.chooseFolderDetectorForSelftest() }
+            if detector == "similar" { probe.chooseSimilarDetectorForSelftest() }
+            probe.startForSelftest()
+            await probe.awaitCompletionForSelftest()
+            try expect(
+                shown.contains(Strings.string("scan.saveFailed.title")),
+                "the \(detector) scan that could not be saved did not say so (alerts: \(shown))")
+            try expect(
+                handedOver == detector,
+                "the \(detector) scan that could not be saved was not handed over to be reviewed")
+            try expect(!finished, "the \(detector) scan that was not saved was reported as saved")
+        }
+
+        // And the library is what receives it: the panel it creates is wired, and an unsaved scan opens a review.
+        // Teeth: drop the `onUnsaved` assignment in `beginScan` and the first assertion fails.
+        let unsavedLibrary = LibraryWindowController(stateDirectory: state)
+        unsavedLibrary.window?.alphaValue = 0
+        unsavedLibrary.beginScan()
+        defer { unsavedLibrary.closeWindowsForSelftest() }
+        try expect(
+            unsavedLibrary.hasUnsavedHandlerForSelftest,
+            "the library's scan panel hands an unsaved scan to nobody")
+        let unsaved = DuplicateScan(
+            scanID: "20260812-150000-000000", root: tree, createdAt: "2026-08-12T15:00:00.000000Z",
+            groups: [])
+        unsavedLibrary.openUnsaved(.exact(unsaved))
+        try expect(
+            unsavedLibrary.openReviewIDsForSelftest.contains(unsaved.scanID),
+            "the library did not open a review for the unsaved scan")
+        unsavedLibrary.closeWindowsForSelftest()
 
         try expect(
             RecentRootsStore().load() == realRecents,
