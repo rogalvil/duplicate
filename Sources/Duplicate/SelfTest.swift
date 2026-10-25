@@ -5089,8 +5089,10 @@ enum SelfTest {
         let switcher = SimilarPairWindowController(scan: videoFirst, stateDirectory: switcherState)
         defer { switcher.window?.close() }
         switcher.selectGroupForSelftest(1)
-        await switcher.awaitFactsForSelftest()
-        try? await Task.sleep(for: .milliseconds(1500))
+        // **Waited for, not slept on.** A fixed 1.5 seconds was a race against AVFoundation on a busy runner -- found
+        // in review on #219.
+        try await waitOnMainActor(
+            until: { switcher.probesInFlightForSelftest == 0 }, what: "both probes to answer")
         switcher.selectGroupForSelftest(0)
         try expect(
             switcher.leftMetadataForSelftest.text.contains("\u{00D7}"),
