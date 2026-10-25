@@ -62,6 +62,10 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   y **fecha** por lado —la fecha es lo que contesta "conservar la más nueva" y cuesta un `stat`—, y el tamaño no
   aparece: producirlo es recorrer el árbol, que el apply ya paga una vez para el manifiesto a decenas de segundos,
   y pagarlo en cada tecla de flecha para un número que nadie decide es el trueque equivocado.
+- **Y por eso los bytes movidos salen del manifiesto, no del disposer (#166).** `TrashDisposer` lee `.size`, que
+  para un directorio es el tamaño de su lista de nombres: la hoja decía «1.3 KB» por una carpeta de 160 MB, y el
+  journal guardaba lo mismo para el historial. El manifiesto acaba de leer cada archivo, así que la suma no cuesta
+  otro recorrido.
 - **Los defaults de la app desactivan el peor caso del detector de carpetas.** La clase patológica del plan es
   10,000 `__init__.py` idénticos; medido, un `__init__.py` **vacío** cae bajo el mínimo de 1 byte y un `.DS_Store`
   está en la lista de ruido, así que ninguno de los dos llega al detector. Hace falta un archivo **no vacío, no

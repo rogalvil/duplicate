@@ -5658,6 +5658,11 @@ enum SelfTest {
         try expect(outcome.originalPath == gonePath, "moved \(outcome.originalPath)")
         try expect(!manager.fileExists(atPath: gonePath), "the folder is still there")
         try expect(manager.fileExists(atPath: keepPath), "the folder that was kept is gone")
+        // **The bytes moved are the files', "first" and "second" (#166).** The Trash disposer reads `.size`, which
+        // for a directory is its list of names: the sheet said 1.3 KB for a folder of 160 MB.
+        // Teeth: append the disposer's outcome unchanged in `FolderApplyRunner` and this reads the entry's size.
+        try expect(
+            report.movedBytes == 11, "the apply moved \(report.movedBytes) bytes, wanted 11")
 
         try expect(report.refused.count == 1, "\(report.refused.count) refusals, wanted 1")
         guard case .wouldLoseFiles(let count, let examples) = report.refused[0].reason else {

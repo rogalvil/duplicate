@@ -146,6 +146,24 @@ struct FolderManifestTests {
         #expect(b.filesMissing(from: a) == ["one.txt"])
     }
 
+    /// **What moving the folder moves (#166)**, from both ways a digest is found: hashed, and read back from the
+    /// cache, which is the path a just-scanned folder takes.
+    @Test("The manifest counts the bytes of its files, cached or hashed")
+    func countsBytes() async throws {
+        let scratch = try FolderScratch()
+        defer { scratch.remove() }
+        try scratch.write("a/one.txt", "first")
+        try scratch.write("a/sub/.hidden", "abc")
+        try scratch.write("a/empty.txt", "")
+
+        let cache = HashCache(url: URL(filePath: scratch.root + "/hashes.v1"))
+        await cache.loadAndRepair()
+        let cold = try await FolderManifest.build(root: scratch.tree + "/a", cache: cache)
+        #expect(cold.byteCount == 8)
+        let warm = try await FolderManifest.build(root: scratch.tree + "/a", cache: cache)
+        #expect(warm.byteCount == 8, "the cached path counted \(warm.byteCount) bytes")
+    }
+
     /// The journal needs one digest for a whole tree, and it has to move when anything inside does.
     @Test("The manifest digest changes with any file inside")
     func digestsTheWholeTree() async throws {
@@ -357,11 +375,19 @@ struct FolderApplyRunnerTests {
         #expect(disposer.disposed == [DirectoryTree.canonical(scratch.tree + "/gone")])
         #expect(report.refused.isEmpty)
 
+        // **The bytes are the files', not what the disposer says (#166).** The real one reports the directory
+        // entry's size; this one reports 100, and neither is what was moved.
+        #expect(
+            report.movedBytes == 11,
+            "reported \(report.movedBytes) bytes for \"first\" and \"second\"")
+
         let loaded = try MoveJournal.load(sessionID: noon.identifier, in: scratch.state)
         let entry = try #require(loaded.entries.first)
         let manifest = try await FolderManifest.build(root: scratch.tree + "/keep")
         // The two trees are identical, so the recorded digest is the keeper's manifest too.
         #expect(entry.digest == manifest.digest)
+        // The history shows this number too.
+        #expect(entry.byteCount == 11)
     }
 
     /// **The refusal this whole design exists for.** A folder that is 95% a copy still has the 5%.

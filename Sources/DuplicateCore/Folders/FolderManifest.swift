@@ -14,10 +14,16 @@ public struct FolderManifest: Sendable, Hashable {
     /// Relative path to digest, for every file under the folder.
     public let entries: [String: Digest32]
     public let root: String
+    /// Bytes in the files of `entries`, which is what moving the folder moves (#166).
+    ///
+    /// **Not the folder's own size.** `.size` on a directory is the size of its list of names, so the apply sheet
+    /// said 1.3 KB for a folder of 160 MB. The manifest has just read every file, so the real number is free here.
+    public let byteCount: Int64
 
-    public init(root: String, entries: [String: Digest32]) {
+    public init(root: String, entries: [String: Digest32], byteCount: Int64) {
         self.root = root
         self.entries = entries
+        self.byteCount = byteCount
     }
 
     public var fileCount: Int { entries.count }
@@ -86,6 +92,7 @@ public struct FolderManifest: Sendable, Hashable {
         var entries: [String: Digest32] = [:]
         entries.reserveCapacity(walk.entries.count)
         var seen = 0
+        var bytes: Int64 = 0
         for entry in walk.entries {
             try Task.checkCancellation()
             let relative = PathElision.relative(DirectoryTree.canonical(entry.path), to: canonical)
@@ -93,6 +100,7 @@ public struct FolderManifest: Sendable, Hashable {
             if seen % ApplyProgress.fileReportInterval == 0 { onFile?(seen) }
             if let cache, let known = await cache.digest(for: entry) {
                 entries[relative] = known
+                bytes += entry.size
                 continue
             }
             // **A cancelled hash must not turn into a missing entry.** `ContentHasher` stops between chunks, and
@@ -113,8 +121,9 @@ public struct FolderManifest: Sendable, Hashable {
             }
             if let cache { await cache.store(result.digest, for: entry) }
             entries[relative] = result.digest
+            bytes += result.byteCount
         }
         onFile?(seen)
-        return FolderManifest(root: canonical, entries: entries)
+        return FolderManifest(root: canonical, entries: entries, byteCount: bytes)
     }
 }

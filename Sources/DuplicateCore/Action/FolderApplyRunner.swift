@@ -193,7 +193,12 @@ public struct FolderApplyRunner: Sendable {
                 ApplyProgress(
                     itemsDone: index, itemCount: plan.items.count, path: item.path, stage: .moving))
             do {
-                let outcome = try disposer.dispose(path: item.path)
+                let disposed = try disposer.dispose(path: item.path)
+                // **The disposer's size is the directory entry's** -- its list of names, 1.3 KB for a folder of
+                // 160 MB (#166). What the move took is what the manifest just read.
+                let outcome = DisposalOutcome(
+                    originalPath: disposed.originalPath, resultingPath: disposed.resultingPath,
+                    mechanism: disposed.mechanism, byteCount: doomed.byteCount)
                 moved.append(outcome)
                 pending.append(
                     JournalEntry(
