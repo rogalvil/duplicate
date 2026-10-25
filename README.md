@@ -280,4 +280,8 @@ para que agregar o quitar funcionalidad se decida leyendo, no adivinando.
 
 ## Licencia
 
-MIT. Ver [`LICENSE`](LICENSE).
+[GPL-3.0](LICENSE). Puedes usar, estudiar, modificar y redistribuir Duplicate. Si distribuyes una versión
+modificada, tiene que ir bajo la misma licencia y con su código: nadie puede hacer de ella una app cerrada.
+
+Hasta el 25 de octubre de 2026 el código se publicó bajo MIT, y las copias que se obtuvieron entonces conservan
+esa licencia.

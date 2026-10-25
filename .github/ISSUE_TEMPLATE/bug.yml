@@ -1,0 +1,60 @@
+name: Algo no funciona
+description: Un error, un texto equivocado o algo que no hace lo que dice.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportarlo. **No pegues rutas, nombres de archivo ni capturas con datos tuyos**: este repo es
+        público. Si hace falta mostrar algo, recrea el caso en una carpeta de prueba.
+  - type: textarea
+    id: what
+    attributes:
+      label: Qué pasó
+      description: Lo que viste, con el texto exacto de cualquier aviso.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Cómo reproducirlo
+      description: Los pasos, desde abrir la app.
+      placeholder: |
+        1. ⌘N, elegir una carpeta con...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Qué esperabas
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión
+      description: La línea de Duplicados → Acerca de Duplicados (versión, build y commit).
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: Versión de macOS
+      placeholder: macOS 15.6
+    validations:
+      required: true
+  - type: dropdown
+    id: detector
+    attributes:
+      label: Dónde
+      options:
+        - Biblioteca
+        - Escaneo
+        - Revisión de archivos idénticos
+        - Carpetas parecidas
+        - Imágenes y videos parecidos
+        - Aplicar o deshacer
+        - Otro
+    validations:
+      required: true
