@@ -2653,6 +2653,16 @@ enum SelfTest {
             "  real corpus: \(identifiers.count) scans, \(totals.groupCount) groups read in "
                 + "\(elapsed)"
         )
+        // **And again, through the cache the window keeps** (#162). The watcher re-reads on every change, and with
+        // no document changed a reload should decode none -- while saying exactly what a fresh read says.
+        let cache = SummaryCache()
+        _ = store.summaries(cache: cache)
+        let reloadStart = ContinuousClock.now
+        let reloaded = store.summaries(cache: cache)
+        let reloadElapsed = ContinuousClock.now - reloadStart
+        try expect(
+            reloaded == library.summaries, "a reload through the cache differs from a fresh read")
+        print("  reloaded through the cache in \(reloadElapsed)")
     }
 
     /// Spins the run loop until `condition` holds, or fails naming what it waited for.

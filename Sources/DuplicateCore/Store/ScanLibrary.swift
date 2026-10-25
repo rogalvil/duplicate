@@ -19,9 +19,9 @@ public struct ScanLibrary: Sendable {
     public private(set) var summaries: [ScanStore.Summary]
 
     /// - Parameter loadNow: reads the directory immediately. Pass `false` to start empty and fill in with
-    ///   ``adopt(_:)`` from a background task -- **measured on the real corpus, reading 119 scans takes
-    ///   0.34 s**, which is a visible stall if it happens on the main thread, and the watcher makes the
-    ///   window pay it again on every change.
+    ///   ``adopt(_:)`` from a background task -- **measured on the real corpus, reading 134 scans takes
+    ///   3.2 s**, which is a visible stall if it happens on the main thread. The window passes a
+    ///   ``SummaryCache`` so the watcher does not make it pay that again on every change.
     public init(store: ScanStore, loadNow: Bool = true) {
         self.store = store
         self.summaries = loadNow ? store.summaries() : []
