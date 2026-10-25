@@ -46,6 +46,13 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     private var reference: Int?
     /// The member in the right pane: the one selected in the list, or the next one.
     private var compared: Int?
+    /// The member under the list's selection: what the space bar checks or unchecks. Usually ``compared``; the
+    /// keeper on the left when that row is selected, which is how the keyboard replaces a keeper.
+    private var cursor: Int?
+    /// Paths a probe already tried, by their bytes. **Tried, not answered**: a file that is gone or unreadable has no
+    /// facts to store, and asking again on every redraw was a loop -- the probe's own redraw asked again (#219).
+    private var probed: Set<[UInt8]> = []
+    private var probeLaunches = 0
     private let thumbnailer = QuickLookThumbnailer()
     private let leftPane = SimilarSidePane()
     private let quickLook = QuickLookCoordinator()
@@ -117,7 +124,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         groupTable.target = self
         groupTable.doubleAction = #selector(revealSelected(_:))
         groupTable.onConfirm = { [weak self] in self?.confirmGroup(nil) }
-        groupTable.onToggle = { [weak self] in self?.toggleCompared() }
+        groupTable.onToggle = { [weak self] in self?.toggle(member: self?.compared) }
         for (identifier, key, width) in [
             ("similarity", "similar.column.similarity", 90.0),
             ("kind", "similar.column.kind", 64.0),
@@ -138,7 +145,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         fileTable.rowHeight = 20
         fileTable.allowsMultipleSelection = false
         fileTable.onConfirm = { [weak self] in self?.confirmGroup(nil) }
-        fileTable.onToggle = { [weak self] in self?.toggleCompared() }
+        fileTable.onToggle = { [weak self] in self?.toggle(member: self?.cursor) }
         for (identifier, key, width) in [
             ("keep", "similar.column.keep", 64.0),
             ("file", "similar.column.a", 220.0),
@@ -385,6 +392,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         for button in [confirmButton, keepAllButton, skipButton] { button.isEnabled = true }
         let group = review.groups[index]
         let previous = keepingCompared ? compared : nil
+        let previousCursor = keepingCompared ? cursor : nil
         fileOrder = review.rankedFiles(inGroup: index)
         let keep = review.effectiveKeep(inGroup: index)
         let best = fileOrder.first { keep.contains($0) } ?? fileOrder.first
@@ -392,8 +400,9 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         compared =
             previous.flatMap { fileOrder.contains($0) && $0 != best ? $0 : nil }
             ?? fileOrder.first { $0 != best }
+        cursor = previousCursor.flatMap { fileOrder.contains($0) ? $0 : nil } ?? compared
         fileTable.reloadData()
-        if let compared, let row = fileOrder.firstIndex(of: compared) {
+        if let cursor, let row = fileOrder.firstIndex(of: cursor) {
             fileTable.selectRowIndexes([row], byExtendingSelection: false)
             fileTable.scrollRowToVisible(row)
         }
@@ -487,8 +496,10 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     /// dozen files -- 27 videos is the largest in this user's scans.
     private func probeFactsIfNeeded(index: Int) {
         let group = review.groups[index]
-        let missing = group.files.filter { facts[Array($0.utf8)] == nil }
+        let missing = group.files.filter { !probed.contains(Array($0.utf8)) }
         guard !missing.isEmpty else { return }
+        for path in missing { probed.insert(Array(path.utf8)) }
+        probeLaunches += 1
         probeGeneration += 1
         let generation = probeGeneration
         let kind = group.mediaKind
@@ -688,10 +699,11 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         advance(from: index)
     }
 
-    /// Checks or unchecks the file in the right pane: the space bar, or a click on its box.
-    private func toggleCompared() {
-        guard let compared else { return }
-        toggle(file: compared)
+    /// Checks or unchecks a member: the space bar, on the row selected in the list -- or on the right pane's file
+    /// when the group list has the focus.
+    private func toggle(member: Int?) {
+        guard let member else { return }
+        toggle(file: member)
     }
 
     private func toggle(file: Int) {
@@ -950,6 +962,20 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func pressConfirmForSelftest() { confirmButton.performClick(nil) }
+
+    /// Selects a row of the file list the way a click or an arrow key does, delegate included.
+    func selectFileForSelftest(_ row: Int) {
+        guard fileOrder.indices.contains(row) else { return }
+        fileTable.selectRowIndexes([row], byExtendingSelection: false)
+        tableViewSelectionDidChange(
+            Notification(name: NSTableView.selectionDidChangeNotification, object: fileTable))
+    }
+
+    /// The space bar in the file list, through the closure the table calls.
+    func pressSpaceInFileListForSelftest() { fileTable.onToggle?() }
+
+    /// How many probes this window started. One per group: a file that cannot be read is not asked again.
+    var probeLaunchesForSelftest: Int { probeLaunches }
     func pressSkipForSelftest() { skipButton.performClick(nil) }
 
     private func groupText(for index: Int, column: String) -> String {
@@ -1062,18 +1088,14 @@ extension SimilarPairWindowController: NSTableViewDataSource, NSTableViewDelegat
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard let table = notification.object as? NSTableView else { return }
         if table === fileTable {
-            // A row is the file to compare: the right pane follows it, unless it is the one already on the left.
+            // A row is the file the space bar acts on, and the file to compare: the right pane follows it, unless
+            // it is the keeper already on the left. **The row stays selected even then**, or the keyboard could never
+            // reach the keeper to uncheck it (#219): the list used to bounce the selection back to the right pane's.
             let row = fileTable.selectedRow
             guard fileOrder.indices.contains(row), let index = selectedGroup else { return }
             let member = fileOrder[row]
-            guard member != compared else { return }
-            if member == reference {
-                // The keeper on the left is not compared with itself; the list keeps the right pane's row.
-                if let compared, let back = fileOrder.firstIndex(of: compared) {
-                    fileTable.selectRowIndexes([back], byExtendingSelection: false)
-                }
-                return
-            }
+            cursor = member
+            guard member != compared, member != reference else { return }
             compared = member
             showPanes(group: review.groups[index])
             refreshAdvice(index: index)

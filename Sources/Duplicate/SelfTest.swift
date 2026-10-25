@@ -5168,6 +5168,14 @@ enum SelfTest {
             !videoViewer.leftStateForSelftest.isEmpty,
             "a missing file's pane says nothing"
         )
+        // **And a file that cannot be read is asked once** (#219). Only an answer was remembered, so the probe's own
+        // redraw asked again for the two missing clips, forever, rebuilding the tables each time.
+        // Teeth: probe the files without facts instead of the files not tried, and the count climbs.
+        try? await Task.sleep(for: .milliseconds(500))
+        try expect(
+            videoViewer.probeLaunchesForSelftest == 1,
+            "the viewer started \(videoViewer.probeLaunchesForSelftest) probes over two missing files"
+        )
 
         // 7. Confirming writes only the group on screen, and the suggestion is not a decision.
         // Teeth: have `confirmGroup` confirm every group and the tally reads 2 decided instead of 1.
@@ -5294,6 +5302,20 @@ enum SelfTest {
             try threeStore.loadSimilarDecisions(scanID: threeScan.scanID).byKey.values
                 .count(where: { $0 == .keepBoth }) == 1,
             "keeping two of three copies did not save keep_both for the pair between them")
+
+        // **The keyboard reaches the keeper** (#219). The list bounced a selection on the left pane's file back to the
+        // right pane's, so the space bar could only toggle the other file and replacing a keeper took the mouse.
+        // Teeth: put the bounce back in `tableViewSelectionDidChange` and the keeper stays checked.
+        three.selectGroupForSelftest(0)
+        let keeperPath = three.leftPaneText
+        let keeperRow = try expectSome(
+            three.fileRowsForSelftest.firstIndex { $0.path == keeperPath },
+            "the left pane's file is not in the list")
+        three.selectFileForSelftest(keeperRow)
+        three.pressSpaceInFileListForSelftest()
+        try expect(
+            three.fileRowsForSelftest.first { $0.path == keeperPath }?.kept == false,
+            "the space bar on the keeper's row left \(keeperPath) checked")
 
         // **A chain refuses to discard a file alike to nothing it keeps.** A~B and B~C, keeping only C: A would go
         // on the strength of B, which goes too, and the apply would have nothing that stays to check A against.
