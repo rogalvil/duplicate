@@ -56,11 +56,20 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   `datetime(2026,8,12,12,0,0).isoformat()` en Python tampoco lo pone. Un test que esperaba la forma
   rellenada estaba equivocado sobre el formato, no sobre el código.
 - **`ScanStore.summaries()` decodifica cada grupo de cada escaneo para producir un puñado de
-  conteos.** Medido en el corpus real: **119 escaneos, 21,594 grupos, 0.34 s** — y el watcher hace que
-  la ventana lo vuelva a pagar en cada cambio. Va fuera del hilo principal, con un contador de
-  generación que descarta una lectura que aterriza después de una más nueva. La corrección de fondo
-  (un decodificador que no materialice las 71,580 rutas para contarlas) sigue pendiente, y el número
-  se imprime en `--selftest --mode library` para que una regresión se vea.
+  conteos.** Medido en el corpus real: 119 escaneos y 0.34 s al principio, y luego **134 escaneos, 60,719
+  grupos, 3.1 s en release**, casi todo en un solo documento de 194 MB. El watcher hacía que la ventana
+  lo volviera a pagar en cada cambio. Va fuera del hilo principal, con un contador de generación que
+  descarta una lectura que aterriza después de una más nueva, y desde #162 con un `SummaryCache` en
+  memoria por documento (tamaño, fecha de modificación e inodo): **la relectura bajó a 4.3 ms**. La
+  primera lectura sigue costando lo mismo; un decodificador que no materialice las rutas para contarlas
+  la bajaría, a costa de una segunda implementación del conteo de recuperables. Los dos números se
+  imprimen en `--selftest --mode library`.
+- **La caché de resúmenes no va a disco, a propósito.** Un índice junto a los documentos sería estado que
+  el CLI no conoce, y el CLI reescribiendo un escaneo lo dejaría viejo para quien lo lea después. En
+  memoria, cada ventana paga una vez la primera lectura y nada más.
+- **Restaurar una fecha con `setAttributes` no la restaura exacta.** Un test que guardaba la
+  `modificationDate`, reescribía el archivo y la volvía a poner, fallaba: APFS guarda nanosegundos y la
+  escritura de la fecha conserva microsegundos. El test fija una fecha redonda antes de las dos lecturas.
 - **Un watch de directorio ve las *entradas*, no su contenido.** Medido con
   `DispatchSource.makeFileSystemObjectSource`: crear o borrar una entrada dispara `.write`; **cambiar
   el contenido de un archivo existente no dispara nada**. Una escritura `.atomic` dispara **dos**

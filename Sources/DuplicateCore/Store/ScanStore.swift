@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Reads and writes the documents shared with the `rav duplicate` CLI.
 ///
@@ -328,10 +329,25 @@ public struct ScanStore: Sendable {
     ///
     /// A scan that fails to decode is skipped rather than aborting the list: one corrupt file must not hide
     /// every other scan the user has.
-    public func summaries() -> [Summary] {
-        identifiers(in: .scans).compactMap { id in
+    ///
+    /// - Parameter cache: summaries already read. A document whose size, modification time and inode all match
+    ///   is not decoded again; see ``SummaryCache``.
+    public func summaries(cache: SummaryCache? = nil) -> [Summary] {
+        let ids = identifiers(in: .scans)
+        let result: [Summary] = ids.compactMap { id in
+            // Read every time, cached or not: a decisions file comes and goes without touching the scan.
+            let hasDecisions = FileManager.default.fileExists(
+                atPath: (try? state.filePath(for: .decisions, id: id)) ?? "")
+            // **Stamped before reading, not after.** A document rewritten in between is stored under the old
+            // stamp, which the next reload no longer matches -- one extra decode, never a stale row.
+            let stamp = cache.flatMap { _ in
+                (try? state.filePath(for: .scans, id: id)).flatMap(SummaryCache.Stamp.init(path:))
+            }
+            if let stamp, let known = cache?.summary(for: id, stamp: stamp) {
+                return known.with(hasDecisions: hasDecisions)
+            }
             guard let scan = try? loadScan(id: id) else { return nil }
-            return Summary(
+            let summary = Summary(
                 scanID: scan.scanID,
                 root: scan.root,
                 createdAt: scan.createdAt,
@@ -339,12 +355,75 @@ public struct ScanStore: Sendable {
                 fileCount: scan.fileCount,
                 reclaimableBytes: scan.reclaimableBytes,
                 isReclaimExact: scan.isReclaimExact,
-                hasDecisions: FileManager.default.fileExists(
-                    atPath: (try? state.filePath(for: .decisions, id: id)) ?? ""
-                ),
+                hasDecisions: hasDecisions,
                 hasRelativePaths: scan.hasRelativePaths
             )
+            if let stamp { cache?.store(summary, for: id, stamp: stamp) }
+            return summary
         }
+        cache?.keep(only: Set(ids))
+        return result
+    }
+}
+
+extension ScanStore.Summary {
+    fileprivate func with(hasDecisions: Bool) -> ScanStore.Summary {
+        ScanStore.Summary(
+            scanID: scanID, root: root, createdAt: createdAt, groupCount: groupCount,
+            fileCount: fileCount, reclaimableBytes: reclaimableBytes,
+            isReclaimExact: isReclaimExact,
+            hasDecisions: hasDecisions, hasRelativePaths: hasRelativePaths)
+    }
+}
+
+/// Summaries already read, by scan, so a reload decodes only the documents that changed (#162).
+///
+/// The library re-reads the directory every time its watcher fires, and a summary used to cost a full decode of
+/// every group of every scan: 3.2 s on this user's 134 scans, 194 MB of them in one document, for a handful of
+/// counts that had not changed. A document is matched by size, modification time and inode -- an atomic rewrite
+/// changes the inode, one in place the time -- so an unchanged scan costs a `stat`.
+///
+/// **Memory only, on purpose.** An index on disk would be state the CLI does not know about, and the CLI
+/// rewriting a scan would leave it stale for whoever reads it next.
+public final class SummaryCache: Sendable {
+    struct Stamp: Hashable, Sendable {
+        let size: Int64
+        let modified: Date
+        let inode: UInt64
+
+        init?(path: String) {
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+                let size = (attributes[.size] as? NSNumber)?.int64Value,
+                let modified = attributes[.modificationDate] as? Date,
+                let inode = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
+            else { return nil }
+            self.size = size
+            self.modified = modified
+            self.inode = inode
+        }
+    }
+
+    private let entries = Mutex<[String: (stamp: Stamp, summary: ScanStore.Summary)]>([:])
+
+    public init() {}
+
+    /// How many scans are held, for the tests.
+    var count: Int { entries.withLock { $0.count } }
+
+    func summary(for id: String, stamp: Stamp) -> ScanStore.Summary? {
+        entries.withLock { held in
+            guard let entry = held[id], entry.stamp == stamp else { return nil }
+            return entry.summary
+        }
+    }
+
+    func store(_ summary: ScanStore.Summary, for id: String, stamp: Stamp) {
+        entries.withLock { $0[id] = (stamp, summary) }
+    }
+
+    /// Forgets scans that are no longer on disk.
+    func keep(only ids: Set<String>) {
+        entries.withLock { held in held = held.filter { ids.contains($0.key) } }
     }
 }
 

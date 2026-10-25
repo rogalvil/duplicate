@@ -18,6 +18,8 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     private var filter: String = ""
 
     private var watchers: [DirectoryWatcher] = []
+    /// Lives as long as the window, so every reload after the first skips the scans that did not change.
+    private let summaryCache = SummaryCache()
     /// Review windows, keyed by scan id, so double-clicking the same row twice raises the window it
     /// already opened instead of starting a second review of the same scan against the same file.
     private var reviewWindows: [String: ReviewWindowController] = [:]
@@ -496,10 +498,11 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
 
     /// Reads the state directory off the main thread and adopts the result.
     ///
-    /// `ScanStore.summaries()` decodes every group of every scan -- 21,594 groups and 71,580 paths on this
-    /// user's corpus -- to produce a handful of counts. That is 0.34 s of work, measured, and it happens
-    /// again on every watcher fire. On the main thread it would stall the window on open and stutter it
-    /// whenever the CLI writes anything.
+    /// `ScanStore.summaries()` decodes every group of a scan to produce a handful of counts: 3.2 s for this
+    /// user's 134 scans, measured, almost all of it one 194 MB document. On the main thread it would stall the
+    /// window on open. The first read still pays it; every later one decodes only the documents that changed,
+    /// through `summaryCache` (#162), because the watcher fires whenever anything lands in `scans/` or
+    /// `decisions/`.
     ///
     /// The generation guard drops a read that lands after a newer one: a burst of watcher fires starts
     /// several, and finishing out of order would leave the older list on screen.
@@ -508,8 +511,9 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         let generation = loadGeneration
         let store = ScanStore(state: stateDirectory)
         let kind = showingKind
+        let cache = summaryCache
         Task.detached(priority: .userInitiated) {
-            let fresh = kind == .files ? store.summaries() : []
+            let fresh = kind == .files ? store.summaries(cache: cache) : []
             let freshFolders = kind == .folders ? store.folderSummaries() : []
             let freshSimilar = kind == .similar ? store.similarSummaries() : []
             await MainActor.run { [weak self] in

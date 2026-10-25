@@ -247,6 +247,84 @@ struct ScanStoreTests {
         #expect(try #require(scratch.store.summaries().first).hasDecisions)
     }
 
+    /// **The stamp is the whole key** (#162): with size, modification time and inode unchanged, the document is
+    /// not opened again. Shown by replacing its bytes in place with garbage of the same length and putting the
+    /// time back -- a fresh read cannot decode it, and the cached one never tries.
+    @Test("A cached reload does not decode an unchanged scan")
+    func cachedReloadSkipsUnchangedScans() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        try scratch.store.save(scan())
+        // A whole second, because setting a time back keeps only microseconds of the nanoseconds APFS stored.
+        let path = try scratch.state.filePath(for: .scans, id: "20260511-064716-685054")
+        let pinned: [FileAttributeKey: Any] = [
+            .modificationDate: Date(timeIntervalSince1970: 1_700_000_000)
+        ]
+        try FileManager.default.setAttributes(pinned, ofItemAtPath: path)
+        let cache = SummaryCache()
+        let first = scratch.store.summaries(cache: cache)
+        #expect(first == scratch.store.summaries())
+        #expect(cache.count == 1)
+
+        let size = try #require(
+            (FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.intValue)
+        try Data(repeating: UInt8(ascii: "x"), count: size).write(to: URL(filePath: path))
+        try FileManager.default.setAttributes(pinned, ofItemAtPath: path)
+
+        #expect(scratch.store.summaries().isEmpty, "the garbage still decodes")
+        #expect(scratch.store.summaries(cache: cache) == first)
+    }
+
+    @Test("A rewritten scan is read again through the cache")
+    func cachedReloadReadsRewrittenScans() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        try scratch.store.save(scan())
+        let cache = SummaryCache()
+        #expect(scratch.store.summaries(cache: cache).first?.groupCount == 2)
+
+        try scratch.store.save(
+            scan(groups: [
+                DuplicateGroup(
+                    size: 2048, digest: digest("a"), files: ["/root/a.bin", "/root/sub/a.bin"])
+            ]))
+        #expect(scratch.store.summaries(cache: cache).first?.groupCount == 1)
+    }
+
+    /// A decisions file comes and goes without touching the scan, so the badge cannot come from the cache.
+    @Test("A cached summary still notices a decisions file")
+    func cachedSummaryNoticesDecisions() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        try scratch.store.save(scan())
+        let cache = SummaryCache()
+        #expect(scratch.store.summaries(cache: cache).first?.hasDecisions == false)
+
+        try scratch.store.save(
+            DecisionsDocument(
+                scanID: "20260511-064716-685054",
+                createdAt: "2026-05-11T06:50:00.000001Z",
+                decisions: [("2048:" + digest("a").hexString, ["/root/a.bin"])]
+            )
+        )
+        #expect(scratch.store.summaries(cache: cache).first?.hasDecisions == true)
+    }
+
+    @Test("A deleted scan leaves the list and the cache")
+    func cacheForgetsDeletedScans() throws {
+        let scratch = try StoreScratch()
+        defer { scratch.remove() }
+        try scratch.store.save(scan(id: "20260511-064716-685054"))
+        try scratch.store.save(scan(id: "20260512-064716-685054"))
+        let cache = SummaryCache()
+        #expect(scratch.store.summaries(cache: cache).count == 2)
+
+        try FileManager.default.removeItem(
+            atPath: try scratch.state.filePath(for: .scans, id: "20260512-064716-685054"))
+        #expect(scratch.store.summaries(cache: cache).map(\.scanID) == ["20260511-064716-685054"])
+        #expect(cache.count == 1)
+    }
+
     /// One unreadable document must not hide every other scan the user has. The list is the only way into
     /// the app's own data, so failing it closed would strand a working corpus behind one bad file.
     @Test("A corrupt scan is skipped, not fatal")
