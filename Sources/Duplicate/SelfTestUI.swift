@@ -81,6 +81,15 @@ extension SelfTest {
             until: { library.similarRowCount == 1 }, what: "the perceptual scan in the library")
         try await sweep.render(library.window, as: "library-similar")
 
+        // The first thing a new user sees, and the manual's first picture.
+        let emptyState = StateDirectory(
+            environment: ["XDG_STATE_HOME": root + "/empty-state"], homePath: root)
+        let emptyLibrary = LibraryWindowController(stateDirectory: emptyState)
+        defer { emptyLibrary.window?.close() }
+        try await waitOnMainActor(
+            until: { emptyLibrary.hasFinishedFirstLoad }, what: "the empty library's first read")
+        try await sweep.render(emptyLibrary.window, as: "library-empty")
+
         let panel = ScanPanelController(stateDirectory: fixture.state)
         defer { panel.window?.close() }
         panel.setRootForSelftest(fixture.tree)
@@ -113,8 +122,14 @@ extension SelfTest {
                 similar.window, as: "similar-\(pair.mediaKind == .video ? "video" : "image")")
         }
 
+        // **Two sessions, so the history shows rows**: an empty table renders fine and says nothing about the
+        // columns. One was put back entirely and one in part, which are the two states a row can describe.
+        try writeSessions(into: fixture.state, root: root, scanID: fixture.exact.scanID)
         let history = SessionHistoryWindowController(stateDirectory: fixture.state)
         defer { history.window?.close() }
+        try expect(
+            history.rowCountForSelftest == 2,
+            "the history lists \(history.rowCountForSelftest) of 2")
         try await sweep.render(history.window, as: "history")
 
         // **The apply sheets, as a dry run shows them** (#180): their lists drew nothing, and no render here had
@@ -129,11 +144,90 @@ extension SelfTest {
         similar.simulateForSelftest()
         try await sweep.renderAsIs(similar.applySheetForSelftest?.window, as: "apply-similar")
 
+        // **And finished**: what someone reads after pressing apply, which no render showed. The real runners, with
+        // a disposer that moves into a fake Trash under the fixture -- `CFFIXED_USER_HOME` does not redirect the
+        // real one, and a render must not put anything there. The folder pair is refused, because `copia-b` holds a
+        // file `copia-a` does not: the containment check doing its job, on screen.
+        let fakeTrash = FakeTrashDisposer(directory: root + "/faketrash")
+        let finishedAt = ScanIdentifier.Instant(
+            year: 2026, month: 10, day: 24, hour: 13, minute: 0, second: 0, microsecond: 0)
+        var folderReview = FolderReviewState(scan: fixture.folders)
+        folderReview.keep(fixture.folders.pairs[0].folderA)
+        let folderReport = try await FolderApplyRunner(
+            state: fixture.state, cacheURL: URL(filePath: root + "/f")
+        ).run(
+            FolderApplyPlan.from(folderReview), sessionID: finishedAt.identifier,
+            instant: finishedAt, disposer: fakeTrash)
+        try expect(
+            folderReport.moved.isEmpty && folderReport.refused.count == 1,
+            "the folder apply moved \(folderReport.moved.count) and refused \(folderReport.refused.count)"
+        )
+        let folderSheet = try expectSome(folders.applySheetForSelftest, "no folder apply sheet")
+        folderSheet.finishForSelftest(folderReport)
+        try await sweep.renderAsIs(folderSheet.window, as: "apply-folders-done")
+
+        var similarReview = SimilarReviewState(scan: fixture.similar)
+        similarReview.confirm(.keepA)
+        let similarReport = try await SimilarApplyRunner(state: fixture.state).run(
+            SimilarApplyPlan.from(similarReview), sessionID: finishedAt.nextMicrosecond.identifier,
+            instant: finishedAt.nextMicrosecond, disposer: fakeTrash)
+        try expect(
+            similarReport.moved.count == 1,
+            "the similar apply moved \(similarReport.moved.count) files, wanted 1")
+        let similarSheet = try expectSome(similar.applySheetForSelftest, "no similar apply sheet")
+        similarSheet.finishForSelftest(similarReport)
+        try await sweep.renderAsIs(similarSheet.window, as: "apply-similar-done")
+
         print("  \(sweep.renderCount) renders in '\(language)' saved to \(output)")
         for finding in sweep.findings { print("  \(finding)") }
         try expect(
             sweep.findings.isEmpty,
             "\(sweep.findings.count) problems across \(sweep.renderCount) renders, listed above")
+    }
+}
+
+/// Two journals for the history to list: one session put back entirely, one in part.
+///
+/// Written straight into the journal rather than by applying, because what the history window shows is what the
+/// journal says, and these are the two states a row can be in.
+@MainActor
+private func writeSessions(into state: StateDirectory, root: String, scanID: String) throws {
+    let digest = Digest32(a: 1, b: 2, c: 3, d: 4)
+    func entry(_ name: String, at timestamp: String) -> JournalEntry {
+        JournalEntry(
+            originalPath: root + "/demo/exactos/" + name,
+            resultingPath: root + "/faketrash/" + name,
+            mechanism: .trash, byteCount: 14, digest: digest, groupKey: "14:" + digest.hexString,
+            scanID: scanID, timestamp: timestamp)
+    }
+    let all = [entry("foto copia.jpg", at: "2026-10-24T12:10:00.000000Z")]
+    _ = try MoveJournal.append(all, sessionID: "20261024-121000-000000", in: state)
+    for moved in all {
+        _ = try MoveJournal.appendRestoration(
+            of: moved, at: "2026-10-24T12:15:00.000000Z", sessionID: "20261024-121000-000000",
+            in: state)
+    }
+    let some = ["a.txt", "b.txt", "c.txt"].map { entry($0, at: "2026-10-24T12:20:00.000000Z") }
+    _ = try MoveJournal.append(some, sessionID: "20261024-122000-000000", in: state)
+    _ = try MoveJournal.appendRestoration(
+        of: some[0], at: "2026-10-24T12:25:00.000000Z", sessionID: "20261024-122000-000000",
+        in: state)
+}
+
+/// Moves into a directory and reports it as the Trash, so a render of a finished apply reads like one.
+private struct FakeTrashDisposer: ItemDisposing {
+    let directory: String
+
+    func dispose(path: String) throws -> DisposalOutcome {
+        try FileManager.default.createDirectory(
+            atPath: directory, withIntermediateDirectories: true)
+        let destination = directory + "/" + (path as NSString).lastPathComponent
+        let size =
+            (try FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value
+            ?? 0
+        try FileManager.default.moveItem(atPath: path, toPath: destination)
+        return DisposalOutcome(
+            originalPath: path, resultingPath: destination, mechanism: .trash, byteCount: size)
     }
 }
 
