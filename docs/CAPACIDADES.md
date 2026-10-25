@@ -360,29 +360,30 @@ una vez.
 ### 4.3 Pendiente
 
 **Los pendientes viven en los issues**, no aquí; esta tabla es el índice que los ordena. Todo lo de abajo se
-confirmó leyendo el código.
+confirmó leyendo el código, y se volvió a confirmar contra `main` al abrir cada issue (2026-10-24). Un issue
+cerrado sale de esta tabla en el mismo PR que lo arregla.
 
-| Prioridad | Qué |
-|---|---|
-| p1 | ⌘Q no protege el apply de carpetas ni el de parecidos: salir a media corrida puede dejar hasta 31 archivos en la Papelera sin entrada en el journal |
-| p2 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
-| p2 | En el visor de parecidos ⌘Z no deshace una decisión, y deshacer un Skip borra las decisiones tomadas después |
-| p2 | En la revisión exacta con filtro, Previous Group se atasca y confirmar puede saltar al primer grupo visible |
-| p2 | La biblioteca deja de actualizarse sola si se cierra y se reabre con otra ventana abierta |
-| p2 | El menú contextual de la biblioteca no hace nada en Folders ni en Images: no hay forma de borrar esos escaneos desde la app |
-| p2 | Quitar todas las decisiones de una revisión exacta no reescribe el archivo: el anterior sobrevive, y el CLI o una reapertura actúan sobre decisiones retiradas |
-| p2 | En carpetas, una falla al guardar decisiones se traga con `try?` |
-| p2 | Si guardar un escaneo falla, el resultado en memoria se pierde, aunque el comentario dice que se puede revisar |
-| p3 | Carpetas y parecidos marcan "Terminado" antes de guardar: el arreglo de #131 solo llegó al exacto |
-| p3 | El aviso de decisiones importadas y la nota de cuarentena solo existen en el exacto |
-| p3 | Undo the Last Session elige la sesión más nueva aunque ya esté devuelta |
-| p3 | Lógica de Core que solo prueba el selftest, contra la regla de que todo Core lleva su test: la exclusión de `~/Library`, la fase `.grouping`, `loadAndRepair`, las etapas del apply de carpetas, la cancelación a media corrida |
-| p3 | Use the hash cache no tiene efecto en parecidos |
-| p3 | Los tamaños del filtro salen como "97.7 KB / 976.6 KB": umbrales decimales impresos en unidades binarias |
-| p3 | Textos viejos: el pie de carpetas dice que solo el CLI puede actuar, y el estado vacío de la biblioteca manda a `rav duplicate scan` |
-| p4 | Memoria: el objetivo de < 400 MB extrapola a ~570 MB a 800,000 archivos, y la corrida sobre `~` (1.3 millones) no registró el pico |
-| p4 | `ScanStore.summaries()` decodifica cada grupo de cada escaneo para sacar conteos |
-| a decidir | El botón del aviso de permisos abre el panel de **Full Disk Access**, contra la decisión de no pedirlo (4.1) |
+| Prioridad | Issue | Qué |
+|---|---|---|
+| p1 | #145 | ⌘Q no protege el apply de carpetas ni el de parecidos: salir a media corrida puede dejar hasta 31 archivos en la Papelera sin entrada en el journal |
+| p2 | #146 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
+| p2 | #147 | En el visor de parecidos ⌘Z no deshace una decisión, y deshacer un Skip borra las decisiones tomadas después |
+| p2 | #148 | En la revisión exacta con filtro, Previous Group se atasca y confirmar puede saltar al primer grupo visible |
+| p2 | #149 | La biblioteca deja de actualizarse sola si se cierra y se reabre con otra ventana abierta |
+| p2 | #150 | El menú contextual de la biblioteca no hace nada en Folders ni en Images: no hay forma de borrar esos escaneos desde la app (verificado: no actúa sobre otro escaneo, no hace nada) |
+| p2 | #151 | Quitar todas las decisiones de una revisión exacta no reescribe el archivo: el anterior sobrevive, y el CLI o una reapertura actúan sobre decisiones retiradas |
+| p2 | #152 | En carpetas, una falla al guardar decisiones se traga con `try?` |
+| p2 | #153 | Si guardar un escaneo falla, el resultado en memoria se pierde, aunque el comentario dice que se puede revisar |
+| p3 | #154 | Carpetas y parecidos marcan "Terminado" antes de guardar: el arreglo de #131 solo llegó al exacto |
+| p3 | #155 | El aviso de decisiones importadas y la nota de cuarentena solo existen en el exacto |
+| p3 | #156 | Undo the Last Session elige la sesión más nueva aunque ya esté devuelta |
+| p3 | #157 | Lógica de Core que solo prueba el selftest, contra la regla de que todo Core lleva su test: la exclusión de `~/Library`, la fase `.grouping`, `HashCache.loadAndRepair`, las etapas y la cancelación del apply de carpetas |
+| p3 | #158 | Use the hash cache no tiene efecto en parecidos |
+| p3 | #159 | Los tamaños del filtro salen como "97.7 KB / 976.6 KB": umbrales decimales impresos en unidades binarias |
+| p3 | #160 | Textos viejos: el pie de carpetas dice que solo el CLI puede actuar, y el estado vacío de la biblioteca manda a `rav duplicate scan` |
+| p4 | #161 | Memoria: el objetivo de < 400 MB extrapola a ~570 MB a 800,000 archivos, y la corrida sobre `~` (1.3 millones) no registró el pico |
+| p4 | #162 | `ScanStore.summaries()` decodifica cada grupo de cada escaneo para sacar conteos |
+| a decidir | #163 | El botón del aviso de permisos abre el panel de **Full Disk Access**, contra la decisión de no pedirlo (4.1) |
 
 ```bash
 gh issue list --label priority:p1     # cerca de los datos del usuario
