@@ -3308,6 +3308,76 @@ enum SelfTest {
             "  the sidebar narrows to 2 of 4 groups, and confirming those leaves the rest untouched"
         )
         print("  checking the disk hides the 2 groups whose files are gone, and decides nothing")
+
+        // **Under a size filter, navigation walks the groups the sidebar shows** (#148). Five groups alternating
+        // 146.5 KB and 10 B, filtered to "at least 100 KB": groups 1, 3 and 5 are shown. Previous from 3 stayed on
+        // 3, confirming 3 jumped back to 1, and the sidebar called group 3 "Group 2" while the header said 3.
+        let navTree = root + "/nav"
+        var navGroups: [DuplicateGroup] = []
+        for index in 0..<5 {
+            let size = index % 2 == 0 ? 150_000 : 10
+            let files = try ["a.bin", "copy/a.bin"].map {
+                try make("nav/group-\(index + 1)/\($0)", bytes: size)
+            }
+            navGroups.append(
+                DuplicateGroup(
+                    size: Int64(size), digest: digest(String(index + 1)),
+                    files: PathOrder.sorted(files)))
+        }
+        let navScan = DuplicateScan(
+            scanID: "20260812-130000-000000", root: navTree,
+            createdAt: "2026-08-12T13:00:00.000000Z",
+            groups: navGroups)
+        try store.save(navScan)
+        let nav = ReviewWindowController(
+            scan: navScan, stateDirectory: state,
+            presenceCacheDirectory: URL(filePath: root + "/presence-nav"))
+        defer { nav.window?.close() }
+        await nav.awaitPresenceForSelftest()
+        nav.setSizeFilterForSelftest(1)
+        nav.selectGroupForSelftest(2)
+
+        // Teeth: step to `groupIndex - 1` in `previousGroup` again and this stays on 2.
+        nav.previousGroup(nil)
+        try expect(
+            nav.reviewState.groupIndex == 0,
+            "Previous from group 3 landed on \(nav.reviewState.groupIndex + 1), wanted group 1")
+        nav.nextGroup(nil)
+        try expect(
+            nav.reviewState.groupIndex == 2,
+            "Next from group 1 landed on \(nav.reviewState.groupIndex + 1), wanted group 3")
+
+        // Teeth: name the row by its position again and this reads "Group 2".
+        try expect(
+            nav.groupTitleForSelftest(row: 1)
+                == String(format: Strings.string("review.group.title"), 3),
+            "the sidebar calls group 3 \(nav.groupTitleForSelftest(row: 1) ?? "nothing")")
+
+        // Teeth: select `visible.first` again in `rebuildVisibleGroups` and this reads group 1.
+        nav.confirmGroup(nil)
+        try expect(
+            nav.reviewState.groupIndex == 4,
+            "confirming group 3 moved to group \(nav.reviewState.groupIndex + 1), wanted the next shown, 5"
+        )
+
+        // **A filter that hides every group leaves nothing to decide.** The detail still holds the last group, so
+        // without this the button decided a group the list says is not there.
+        // Teeth: drop `confirmButton.isEnabled = !visible.isEmpty` and the first assertion fails.
+        nav.setSizeFilterForSelftest(4)
+        try expect(
+            !nav.confirmEnabledForSelftest, "Confirm is live while the filter shows no group")
+        try expect(
+            !nav.validateMenuItem(
+                NSMenuItem(
+                    title: "", action: #selector(ReviewWindowController.confirmGroup(_:)),
+                    keyEquivalent: "")),
+            "the Confirm menu item is live while the filter shows no group")
+        try expect(
+            nav.warningText == Strings.string("review.warning.noneShown"),
+            "the window does not say that no group matches: \(nav.warningText)")
+        print(
+            "  under a size filter, Previous, Next and Confirm walk the groups shown, named as the header names them"
+        )
     }
 
     // MARK: - preview

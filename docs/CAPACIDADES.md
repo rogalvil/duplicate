@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 | Prioridad | Issue | Qué |
 |---|---|---|
 | p2 | #146 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
-| p2 | #148 | En la revisión exacta con filtro, Previous Group se atasca y confirmar puede saltar al primer grupo visible |
 | p2 | #149 | La biblioteca deja de actualizarse sola si se cierra y se reabre con otra ventana abierta |
 | p2 | #150 | El menú contextual de la biblioteca no hace nada en Folders ni en Images: no hay forma de borrar esos escaneos desde la app (verificado: no actúa sobre otro escaneo, no hace nada) |
 | p2 | #151 | Quitar todas las decisiones de una revisión exacta no reescribe el archivo: el anterior sobrevive, y el CLI o una reapertura actúan sobre decisiones retiradas |
