@@ -243,7 +243,6 @@ public struct SimilarScanSession: Sendable {
             }
             return PathOrder.lessThan($0.fileB, $1.fileB)
         }
-        progress.setPhase(.finished)
 
         let scan = SimilarScan(
             scanID: instant.identifier,
@@ -254,6 +253,9 @@ public struct SimilarScanSession: Sendable {
             pairs: pairs
         )
 
+        // "Saving", then "finished" once the document is written, for the reason the folder session gives.
+        progress.setPhase(.saving)
+        defer { progress.setPhase(.finished) }
         var savedPath: String?
         var saveFailure: String?
         do {

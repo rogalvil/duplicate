@@ -119,7 +119,6 @@ public struct FolderScanSession: Sendable {
         progress.setPhase(.grouping)
         let tree = DirectoryTree.build(root: request.root, files: treeFiles)
         let found = try FolderSimilarity.find(in: tree, threshold: request.threshold)
-        progress.setPhase(.finished)
 
         let scan = FolderScan(
             scanID: instant.identifier,
@@ -129,6 +128,11 @@ public struct FolderScanSession: Sendable {
             pairs: found.pairs
         )
 
+        // **"Saving", then "finished" once the document is written** -- what #131 did for the exact session. This
+        // set "finished" before encoding and writing, so the panel said "Terminado" through the save, and still
+        // said it when the save then failed.
+        progress.setPhase(.saving)
+        defer { progress.setPhase(.finished) }
         var savedPath: String?
         var saveFailure: String?
         do {
