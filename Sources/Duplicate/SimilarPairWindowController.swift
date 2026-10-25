@@ -324,7 +324,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func refreshDetail() {
-        footerLabel.stringValue = footerString()
+        refreshFooter()
         guard let pair = selectedPair else {
             headerLabel.stringValue = Strings.string("similar.empty")
             leftPane.showEmpty()
@@ -465,6 +465,11 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     ///
     /// **Split because this build only produces one of the two.** A scan it wrote has no video pairs at all, so
     /// a single total would read as "there is no video here" when it means "this app did not look".
+    private func refreshFooter() {
+        footerLabel.stringValue = footerString()
+        footerLabel.textColor = saveFailure == nil ? .secondaryLabelColor : .systemOrange
+    }
+
     private func footerString() -> String {
         var text = String(
             format: Strings.string("similar.footer"),
@@ -473,7 +478,11 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             Strings.count("count.videoPairs", scan.pairCount(of: .video)),
             Int(scan.videoThreshold * 100)
         )
-        if let saveFailure { return text + "  -  " + saveFailure }
+        if let saveFailure {
+            // First, and in orange: the footer is one line truncated in the middle, and a failure at its end was
+            // the part the ellipsis hid.
+            return Strings.string("review.saveFailed.title") + ": " + saveFailure + "  -  " + text
+        }
         if savedCount > 0 { text += "  -  " + Strings.string("similar.saved") }
         return text
     }
@@ -625,8 +634,9 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             savedCount = document.count
         } catch {
             // Reported in the footer rather than in a sheet: losing a decision matters, and a modal over every
-            // click would make deciding 4,771 pairs impossible.
-            saveFailure = String(describing: error)
+            // click would make deciding 4,771 pairs impossible. The localized description: `String(describing:)` is
+            // the whole `NSError`, `UserInfo` and all, which no footer can show.
+            saveFailure = error.localizedDescription
         }
     }
 
