@@ -306,6 +306,22 @@
 			<string>%1$d de los pares que decidiste traen "||" en una ruta, que es el separador de este formato.</string>
 		</dict>
 	</dict>
+	<key>similar.apply.headline</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo de %2$@ iría al basurero</string>
+			<key>other</key>
+			<string>%1$d archivos de %2$@ irían al basurero</string>
+		</dict>
+	</dict>
 	<key>undo.alreadyRestored</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

@@ -306,6 +306,22 @@
 			<string>%1$d of the pairs you decided contain "||" in a path, which is the separator this format uses.</string>
 		</dict>
 	</dict>
+	<key>similar.apply.headline</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file from %2$@ would go to the Trash</string>
+			<key>other</key>
+			<string>%1$d files from %2$@ would go to the Trash</string>
+		</dict>
+	</dict>
 	<key>undo.alreadyRestored</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

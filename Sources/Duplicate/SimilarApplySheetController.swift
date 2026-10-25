@@ -158,8 +158,11 @@ final class SimilarApplySheetController: NSWindowController {
 
     /// The dry run: what would move, and what would not.
     private func showPlan() {
+        // The file count chooses the clause -- in Spanish the verb agrees with it too -- and the pair count comes in
+        // as its own fragment, which is the one shape a plural entry here can take.
         headlineLabel.stringValue = String(
-            format: Strings.string("similar.apply.headline"), plan.items.count, plan.pairCount)
+            format: Strings.string("similar.apply.headline"), plan.items.count,
+            Strings.count("count.pairs", plan.pairCount))
 
         var details: [String] = []
         // **Said before the button is pressed, not after**: every file is re-checked at the moment it is moved,
