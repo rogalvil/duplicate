@@ -64,10 +64,12 @@ Toda clave nueva va en **las dos** tablas. `make selftest MODE=l10n` falla si di
 
 ## Git
 
-**Todo pasa por PR. `main` está protegido por un ruleset y lo rechaza del lado del servidor**, sin
-bypass para nadie: se exige PR, CI verde y rama al día con `main`. No hay force-push ni borrado. La
-única excepción ya ocurrió: el commit inicial de boilerplate que creó la rama, porque GitHub no puede
-abrir un PR sin rama base.
+**Todo pasa por PR. `main` está protegido por dos rulesets y lo rechaza del lado del servidor.**
+`protect main`, sin bypass para nadie: se exige PR, CI verde y rama al día con `main`, solo merge commit, y no
+hay force-push ni borrado. `approval for collaborators` exige además una aprobación, que caduca con un push nuevo,
+y exime **solo** al admin, porque GitHub no deja aprobar el PR propio. Van separados a propósito: un bypass en
+el primero eximiría al dueño también del CI. La única excepción ya ocurrió: el commit inicial de boilerplate que
+creó la rama, porque GitHub no puede abrir un PR sin rama base.
 
 Si un PR queda atrás de `main`, actualizarlo con **merge**, nunca rebase — la rama ya está publicada
 y `non_fast_forward` prohíbe el force-push:
