@@ -49,7 +49,9 @@ public actor HashCache {
     }
 
     private let url: URL
-    private var entries: [HashCacheKey: Digest32] = [:]
+    private var entries = DigestTable()
+    /// Rows not yet on disk. Written out in blocks of ``flushThreshold`` as they arrive, and the rest on
+    /// ``persist()``, so a cold scan does not hold a second copy of every digest until it ends.
     private var pending: [HashCacheRecord] = []
     private var recordsOnDisk = 0
     private var lockDescriptor: Int32 = -1
@@ -78,37 +80,69 @@ public actor HashCache {
     /// Reads the file into memory. Safe to call on a missing or corrupt file.
     public func load() {
         report = LoadReport()
-        entries.removeAll()
+        entries = DigestTable()
         pending.removeAll()
         recordsOnDisk = 0
         rowsAtLastPrune = 0
 
         acquireLock()
 
+        // **Read where it is mapped, not copied** (#161). `[UInt8](data)` put a second 60 MB copy of an 800,000-row
+        // file beside the mapping for as long as the load ran. Only the header is ever turned into an array.
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return }
-        let bytes = [UInt8](data)
-        guard HashCacheFormat.isReadableHeader(bytes) else {
+        let header = data.prefix(HashCacheFormat.headerSize)
+        guard HashCacheFormat.isReadableHeader(header) else {
             // Wrong magic, version, record size or semantic salt. Discarding the whole file is correct:
             // the rows may be perfectly intact and still mean something else.
-            report.discardedFile = !bytes.isEmpty
+            report.discardedFile = !data.isEmpty
             return
         }
-        report.hadTornTail = HashCacheFormat.hasTornTail(inFileOfLength: bytes.count)
-        rowsAtLastPrune = HashCacheFormat.rowsAtLastPrune(bytes)
+        report.hadTornTail = HashCacheFormat.hasTornTail(inFileOfLength: data.count)
+        rowsAtLastPrune = HashCacheFormat.rowsAtLastPrune(header)
 
-        let count = HashCacheFormat.wholeRecordCount(inFileOfLength: bytes.count)
-        entries.reserveCapacity(count)
+        let count = HashCacheFormat.wholeRecordCount(inFileOfLength: data.count)
+        func row(_ index: Int) -> HashCacheRecord? {
+            let start =
+                data.startIndex + HashCacheFormat.headerSize + index * HashCacheFormat.recordSize
+            return HashCacheFormat.decode(data[start..<(start + HashCacheFormat.recordSize)])
+        }
+        var rows: [HashCacheRecord] = []
+        rows.reserveCapacity(count)
         for index in 0..<count {
-            let start = HashCacheFormat.headerSize + index * HashCacheFormat.recordSize
-            let end = start + HashCacheFormat.recordSize
-            guard let record = HashCacheFormat.decode(bytes[start..<end]) else {
+            guard let record = row(index) else {
                 report.corruptRecords += 1
                 continue
             }
-            // Last writer wins, which is what makes appending an update.
-            entries[record.key] = record.digest
+            rows.append(record)
             report.recordsRead += 1
         }
+        rows.sort { HashCacheKey.isOrdered($0.key, $1.key) }
+
+        // **Last writer wins, which is what makes appending an update** -- and a sort does not promise to keep
+        // file order among equal keys. So a key written twice takes its digest from a walk backwards through the
+        // file. Measured, a real cache has none (6,661 rows, 6,661 keys), so this is one pass over nothing.
+        var repeated: Set<HashCacheKey> = []
+        for index in rows.indices.dropFirst() where rows[index].key == rows[index - 1].key {
+            repeated.insert(rows[index].key)
+        }
+        if !repeated.isEmpty {
+            var latest: [HashCacheKey: Digest32] = [:]
+            for index in stride(from: count - 1, through: 0, by: -1)
+            where latest.count < repeated.count {
+                guard let record = row(index), repeated.contains(record.key),
+                    latest[record.key] == nil
+                else { continue }
+                latest[record.key] = record.digest
+            }
+            var kept = 0
+            for index in rows.indices where kept == 0 || rows[index].key != rows[kept - 1].key {
+                let key = rows[index].key
+                rows[kept] = HashCacheRecord(key: key, digest: latest[key] ?? rows[index].digest)
+                kept += 1
+            }
+            rows.removeLast(rows.count - kept)
+        }
+        entries = DigestTable(sortedUnique: rows)
         recordsOnDisk = count
     }
 
@@ -134,16 +168,25 @@ public actor HashCache {
     /// doubling keeps the old storage alive beside the new: on 800,000 files that was a peak of its own.
     public func reserve(_ count: Int) {
         guard count > 0 else { return }
-        entries.reserveCapacity(entries.count + count)
-        pending.reserveCapacity(pending.count + count)
+        entries.reserve(count)
+        pending.reserveCapacity(pending.count + min(count, Self.flushThreshold))
     }
+
+    /// How many rows wait in memory before they are appended without waiting for ``persist()``.
+    ///
+    /// 64 Ki rows are 5 MB on disk. Writing them as they come is the same append ``persist()`` does, so a scan that
+    /// stops halfway keeps what it hashed, as it always did.
+    static let flushThreshold = 65_536
 
     /// Records a digest, to be written on the next ``persist()``.
     public func store(_ digest: Digest32, for entry: FileEntry) {
         guard let key = HashCacheKey(entry: entry) else { return }
         guard entries[key] != digest else { return }
-        entries[key] = digest
+        entries.set(digest, for: key)
         pending.append(HashCacheRecord(key: key, digest: digest))
+        // Tried once per block, not on every store after a failure: a cache that cannot write keeps its rows
+        // for ``persist()`` to report, and a scan does not pay a failing `open` per file.
+        if pending.count % Self.flushThreshold == 0 { _ = try? persist() }
     }
 
     /// Counters for the progress UI, and for the selftest.
@@ -239,15 +282,15 @@ public actor HashCache {
         guard !volumes.isEmpty else { return 0 }
 
         var dropped = 0
-        for (key, _) in entries {
-            guard let devices = volumes[key.volume] else { continue }
+        entries.removeAll { key in
+            guard let devices = volumes[key.volume] else { return false }
             // `.cannotTell` and an unmounted volume are both kept: see the note on ``prune()``.
             switch CacheLiveness.resolve(key: key, devices: devices) {
             case .gone, .lengthChanged:
-                entries.removeValue(forKey: key)
                 dropped += 1
+                return true
             case .live, .cannotTell:
-                continue
+                return false
             }
         }
         guard dropped > 0 else {
@@ -284,11 +327,11 @@ public actor HashCache {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         var payload = HashCacheFormat.encodeHeader(rowsAtLastPrune: UInt64(entries.count))
-        // Sorted so the rewritten file is reproducible, which makes a byte-diff meaningful in a test.
-        for key in entries.keys.sorted(by: HashCache.isOrdered) {
-            payload += HashCacheFormat.encode(
-                HashCacheRecord(key: key, digest: entries[key]!)
-            )
+        payload.reserveCapacity(payload.count + entries.count * HashCacheFormat.recordSize)
+        // In key order, which the table already keeps, so the rewritten file is reproducible and a byte-diff
+        // means something in a test.
+        for record in entries.records() {
+            payload += HashCacheFormat.encode(record)
         }
 
         let temporary = directory.appending(
@@ -347,16 +390,6 @@ public actor HashCache {
             }
             return true
         }
-    }
-
-    private static func isOrdered(_ a: HashCacheKey, _ b: HashCacheKey) -> Bool {
-        if a.volume != b.volume { return a.volume < b.volume }
-        if a.inode != b.inode { return a.inode < b.inode }
-        if a.size != b.size { return a.size < b.size }
-        if a.mtimeNanoseconds != b.mtimeNanoseconds {
-            return a.mtimeNanoseconds < b.mtimeNanoseconds
-        }
-        return a.generation < b.generation
     }
 }
 

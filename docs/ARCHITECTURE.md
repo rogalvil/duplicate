@@ -1033,6 +1033,37 @@ diferencia. Como un escaneo tiene varias listas de todos los archivos a la vez, 
 | app, caché fría | 610–652 MB | 485–499 MB |
 | app, caché caliente | 662–664 MB | 524 MB |
 
+**Después la caché, y con eso el objetivo se cumple.** Seis cambios, medidos de a uno con el pico por fase:
+
+1. **`DigestTable`**: los digests de la caché en un arreglo ordenado por clave (72 B por fila, búsqueda binaria)
+   más un diccionario chico para lo recién llegado, que se funde desde atrás en el mismo arreglo. El diccionario de
+   ~150 MB queda en ~58. La carga lee el archivo donde está mapeado, sin copiarlo, y resuelve las claves repetidas
+   con una pasada hacia atrás por el archivo: el sort no promete conservar el orden entre iguales, y la última fila
+   escrita es la que vale.
+2. Las filas nuevas se escriben **en bloques de 64 Ki** mientras llegan, en vez de quedarse todas hasta el final.
+3. `narrow` **reserva** la lista de sobrevivientes: crecía por duplicación mientras los buckets seguían vivos. Esa
+   fase pasó de sumar ~80 MB a no sumar nada.
+4. Los digests van **en una lista paralela a los sobrevivientes** (`[Digest32?]`, 40 B), no en pares
+   `(entry, digest)` de 104 B, y `hashAll` escribe cada resultado en su casilla al llegar en vez de juntarlos
+   primero en otra lista de 48 B por archivo.
+5. `ScanSession` **suelta la caché** después de persistirla y antes de codificar el documento.
+6. `JSONWriter.document` agrega el `"\n"` en el lugar: `encode(value) + "\n"` copiaba el documento entero.
+
+| 800,000 archivos | `main` antes de #200 | ahora |
+|---|---|---|
+| `DuplicateFinder` solo | 657–714 MB | 280–297 MB |
+| app, caché fría | 897 MB | **336–371 MB** |
+| app, caché caliente | 955 MB | **356–362 MB** |
+
+| 200,000 archivos | `main` antes de #200 | ahora |
+|---|---|---|
+| app, caché fría | 218 MB | 126–128 MB |
+| app, caché caliente | 220 MB | 116 MB |
+
+Lo que queda a 800,000 archivos es casi todo el recorrido: ~206 MB entre las 800,000 rutas (96 B cada una), la
+lista de entradas creciendo y lo transitorio de Foundation. Con caché caliente, además, la tabla vive todo el
+escaneo. Bajar de ahí ya sería guardar las rutas de forma compacta, y no hace falta para el objetivo.
+
 ### Y la quinta: `AttrListWalker` queda formalmente rechazado
 
 Contado con `fs_usage` sobre el mismo árbol de 3,421 archivos (necesita root, así que lo corrió el usuario):

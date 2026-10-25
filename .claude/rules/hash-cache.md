@@ -54,9 +54,18 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   medía `DuplicateFinder` solo y daba 657–714 MB a 800,000 archivos; el escaneo de la app, con la caché cargada y
   persistida, daba **897–955 MB**. Una medición de memoria vale lo que vale el camino donde se tomó:
   `corpus --session-cache` mide el de la app.
-- **El diccionario de la caché es la estructura más grande del proceso a escala.** 800,000 claves de 40 B con
+- **El diccionario de la caché era la estructura más grande del proceso a escala.** 800,000 claves de 40 B con
   digests de 32 B, y Swift lo dimensiona a la siguiente potencia de dos sobre `n / 0.75`: 2²¹ casillas, ~150 MB
-  calculados (medido: cargar la caché caliente lleva el proceso de 29 a 354 MB).
+  calculados (medido: cargar la caché caliente llevaba el proceso de 29 a 354 MB). Ahora es `DigestTable`, un
+  arreglo ordenado de 72 B por fila más un diccionario chico de lo recién llegado; el escaneo caliente completo
+  pica en 356–362 MB.
+- **Un sort no promete conservar el orden entre claves iguales, y la caché depende de ese orden.** Agregar es como
+  se escribe una actualización, así que la última fila de una clave es la que vale. La carga ordena las filas y,
+  para las claves repetidas, toma el digest de una pasada hacia atrás por el archivo. **No había test de "la
+  última gana" al recargar**; el que se escribió para esto falla si se quita esa pasada.
+- **Ningún test cubría que un archivo que cambió de tamaño a mitad del escaneo se reagrupe por lo hasheado.** Al
+  rehacer el hasheo, quitar la corrección pasó todos los tests. Ahora hay uno, y otro que fija que `unreadable` sale
+  en el orden de entrada y no en el que terminaron las lecturas.
   Crecerlo de a una inserción además rehashea varias veces con el viejo y el nuevo vivos; `reserve(_:)` lo
   dimensiona una vez antes de que el escaneo guarde.
 - **La etapa de prefijo, por fin medida sobre el caso que existe para atender.** 80 archivos de 64 MiB del mismo

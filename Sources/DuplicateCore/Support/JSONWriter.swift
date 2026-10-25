@@ -36,7 +36,11 @@ public enum JSONWriter {
     /// `save_scan` in `src/rav/core/duplicates.py:107` appends that newline, so a document without
     /// it differs from the CLI's output in its last byte.
     public static func document(_ value: JSONValue) throws -> Data {
-        Data((try encode(value) + "\n").utf8)
+        // Appended in place: `encode(value) + "\n"` built a second copy of the whole document only to add one
+        // byte, the last thing a scan allocates before it ends (#161).
+        var text = try encode(value)
+        text.append("\n")
+        return Data(text.utf8)
     }
 
     /// One compact line plus a newline: a JSON Lines record.

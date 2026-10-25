@@ -18,31 +18,40 @@ public enum GroupBuilder {
     public static func groups(
         from hashed: [(entry: FileEntry, digest: Digest32)]
     ) -> [DuplicateGroup] {
-        var indices = Array(hashed.indices)
+        groups(entries: hashed.map(\.entry), digests: hashed.map(\.digest))
+    }
+
+    /// Builds the groups from two parallel lists: a file, and its digest or `nil` when it could not be hashed.
+    ///
+    /// **Two lists instead of one of pairs** (#161). The scan already holds the entries, and pairing each with
+    /// its digest made a third list of every candidate at 104 bytes a row; the digests alone are 40.
+    public static func groups(entries: [FileEntry], digests: [Digest32?]) -> [DuplicateGroup] {
+        precondition(entries.count == digests.count, "one digest slot per entry")
+        var indices = entries.indices.filter { digests[$0] != nil }
         // One sort does all the work: it clusters by (size, digest) and leaves each cluster's paths
         // already in byte order, so the run scan below just slices.
         indices.sort { left, right in
-            let a = hashed[left]
-            let b = hashed[right]
-            if a.entry.size != b.entry.size { return a.entry.size > b.entry.size }
-            if a.digest != b.digest { return a.digest < b.digest }
-            return PathOrder.lessThan(a.entry.path, b.entry.path)
+            let a = entries[left]
+            let b = entries[right]
+            if a.size != b.size { return a.size > b.size }
+            if digests[left] != digests[right] { return digests[left]! < digests[right]! }
+            return PathOrder.lessThan(a.path, b.path)
         }
 
         var result: [DuplicateGroup] = []
         var start = 0
         while start < indices.count {
             var end = start + 1
-            let size = hashed[indices[start]].entry.size
-            let digest = hashed[indices[start]].digest
+            let size = entries[indices[start]].size
+            let digest = digests[indices[start]]!
             while end < indices.count,
-                hashed[indices[end]].entry.size == size,
-                hashed[indices[end]].digest == digest
+                entries[indices[end]].size == size,
+                digests[indices[end]] == digest
             {
                 end += 1
             }
             if end - start > 1 {
-                let members = indices[start..<end].map { hashed[$0].entry }
+                let members = indices[start..<end].map { entries[$0] }
                 result.append(
                     DuplicateGroup(
                         size: size,

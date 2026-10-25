@@ -144,45 +144,39 @@ public struct DuplicateFinder: Sendable {
         // synchronous and `HashCache` is an actor, so a caching hasher could not await it; and asking
         // once per candidate outside the bounded window keeps an actor hop out of the hot path.
         //
-        // **One list holds every digest, sized once** (#161). Hits go straight into it and the hasher appends to
-        // it; two lists joined with `cached + hashed` meant a third full copy, alive beside the other two.
-        var digests: [(entry: FileEntry, digest: Digest32)] = []
-        digests.reserveCapacity(survivors.count)
-        var needsReading = survivors
+        // **The digests sit beside the survivors, not paired with them** (#161): one slot per candidate, `nil`
+        // until it is known. A list of `(entry, digest)` pairs was a third list of every candidate at 104 bytes
+        // a row, and joining the cached half to the hashed half once made a fourth.
+        var digests = [Digest32?](repeating: nil, count: survivors.count)
+        var toRead: [Int] = []
         if let cache = configuration.cache {
-            var misses: [Int] = []
             for (index, entry) in survivors.enumerated() {
                 if let digest = await cache.digest(for: entry) {
-                    digests.append((entry, digest))
+                    digests[index] = digest
                     progress.noteCacheHit()
                 } else {
-                    misses.append(index)
+                    toRead.append(index)
                 }
             }
-            // A cold cache misses everything, and then the survivors already are the list to read.
-            if misses.count != survivors.count {
-                needsReading = misses.map { survivors[$0] }
-            }
+        } else {
+            toRead = Array(survivors.indices)
         }
-        survivors = []
-        let cacheHits = digests.count
+        let cacheHits = survivors.count - toRead.count
 
         let unreadable = try await hashAll(
-            needsReading, into: &digests, width: width, progress: progress)
-        needsReading = []
+            toRead, of: &survivors, into: &digests, width: width, progress: progress)
         try Task.checkCancellation()
 
         if let cache = configuration.cache {
-            await cache.reserve(digests.count - cacheHits)
-            for (entry, digest) in digests[cacheHits...] {
-                await cache.store(digest, for: entry)
+            await cache.reserve(toRead.count)
+            for index in toRead {
+                guard let digest = digests[index] else { continue }
+                await cache.store(digest, for: survivors[index])
             }
         }
 
         progress.setPhase(.grouping)
-        // Hits first and hashed after, an order that does not reach the document: the builder sorts on size,
-        // digest and path, which are unique together.
-        let groups = GroupBuilder.groups(from: digests)
+        let groups = GroupBuilder.groups(entries: survivors, digests: digests)
         // **Not `.finished` here.** Finding is over; the scan is not. `ScanSession` still has to persist the
         // cache and write the document, and on a large tree that is minutes. A caller driving this type
         // directly ends at `.grouping`, which is the truth for what it does.
@@ -203,7 +197,10 @@ public struct DuplicateFinder: Sendable {
         width: Int,
         progress: ProgressCounters
     ) async throws -> [FileEntry] {
+        // Sized for every candidate up front: grown by appends it doubled while the buckets it copies from were
+        // still alive (#161). The probe only ever removes files, so this is an upper bound.
         var result: [FileEntry] = []
+        result.reserveCapacity(buckets.reduce(0) { $0 + $1.count })
         for bucket in buckets {
             try Task.checkCancellation()
             guard let size = bucket.first?.size, hasher.usesPrefixStage(forSize: size) else {
@@ -235,46 +232,51 @@ public struct DuplicateFinder: Sendable {
 
     // MARK: - Stage two: full hash
 
-    /// Hashes `entries` and appends each digest to `digests`, returning the paths that could not be read.
+    /// Hashes the survivors at `indices`, writing each digest into its slot, and returns the paths that could
+    /// not be read.
+    ///
+    /// The size the walk recorded is what put a file in its bucket. If the file changed underneath the scan, its
+    /// digest is still correct for what is on disk -- but it is no longer evidence of a match, so the entry takes
+    /// the size that was actually hashed and the group builder decides again.
     private func hashAll(
-        _ entries: [FileEntry],
-        into digests: inout [(entry: FileEntry, digest: Digest32)],
+        _ indices: [Int],
+        of entries: inout [FileEntry],
+        into digests: inout [Digest32?],
         width: Int,
         progress: ProgressCounters
     ) async throws -> [String] {
-        let results = await run(over: entries, width: width) {
-            entry -> Result<HashResult, any Error> in
-            do {
-                let hashed = try self.hasher.fullDigest(atPath: entry.path)
-                progress.noteHashed(path: entry.path, bytes: hashed.byteCount)
-                return .success(hashed)
-            } catch {
-                return .failure(error)
-            }
-        }
-
-        var unreadable: [String] = []
-        for (entry, outcome) in zip(entries, results) {
-            switch outcome {
-            case .success(let hashed)?:
-                // The size the walk recorded is what put this file in its bucket. If the file changed
-                // underneath the scan, its digest is still correct for what is on disk -- but it is no
-                // longer evidence of a match, so the walk's size is replaced with the one that was
-                // actually hashed and the group builder decides again.
-                digests.append((entry.withSize(hashed.byteCount), hashed.digest))
-            case .failure?:
-                // Reported either way. A file that vanished mid-scan and a file on a failing disk are
-                // both "we did not get a digest", and the caller shows the list rather than pretending
-                // the scan was complete.
-                unreadable.append(entry.path)
-            case nil:
-                // The window returns nil only for work it never ran, which happens on cancellation.
-                // Cancellation is surfaced by the checkCancellation call after this stage, so there is
-                // nothing to record here.
-                break
-            }
-        }
-        return unreadable
+        let paths = indices.map { entries[$0].path }
+        // Each result goes straight into its slot as it lands: collecting them first was one more list of every
+        // file read, 48 bytes a row, alive beside the slots it was about to be copied into (#161). Work the window
+        // never ran, on cancellation, delivers nothing, and the `checkCancellation` after this stage reports it.
+        var failed: [Int] = []
+        await run(
+            over: paths, width: width,
+            work: { path -> Result<HashResult, any Error> in
+                do {
+                    let hashed = try self.hasher.fullDigest(atPath: path)
+                    progress.noteHashed(path: path, bytes: hashed.byteCount)
+                    return .success(hashed)
+                } catch {
+                    return .failure(error)
+                }
+            },
+            deliver: { position, outcome in
+                let index = indices[position]
+                switch outcome {
+                case .success(let hashed):
+                    if hashed.byteCount != entries[index].size {
+                        entries[index] = entries[index].withSize(hashed.byteCount)
+                    }
+                    digests[index] = hashed.digest
+                case .failure:
+                    failed.append(position)
+                }
+            })
+        // Reported either way. A file that vanished mid-scan and a file on a failing disk are both "we did not get
+        // a digest", and the caller shows the list rather than pretending the scan was complete -- in input
+        // order, so two runs of the same tree say it the same way.
+        return failed.sorted().map { paths[$0] }
     }
 
     // MARK: - The bounded window
@@ -294,8 +296,19 @@ public struct DuplicateFinder: Sendable {
         width: Int,
         work: @escaping @Sendable (Element) -> Value
     ) async -> [Value?] {
-        guard !elements.isEmpty else { return [] }
         var results = [Value?](repeating: nil, count: elements.count)
+        await run(over: elements, width: width, work: work) { results[$0] = $1 }
+        return results
+    }
+
+    /// The same window, handing each result to `deliver` with its index as it completes instead of keeping them.
+    private func run<Element: Sendable, Value: Sendable>(
+        over elements: [Element],
+        width: Int,
+        work: @escaping @Sendable (Element) -> Value,
+        deliver: (Int, Value) -> Void
+    ) async {
+        guard !elements.isEmpty else { return }
         let inflight = max(1, min(width, elements.count))
         let queue = ioQueue
 
@@ -318,12 +331,11 @@ public struct DuplicateFinder: Sendable {
                 next += 1
             }
             while let (index, value) = await group.next() {
-                results[index] = value
+                if let value { deliver(index, value) }
                 guard !Task.isCancelled, next < elements.count else { continue }
                 schedule(next)
                 next += 1
             }
         }
-        return results
     }
 }
