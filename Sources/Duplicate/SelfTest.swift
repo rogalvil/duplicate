@@ -4403,6 +4403,49 @@ enum SelfTest {
         )
         viewer.selectPairForSelftest(0)
 
+        // **Quitting waits for a folder apply too.** `applicationShouldTerminate` asks the library whether anything
+        // is moving, and the library asked only the exact reviews: ⌘Q in the middle of a folder apply quit at once,
+        // with folders half-moved (#145). The viewer is opened by the library, as a double-click does, so it is in
+        // the registry that question reads.
+        //
+        // Asserted on the question rather than through the delegate: a deferred termination that then completes
+        // would end this process with status 0, a pass nobody earned. Stopped before anything moves, and if the stop
+        // loses that race, what moved is put back.
+        //
+        // Teeth: drop `folderWindows` from `hasApplyInFlight` and the second assertion fails.
+        let quitViewer = try expectSome(
+            library.openScanForSelftest(reloaded.scanID) as? FolderPairWindowController,
+            "the library opened no folder viewer for its row")
+        defer { quitViewer.window?.close() }
+        // Invisible: the library shows what it opens, and this check has no business on someone's screen.
+        quitViewer.window?.alphaValue = 0
+        try expect(quitViewer.pairRowCount > 0, "the library opened a viewer with no pairs")
+        quitViewer.decideForSelftest("keepA", row: 0)
+        // **Refused here rather than simulated.** With nothing decided the window answers with a modal alert
+        // instead of the sheet, and a modal stops the run until someone clicks it -- which happened, on the
+        // user's screen, while this was being written.
+        try expect(
+            quitViewer.reviewTallyForSelftest.decided > 0,
+            "nothing is decided, so simulating would raise a modal instead of the sheet")
+        quitViewer.simulateForSelftest()
+        let quitSheet = try expectSome(
+            quitViewer.applySheetForSelftest, "no apply sheet for the quit check")
+        defer { quitSheet.window?.close() }
+        quitSheet.window?.alphaValue = 0
+        try expect(!library.hasApplyInFlight, "the library reports an apply before one started")
+        quitSheet.applyForSelftest()
+        try expect(
+            library.hasApplyInFlight, "a folder apply is running and quitting would not wait for it"
+        )
+        quitSheet.stopForSelftest()
+        await quitSheet.awaitApplyForSelftest()
+        if let moved = quitSheet.reportForSelftest?.moved, !moved.isEmpty {
+            quitSheet.undoForSelftest()
+            await quitSheet.awaitUndoForSelftest()
+        }
+        try expect(!library.hasApplyInFlight, "the library still reports an apply that has stopped")
+        print("  quitting waits for a folder apply, not only for an exact one")
+
         print("  and Command-Z takes a decision back, in the window and in the file")
 
         print(
@@ -4849,6 +4892,44 @@ enum SelfTest {
             fit.width <= advertisedSimilar.width,
             "the similar viewer demands \(Int(fit.width)) points of width and advertises \(Int(advertisedSimilar.width))"
         )
+
+        // **Quitting waits for a perceptual apply too**, for the reason the folder viewer gives (#145): the library
+        // asked only the exact reviews. Same shape: opened by the library, asserted on the question, stopped
+        // before anything moves, and put back if the stop loses the race.
+        //
+        // Teeth: drop `similarWindows` from `hasApplyInFlight` and the second assertion fails.
+        let quitViewer = try expectSome(
+            library.openScanForSelftest(reloaded.scanID) as? SimilarPairWindowController,
+            "the library opened no perceptual viewer for its row")
+        defer { quitViewer.window?.close() }
+        // Invisible: the library shows what it opens, and this check has no business on someone's screen.
+        quitViewer.window?.alphaValue = 0
+        try expect(quitViewer.pairRowCount > 0, "the library opened a viewer with no pairs")
+        quitViewer.decideForSelftest(.keepA, row: 0)
+        // **Refused here rather than simulated.** With nothing decided the window answers with a modal alert
+        // instead of the sheet, and a modal stops the run until someone clicks it -- which happened, on the
+        // user's screen, while this was being written.
+        try expect(
+            quitViewer.reviewTallyForSelftest.decided > 0,
+            "nothing is decided, so simulating would raise a modal instead of the sheet")
+        quitViewer.simulateForSelftest()
+        let quitSheet = try expectSome(
+            quitViewer.applySheetForSelftest, "no apply sheet for the quit check")
+        defer { quitSheet.window?.close() }
+        quitSheet.window?.alphaValue = 0
+        try expect(!library.hasApplyInFlight, "the library reports an apply before one started")
+        quitSheet.applyForSelftest()
+        try expect(
+            library.hasApplyInFlight,
+            "a perceptual apply is running and quitting would not wait for it")
+        quitSheet.stopForSelftest()
+        await quitSheet.awaitApplyForSelftest()
+        if let moved = quitSheet.reportForSelftest?.moved, !moved.isEmpty {
+            quitSheet.undoForSelftest()
+            await quitSheet.awaitUndoForSelftest()
+        }
+        try expect(!library.hasApplyInFlight, "the library still reports an apply that has stopped")
+        print("  quitting waits for a perceptual apply, not only for an exact one")
 
         print(
             "  a perceptual scan of 3 images and 2 clips: \(reloaded.pairCount) pairs "

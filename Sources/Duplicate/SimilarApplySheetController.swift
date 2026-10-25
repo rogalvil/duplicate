@@ -374,6 +374,10 @@ final class SimilarApplySheetController: NSWindowController {
     }
 
     func applyForSelftest() { applyNow(nil) }
+    /// The stop button: while an apply runs it stops it and leaves the sheet open.
+    func stopForSelftest() { dismiss(nil) }
+    /// Waits for an apply started by ``applyForSelftest()`` to report back on the main actor.
+    func awaitApplyForSelftest() async { await applyTask?.value }
     func undoForSelftest() { undoNow(nil) }
 
     /// Waits for an undo started by ``undoForSelftest()``.

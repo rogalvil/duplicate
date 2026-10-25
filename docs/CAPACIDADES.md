@@ -49,7 +49,7 @@ son de `Sources/Duplicate/` salvo que digan otra cosa.
 | La biblioteca vuelve | cerrar la última ventana que no es la biblioteca | La reabre. Las hojas y los paneles no cuentan como ventana |
 | Salir al cerrar | cerrar la biblioteca sin otra ventana abierta | La app termina |
 | Reabrir | clic en el Dock, o `open` | Trae la biblioteca |
-| ⌘Q durante un apply | ⌘Q | Espera a que el apply termine. **Solo mira la revisión exacta** (ver pendientes) |
+| ⌘Q durante un apply | ⌘Q | Espera a que el apply termine, en cualquiera de los tres visores |
 | Límite de descriptores | invisible | Sube `RLIMIT_NOFILE` de 256 a 4096 antes de abrir nada |
 | About | Duplicate > About Duplicate | Versión, número de build, commit, y aviso si el árbol estaba sucio al compilar |
 
@@ -239,7 +239,7 @@ tocar cualquiera de los tres.
 | Avisa decisiones importadas del CLI | sí | no | **no** — y 17 de 18 `similar-decisions` reales vienen completas del CLI |
 | Pregunta al cerrar | sí | no | no (sí avisa contradicciones) |
 | Simular | botón y ⇧⌘D | botón | botón |
-| ⌘Q protegido durante el apply | sí | **no** | **no** |
+| ⌘Q protegido durante el apply | sí | sí | sí |
 | Nota de cuarentena tras el apply | sí | **no** | **no** |
 | Biblioteca: ordenar, filtrar, menú contextual, badge "Reviewed" | sí | **no** | **no** |
 | Aviso de carpetas sin permiso al escanear | sí | **no** | **no** |
@@ -365,7 +365,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p1 | #145 | ⌘Q no protege el apply de carpetas ni el de parecidos: salir a media corrida puede dejar hasta 31 archivos en la Papelera sin entrada en el journal |
 | p2 | #146 | Los escaneos de carpetas y de parecidos no avisan de carpetas sin permiso: el dato se calcula y nadie lo muestra |
 | p2 | #147 | En el visor de parecidos ⌘Z no deshace una decisión, y deshacer un Skip borra las decisiones tomadas después |
 | p2 | #148 | En la revisión exacta con filtro, Previous Group se atasca y confirmar puede saltar al primer grupo visible |
@@ -419,8 +418,8 @@ Vistas desde quien usa la app, no desde el código: dos o más caminos para el m
 
 Los tres detectores repiten la misma tubería —sesión de escaneo, estado de revisión, ventana, hoja de aplicar,
 runner— y en cada capa la copia **ya divergió**: la tabla de la sección 2 son esas divergencias vistas desde
-afuera, y una está en el camino destructivo (⌘Q). El costo no es el tamaño; es que un arreglo hecho en una copia
-no llega a las otras dos, como pasó con #131.
+afuera, y una estuvo en el camino destructivo (⌘Q, #145). El costo no es el tamaño; es que un arreglo hecho en
+una copia no llega a las otras dos, como pasó con #131 y con #145.
 
 Lo que **sí** es una sola pieza y conviene que siga así: el deshacer (`UndoPlanner`, `UndoCoordinator`,
 `MoveJournal`), las frases de falla y de progreso, Quick Look, los contadores y el heurístico de profundidad.

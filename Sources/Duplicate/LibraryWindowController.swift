@@ -467,9 +467,12 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     /// Whether any open review is in the middle of an apply.
     ///
     /// Asked by `applicationShouldTerminate`: quitting halfway through would leave files half-moved and a
-    /// journal that stops mid-run.
+    /// journal that stops mid-run. **All three kinds of review**: this asked only the exact ones, so ⌘Q in the
+    /// middle of a folder or perceptual apply quit at once.
     var hasApplyInFlight: Bool {
         reviewWindows.values.contains { $0.isApplying }
+            || folderWindows.values.contains { $0.isApplying }
+            || similarWindows.values.contains { $0.isApplying }
     }
 
     /// Selects a row by scan id once it appears, since the list is read asynchronously.
@@ -729,6 +732,25 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
     func showSimilarScansForSelftest() {
         kindControl.selectedSegment = LibraryKind.similar.rawValue
         kindChanged(nil)
+    }
+
+    /// Opens a scan from the tab being shown, the way a double-click on its row does, and returns the window the
+    /// library now tracks for it. By id, not by row: a tab sorts newest first, so row 0 is whichever scan came last.
+    func openScanForSelftest(_ scanID: String) -> NSWindowController? {
+        let ids: [String] =
+            switch showingKind {
+            case .files: rows.map(\.scanID)
+            case .folders: folderRows.map(\.scanID)
+            case .similar: similarRows.map(\.scanID)
+            }
+        guard let row = ids.firstIndex(of: scanID) else { return nil }
+        tableView.selectRowIndexes([row], byExtendingSelection: false)
+        reviewScan(nil)
+        switch showingKind {
+        case .files: return reviewWindows[scanID]
+        case .folders: return folderWindows[scanID]
+        case .similar: return similarWindows[scanID]
+        }
     }
 
     func showFolderScansForSelftest() {

@@ -511,6 +511,8 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     }
     var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
     var applySheetForSelftest: FolderApplySheetController? { applySheet }
+    /// Whether this review's apply sheet is moving folders right now. Asked before quitting.
+    var isApplying: Bool { applySheet?.isApplying ?? false }
 
     func undoForSelftest() { undo.undo() }
     var canUndoForSelftest: Bool { undo.canUndo }

@@ -738,6 +738,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     var ambiguousKeysForSelftest: [String] { review.ambiguousKeys }
 
     var applySheetForSelftest: SimilarApplySheetController? { applySheet }
+    /// Whether this review's apply sheet is moving files right now. Asked before quitting.
+    var isApplying: Bool { applySheet?.isApplying ?? false }
 
     func simulateForSelftest() { simulateAndApply(nil) }
 
