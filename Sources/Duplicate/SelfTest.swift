@@ -5074,6 +5074,29 @@ enum SelfTest {
             "the line lost what it said across a toggle")
         print("  the panes name the size, the date and the resolution: \(probed)")
 
+        // **A probe that lands after the selection moved still keeps what it read** (#219). Its paths are marked as tried
+        // when it starts, and a newer probe's generation made it drop its answer, so the clips' resolution, codec and
+        // duration never arrived -- and their suggestion never used them. The video group goes first, so opening the
+        // window starts its probe and selecting the images starts a newer one before it answers.
+        // Teeth: return before storing the facts when the probe is not the newest, and the resolution never arrives.
+        let videoFirst = SimilarScan(
+            scanID: "20260813-180000-000000", root: tree, createdAt: "t", imageThreshold: 5,
+            videoThreshold: 0.7,
+            pairs: reloaded.pairs.filter { $0.mediaKind == .video }
+                + reloaded.pairs.filter { $0.mediaKind == .image })
+        let switcherState = StateDirectory(
+            environment: ["XDG_STATE_HOME": root + "/switch-state"], homePath: root)
+        let switcher = SimilarPairWindowController(scan: videoFirst, stateDirectory: switcherState)
+        defer { switcher.window?.close() }
+        switcher.selectGroupForSelftest(1)
+        await switcher.awaitFactsForSelftest()
+        try? await Task.sleep(for: .milliseconds(1500))
+        switcher.selectGroupForSelftest(0)
+        try expect(
+            switcher.leftMetadataForSelftest.text.contains("\u{00D7}"),
+            "the clips' probe was overtaken and its answer lost: \(switcher.leftMetadataForSelftest.text)"
+        )
+
         // **Quick Look and Reveal, the two things this viewer could not do.** A thumbnail capped at 280 points
         // is enough to tell two photographs apart and not always enough to decide between them -- the difference
         // the detector found can be finer than the picture it draws -- and until now there was no way to look

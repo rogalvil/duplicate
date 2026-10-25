@@ -36,7 +36,6 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     private var review: SimilarReviewState
     /// Facts already probed, by the bytes of the path. Filled for the group being looked at, never for all of them.
     private var facts: [[UInt8]: MediaFacts] = [:]
-    private var probeGeneration = 0
     private let probe = MediaProbe()
     private let groupTable = ReviewTableView()
     private let fileTable = ReviewTableView()
@@ -491,17 +490,18 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
 
     /// Probes the members of the group being looked at, then refines the suggestions of its pairs.
     ///
-    /// **Lazily and cancellably.** Probing all 2,460 files of a real scan up front would repeat a large part of the
-    /// scan; the generation counter drops a probe that lands after the selection moved on. A group is at most a few
-    /// dozen files -- 27 videos is the largest in this user's scans.
+    /// **Lazily.** Probing all 2,460 files of a real scan up front would repeat a large part of the scan. A group is at
+    /// most a few dozen files -- 27 videos is the largest in this user's scans.
+    ///
+    /// **What a probe read is kept even if the selection moved on**, and only the redraw depends on it (#219). Its
+    /// paths are marked as tried when it starts, so dropping a late answer -- which a generation counter here did --
+    /// lost that group's resolution, codec and duration for good, and its suggestion never used them.
     private func probeFactsIfNeeded(index: Int) {
         let group = review.groups[index]
         let missing = group.files.filter { !probed.contains(Array($0.utf8)) }
         guard !missing.isEmpty else { return }
         for path in missing { probed.insert(Array(path.utf8)) }
         probeLaunches += 1
-        probeGeneration += 1
-        let generation = probeGeneration
         let kind = group.mediaKind
         let probe = self.probe
         Task { @MainActor [weak self] in
@@ -514,7 +514,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
                     }
                 if let fact { found.append((path, fact)) }
             }
-            guard let self, generation == self.probeGeneration else { return }
+            guard let self else { return }
             for (path, fact) in found { self.facts[Array(path.utf8)] = fact }
             for link in group.links {
                 let pair = self.scan.pairs[link.pairIndex]
