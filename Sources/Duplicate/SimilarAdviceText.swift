@@ -9,15 +9,6 @@ import Foundation
 @MainActor
 enum SimilarAdviceText {
 
-    static func label(for decision: SimilarDecision) -> String {
-        switch decision {
-        case .keepA: return Strings.string("similar.decision.keepA")
-        case .keepB: return Strings.string("similar.decision.keepB")
-        case .keepBoth: return Strings.string("similar.decision.keepBoth")
-        case .keepNone: return Strings.string("similar.decision.keepNone")
-        }
-    }
-
     /// The one-line "why" under a suggestion.
     static func explanation(for ground: SimilarDecisionDefaults.Ground) -> String {
         switch ground {
