@@ -7,10 +7,11 @@ import Foundation
 extension SelfTest {
     /// The manual pass's eyes, for the part code can see.
     ///
-    /// Every window is rendered at its smallest size and at a laptop's, in the language this process was launched
-    /// with, over a real tree scanned by the three real detectors. Each render is swept for text that does not fit,
-    /// keys that leaked untranslated, panes squeezed to nothing and controls pushed out of the window -- and saved
-    /// as a PNG, for what a sweep cannot judge.
+    /// Every window is rendered at the size it opens at, and then at its smallest and at a laptop's if it can be
+    /// resized, in the language this process was launched with, over a real tree scanned by the three real
+    /// detectors. Each render is swept for text that does not fit, keys that leaked untranslated, panes squeezed to
+    /// nothing, controls pushed out of the window and controls drawn over each other -- and saved as a PNG, for
+    /// what a sweep cannot judge.
     ///
     /// **Local only.** It is not in `--mode all`, so CI never runs it: it is the check before opening a PR, and
     /// `make ui` runs it once per language.
@@ -20,8 +21,9 @@ extension SelfTest {
     /// user's whole system. And a run that believes it is in Spanish while drawing English asserts the same thing
     /// twice, which already happened here with three locale identifiers.
     ///
-    /// Writes only under `/tmp` and `--output`. **Window frames are not autosaved**: shrinking a window to its
-    /// minimum here would otherwise open the user's real one at that size.
+    /// Writes only under `/tmp` and `--output`. **Window frames are neither restored nor autosaved**: this process
+    /// runs under the app's own defaults, so a restored frame would render this machine's last size instead of a
+    /// first launch's, and shrinking a window to its minimum would open the user's real one at that size.
     ///
     /// Proof of teeth, one break per sweep, each run against the broken version:
     /// - language: drop `-AppleLanguages` from the `ui` target and the run for the language the system does not
@@ -29,6 +31,11 @@ extension SelfTest {
     /// - leaked key: misspell `review.warning.preview` at its call site and the review window reports the key.
     /// - cut text: give the scan panel's `rootLabel` `.byClipping` and it reports the path cut at the right.
     /// - squeezed pane: drop the library's `minSize` height to 90 and its table reports 30 points of height.
+    /// - overlap: set the scan panel's `optionsStack.spacing` to -14 and every row is reported over the next, at the
+    ///   size the panel opens at. With the check off the same run passes: no text is cut and nothing leaves the
+    ///   window.
+    /// - opening size: rendered first, it found the folder viewer's decision row with an ambiguous width -- shrunk
+    ///   from the size it opened at, "Simulate and apply" stayed outside the window. Unpin the row's width to see it.
     /// - the other three were not staged: they caught real defects on their first run. A plural after a count of
     ///   one in four footers, file names cut by the edge of the exact review's list at its smallest size, and the
     ///   folder viewer's detail -- an `NSTextView` holding the pair's differences in zero points of width.
@@ -64,7 +71,7 @@ extension SelfTest {
 
         var sweep = UISweep(language: language, output: output)
 
-        let library = LibraryWindowController(stateDirectory: fixture.state)
+        let library = LibraryWindowController(stateDirectory: fixture.state, restoresFrame: false)
         defer { library.window?.close() }
         try await waitOnMainActor(
             until: { library.hasFinishedFirstLoad }, what: "the library's first read")
@@ -84,7 +91,7 @@ extension SelfTest {
         // The first thing a new user sees, and the manual's first picture.
         let emptyState = StateDirectory(
             environment: ["XDG_STATE_HOME": root + "/empty-state"], homePath: root)
-        let emptyLibrary = LibraryWindowController(stateDirectory: emptyState)
+        let emptyLibrary = LibraryWindowController(stateDirectory: emptyState, restoresFrame: false)
         defer { emptyLibrary.window?.close() }
         try await waitOnMainActor(
             until: { emptyLibrary.hasFinishedFirstLoad }, what: "the empty library's first read")
@@ -101,13 +108,13 @@ extension SelfTest {
 
         let review = ReviewWindowController(
             scan: fixture.exact, stateDirectory: fixture.state,
-            presenceCacheDirectory: URL(filePath: root + "/presence"))
+            presenceCacheDirectory: URL(filePath: root + "/presence"), restoresFrame: false)
         defer { review.window?.close() }
         await review.awaitPresenceForSelftest()
         try await sweep.render(review.window, as: "review")
 
         let folders = FolderPairWindowController(
-            scan: fixture.folders, stateDirectory: fixture.state)
+            scan: fixture.folders, stateDirectory: fixture.state, restoresFrame: false)
         defer { folders.window?.close() }
         folders.selectPairForSelftest(0)
         try await sweep.render(folders.window, as: "folder-pair")
@@ -346,9 +353,12 @@ private struct UISweep {
         self.output = output
     }
 
-    /// The two sizes: the smallest the window allows, which is where text runs out of room, and a 13-inch
-    /// laptop's, which is how most people first see it.
+    /// After the size a window opens at, two more: the smallest it allows, which is where text runs out of room,
+    /// and a 13-inch laptop's, which is how most people first see it.
     private static let laptop = NSSize(width: 1280, height: 800)
+
+    /// The size each window had the first time it came here, before any render resized it.
+    private var openingSizes: [ObjectIdentifier: NSSize] = [:]
 
     /// A window with a size of its own -- a sheet -- rendered once, as it is.
     mutating func renderAsIs(_ window: NSWindow?, as name: String) async throws {
@@ -360,6 +370,7 @@ private struct UISweep {
         frameView.displayIfNeeded()
         let place = "\(name) @ \(Int(window.frame.width))x\(Int(window.frame.height))"
         inspect(frameView, content: content, window: window, place: place)
+        inspectOverlaps(in: content, place: place)
         try save(frameView, as: name)
         renderCount += 1
     }
@@ -368,7 +379,19 @@ private struct UISweep {
         let window = try SelfTest.expectSome(window, "\(name) has no window")
         // Before any resize: the autosaved frame is the user's, and a resize here would be written back to it.
         window.setFrameAutosaveName("")
-        for (label, size) in [("min", window.minSize), ("laptop", Self.laptop)] {
+        // **The size it opens at is the first one anyone sees** (#211), and a window that cannot be resized has no
+        // other: the scan panel rendered at a laptop's showed a gap between its rows that nobody can ever see. Going
+        // first also means the other two are reached from a window already laid out, as they are by anyone who
+        // resizes one -- which is how the folder viewer's decision row turned out to have no width of its own.
+        // The window lays itself out before its size is taken: it grows to fit its content, as it does on screen.
+        window.layoutIfNeeded()
+        let opening = openingSizes[ObjectIdentifier(window)] ?? window.frame.size
+        openingSizes[ObjectIdentifier(window)] = opening
+        let sizes =
+            window.styleMask.contains(.resizable)
+            ? [("open", opening), ("min", window.minSize), ("laptop", Self.laptop)]
+            : [("open", opening)]
+        for (label, size) in sizes {
             window.setFrame(NSRect(origin: window.frame.origin, size: size), display: false)
             // Thumbnails and the probes behind them arrive a beat after the layout.
             try? await Task.sleep(for: .milliseconds(300))
@@ -380,6 +403,7 @@ private struct UISweep {
 
             let place = "\(name) @ \(label) \(Int(window.frame.width))x\(Int(window.frame.height))"
             inspect(frameView, content: content, window: window, place: place)
+            inspectOverlaps(in: content, place: place)
             if let problem = Self.unformatted(window.title) ?? leakedKey(in: window.title) {
                 findings.append("\(place): window title \(problem)")
             }
@@ -451,6 +475,39 @@ private struct UISweep {
 
         for subview in view.subviews {
             inspect(subview, content: content, window: window, place: place)
+        }
+    }
+
+    /// Controls drawn over each other (#211): one row laid on top of the next cuts no text and leaves nothing outside
+    /// the window, so every other check passes. Compared across the whole window, not between siblings, because two
+    /// rows of a stack are cousins. Lists are left out, since what a table lays out and scrolls is the table's
+    /// business, and so are a control's own subviews: a button's title is a text field inside it.
+    private mutating func inspectOverlaps(in content: NSView, place: String) {
+        var controls: [(view: NSView, rect: NSRect)] = []
+        func collect(_ view: NSView) {
+            guard !view.isHidden, !(view is NSScrollView) else { return }
+            guard view is NSControl else {
+                view.subviews.forEach(collect)
+                return
+            }
+            // The alignment rect, as for "pushed out", and one point in from it: two controls that touch are laid
+            // out edge to edge, not over each other.
+            if !view.visibleRect.isEmpty, let parent = view.superview {
+                let rect = parent.convert(view.alignmentRect(forFrame: view.frame), to: content)
+                    .insetBy(dx: 1, dy: 1)
+                if !rect.isEmpty { controls.append((view, rect)) }
+            }
+        }
+        collect(content)
+        for (index, first) in controls.enumerated() {
+            for second in controls[(index + 1)...] {
+                let shared = first.rect.intersection(second.rect)
+                guard !shared.isEmpty else { continue }
+                findings.append(
+                    "\(place): \(Self.describe(first.view)) and \(Self.describe(second.view)) overlap by "
+                        + "\(Int(shared.width.rounded(.up)))x\(Int(shared.height.rounded(.up))) points"
+                )
+            }
         }
     }
 
