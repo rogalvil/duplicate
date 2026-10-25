@@ -47,7 +47,7 @@ public struct DuplicateFinder: Sendable {
         public let scan: DuplicateScan
         /// What the walk could not see, and how much it visited -- **without its entries** (#161).
         ///
-        /// Carrying every file the walk found kept that list alive until the scan returned: 112 bytes an entry,
+        /// Carrying every file the walk found kept that list alive until the scan returned: 72 bytes an entry,
         /// plus growth slack, for a list nothing downstream reads. The app reads `inaccessiblePaths`.
         public let walk: WalkResult
         /// Candidates that could not be hashed, with the reason. Skipped, not fatal.

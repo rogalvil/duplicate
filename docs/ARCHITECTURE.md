@@ -1023,6 +1023,16 @@ con caché caliente: cargar la caché lleva el proceso de 29 a 354 MB (el diccio
 caché en una tabla ordenada en vez de un diccionario, y achicar `FileEntry`, que mide 112 B porque cinco campos
 opcionales ocupan 16 B cada uno. Está en #161.
 
+**Primero `FileEntry`: de 112 a 72 B.** Los cinco opcionales se guardan como valores planos junto a una máscara de
+un byte que dice cuáles están, y se leen por las mismas propiedades opcionales; nada fuera del tipo nota la
+diferencia. Como un escaneo tiene varias listas de todos los archivos a la vez, los 40 B se pagan varias veces:
+
+| 800,000 archivos | antes | con `FileEntry` de 72 B |
+|---|---|---|
+| `DuplicateFinder` solo | 379–411 MB | 314–319 MB |
+| app, caché fría | 610–652 MB | 485–499 MB |
+| app, caché caliente | 662–664 MB | 524 MB |
+
 ### Y la quinta: `AttrListWalker` queda formalmente rechazado
 
 Contado con `fs_usage` sobre el mismo árbol de 3,421 archivos (necesita root, así que lo corrió el usuario):

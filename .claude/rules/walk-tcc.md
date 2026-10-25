@@ -92,8 +92,13 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   Un número de memoria se vuelve a medir con el commit que lo produjo antes de llamar regresión a la diferencia.
 - **Ninguna lista de todos los archivos sobrevive a la siguiente (#161).** `Outcome` cargaba la lista entera del
   recorrido hasta el final y nadie la leía; los buckets vivían durante el hasheo. En `DuplicateFinder` el recorrido
-  vive en un `do { }` y las listas ya usadas se vacían a mano. `FileEntry` mide 112 B, así que cada copia de más a
-  800,000 archivos son ~90 MB más su holgura de crecimiento.
+  vive en un `do { }` y las listas ya usadas se vacían a mano. `FileEntry` medía 112 B, así que cada copia de más a
+  800,000 archivos eran ~90 MB más su holgura de crecimiento.
+- **Un opcional de 8 bytes ocupa 16 en un struct.** El tag se rellena hasta el siguiente múltiplo de 8, así que los
+  cinco opcionales de `FileEntry` eran un tercio de cada entrada. Ahora son valores planos con una máscara de un
+  byte, y la entrada mide 72 B; un test fija ese número. **Lo ausente se guarda como cero**, y la máscara es lo único
+  que separa "desconocido" de "cero": quitarla del acceso a `identity` rompe cinco tests, entre ellos el de la
+  caché que se niega a guardar un archivo sin identidad.
 - **Launch Services arranca la app con `RLIMIT_NOFILE` blando en 256.** Quedarse sin descriptores no
   truena: sale como archivo ilegible, se cuenta como candidato saltado, y **el escaneo encuentra menos
   de lo que debía** — una falla que se ve como una respuesta más chica, no como un error. `main.swift`
