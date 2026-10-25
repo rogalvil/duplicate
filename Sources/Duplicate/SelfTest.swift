@@ -4824,6 +4824,18 @@ enum SelfTest {
             panel.isVideoToggleVisibleForSelftest,
             "the video toggle is hidden for the video detector")
 
+        // **The hash-cache toggle reaches this detector too** (#158). The perceptual request was built without it,
+        // so it always used the cache -- turning the toggle off changed nothing here.
+        // Teeth: drop `usesCache: request.usesCache` from `similarRequest(from:)` and the request still says true.
+        panel.setUsesCacheForSelftest(false)
+        try expect(
+            panel.similarRequestForSelftest()?.usesCache == false,
+            "the cache toggle is off and the perceptual request still uses the cache")
+        panel.setUsesCacheForSelftest(true)
+        try expect(
+            panel.similarRequestForSelftest()?.usesCache == true,
+            "the cache toggle is on and the perceptual request does not use the cache")
+
         // 1b. A real video scan, through the session the window uses.
         let movie = try await SyntheticMovie.write(
             SyntheticMovie.Specification(seconds: 6, pattern: .movingBlock), to: tree + "/clip.mp4")
