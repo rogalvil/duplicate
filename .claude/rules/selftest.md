@@ -98,14 +98,19 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   Greptile, ya con `require_code_owner_review` puesto. #210, donde el bot solo comentó, falló esa regla y entró
   como `bypass` con `--admin`, con las reglas de `protect main` evaluadas y en verde. Si en el PR de un colaborador
   el bot sí queda fuera no se sabe, y probarlo pide una segunda cuenta (#212).
-- **Un selftest que termina antes de tiempo salía con 0.** El `main` asíncrono llama a `exit(0)` cuando el run loop
-  principal se detiene, y una hoja de aplicar cerrada o terminada a media prueba, o un `performClick` sobre una
-  ventana con una hoja puesta, lo detuvo: el modo `similar-window` acababa sin `OK` ni `FAILED`, con estado 0, y
-  `--mode all` se habría saltado todos los modos siguientes con CI en verde (#217). Medido con `lldb`: el `exit` sale
-  de `swift_task_asyncMainDrainQueue`. Ahora `main.swift` trata cualquier salida antes de que `SelfTest.run` regrese
-  como `FAILED: the process exited before the selftest finished`, con estado 1. Y en un modo, **una hoja se deja
-  abierta hasta el final**: lo que se afirma sobre su lista sale de `SimilarApplySheetController.listing(for:)` sin
-  abrir otra, y una acción en una ventana con hoja se llama directo, no con `performClick`.
+- **Un selftest que termina antes de tiempo salía con 0.** El `main` asíncrono drena su cola con `CFRunLoopRun()` y
+  llama a `exit(0)` en cuanto regresa. Una hoja de aplicar cerrada a media prueba lo hacía regresar, y el modo
+  `similar-window` acababa sin `OK` ni `FAILED`, con estado 0; `--mode all` se habría saltado todos los modos
+  siguientes con CI en verde (#217). Medido con `lldb`: el `exit` sale de `swift_task_asyncMainDrainQueue`, y **no hay
+  ningún** `CFRunLoopStop`, `_CFRunLoopStopMode`, `stopModal`, `abortModal`, `stop:` ni `terminate:`; un timer que
+  mantiene el run loop con una fuente tampoco lo evita. No sé qué lo hace regresar.
+- **Y por eso el selftest ya no corre en un `main` asíncrono (#222).** Corre en un `Task` en el actor principal, y
+  `main.swift` gira el run loop con su propio ciclo, que solo termina cuando el selftest llama a `exit`. La guarda de
+  #217 se queda: cualquier salida antes de que `SelfTest.run` regrese es `FAILED: the process exited before the
+  selftest finished`, con estado 1. Fue esa guarda la que destapó la segunda aparición, intermitente: `folder-window`
+  borra un escaneo cuyo visor tiene una hoja puesta y luego espera, y una de dos corridas completas murió ahí.
+  Reproducida a propósito —cerrar la hoja del grupo de tres en `similar-window`—, falla siempre con el `main`
+  asíncrono y pasa con el ciclo propio; con el ciclo propio, tres corridas completas seguidas dan 44 `OK`.
 - **`reviewDecision` sí sigue a los rulesets. Lo negué dos veces sin medir.** Primero tomé el `APPROVED` como
   prueba de algo que nadie había evaluado; después escribí que el campo ignoraba los rulesets. Las suites de
   #207 a #210 coinciden con `reviewDecision` en los cuatro casos. Lo que el campo no dice es *qué* regla falló ni
