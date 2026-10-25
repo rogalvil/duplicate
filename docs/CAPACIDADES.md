@@ -366,7 +366,6 @@ cerrado sale de esta tabla en el mismo PR que lo arregla.
 
 | Prioridad | Issue | Qué |
 |---|---|---|
-| p3 | #159 | Los tamaños del filtro salen como "97.7 KB / 976.6 KB": umbrales decimales impresos en unidades binarias |
 | p3 | #160 | Textos viejos: el pie de carpetas dice que solo el CLI puede actuar, y el estado vacío de la biblioteca manda a `rav duplicate scan` |
 | p3 | #166 | El apply de carpetas reporta el tamaño de la entrada del directorio («1.3 KB» por 160 MB), no el de su contenido |
 | p4 | #161 | Memoria: el objetivo de < 400 MB extrapola a ~570 MB a 800,000 archivos, y la corrida sobre `~` (1.3 millones) no registró el pico |

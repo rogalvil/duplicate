@@ -35,7 +35,12 @@ public struct GroupFilter: Sendable, Equatable {
     ///
     /// Round numbers a person recognises, not percentiles: "at least 1 MB" is a decision somebody can make
     /// about their own disk, and "the top 12%" is not.
-    public static let sizeChoices: [Int64] = [0, 100_000, 1_000_000, 10_000_000, 100_000_000]
+    ///
+    /// **Binary, because that is how every size in this app is printed.** These were decimal -- 100,000 and
+    /// 1,000,000 -- and `ByteSize.format` divides by 1,024, so the menu offered "97.7 KB" and "976.6 KB" (#159).
+    /// Formatting only the menu in decimal would have the filter speak another unit than the group sizes it
+    /// filters, which `ByteSize` keeps binary because that is the CLI's format.
+    public static let sizeChoices: [Int64] = [0, 100 << 10, 1 << 20, 10 << 20, 100 << 20]
 
     public var isNarrowing: Bool {
         minimumSize > 0 || onlyUndecided || onlyStillDuplicates

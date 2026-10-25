@@ -97,7 +97,11 @@ struct GroupFilterTests {
     @Test("The size choices are round numbers a person recognises")
     func offersRoundSizes() {
         #expect(GroupFilter.sizeChoices.first == 0)
-        #expect(GroupFilter.sizeChoices.contains(1_000_000))
+        #expect(GroupFilter.sizeChoices.contains(1 << 20))
+        // **Round in the unit they are printed in** (#159): decimal thresholds read "97.7 KB" in the menu.
+        #expect(
+            GroupFilter.sizeChoices.dropFirst().map(ByteSize.format)
+                == ["100.0 KB", "1.0 MB", "10.0 MB", "100.0 MB"])
         #expect(GroupFilter.sizeChoices == GroupFilter.sizeChoices.sorted())
     }
 }
