@@ -45,7 +45,13 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
     private let quickLook = QuickLookCoordinator()
     private let footerLabel = NSTextField(labelWithString: "")
 
-    init(scan: FolderScan, stateDirectory: StateDirectory = StateDirectory.current()) {
+    /// - Parameter restoresFrame: whether the window opens at, and saves back to, the frame it was last left at.
+    ///   Off in `make ui`, which renders what a first launch shows -- and runs under this app's own defaults, so
+    ///   it would otherwise render whatever size this machine last closed the window at.
+    init(
+        scan: FolderScan, stateDirectory: StateDirectory = StateDirectory.current(),
+        restoresFrame: Bool = true
+    ) {
         self.stateDirectory = stateDirectory
         self.review = FolderReviewState(
             scan: scan,
@@ -66,7 +72,7 @@ final class FolderPairWindowController: NSWindowController, NSWindowDelegate {
             PathElision.elide(scan.root, leading: 1, trailing: 2)
         )
         window.center()
-        window.setFrameAutosaveName("FolderPairWindow")
+        if restoresFrame { window.setFrameAutosaveName("FolderPairWindow") }
         window.minSize = NSSize(width: 760, height: 420)
         super.init(window: window)
         window.delegate = self

@@ -107,10 +107,14 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
     ///   point it at a temp directory: the default is the real `~/Library/Caches`, and a mode that wrote
     ///   there would leak its answers into the next run -- which it did, and the leak is what made a
     ///   teeth check fail on the wrong assertion.
+    /// - Parameter restoresFrame: whether the window opens at, and saves back to, the frame it was last left at.
+    ///   Off in `make ui`, which renders what a first launch shows -- and runs under this app's own defaults, so
+    ///   it would otherwise render whatever size this machine last closed the window at.
     init(
         scan: DuplicateScan,
         stateDirectory: StateDirectory,
-        presenceCacheDirectory: URL = PresenceCache.defaultDirectory()
+        presenceCacheDirectory: URL = PresenceCache.defaultDirectory(),
+        restoresFrame: Bool = true
     ) {
         self.stateDirectory = stateDirectory
         self.presenceCache = PresenceCache(directory: presenceCacheDirectory)
@@ -133,7 +137,7 @@ final class ReviewWindowController: NSWindowController, NSMenuItemValidation {
         )
         window.center()
         // Per scan, so reviewing two scans does not make them fight over one saved frame.
-        window.setFrameAutosaveName("ReviewWindow")
+        if restoresFrame { window.setFrameAutosaveName("ReviewWindow") }
         // **A window with a minimum, rather than one that collapses.** Dragged below what the layout needs,
         // AutoLayout starts breaking constraints and the detail pane vanishes entirely -- seen in a real
         // screenshot: a squashed window with an empty right half and no footer. `minSize` makes the window

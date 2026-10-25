@@ -82,7 +82,10 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         return formatter
     }()
 
-    init(stateDirectory: StateDirectory) {
+    /// - Parameter restoresFrame: whether the window opens at, and saves back to, the frame it was last left at.
+    ///   Off in `make ui`, which renders what a first launch shows -- and runs under this app's own defaults, so
+    ///   it would otherwise render whatever size this machine last closed the window at.
+    init(stateDirectory: StateDirectory, restoresFrame: Bool = true) {
         self.stateDirectory = stateDirectory
         // Deliberately empty: the read happens off the main thread. Measured on the real corpus,
         // decoding 119 scans takes 0.34 s, and a window that stalls before it draws is a window that
@@ -97,7 +100,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
         )
         window.title = Strings.string("window.library.title")
         window.center()
-        window.setFrameAutosaveName("LibraryWindow")
+        if restoresFrame { window.setFrameAutosaveName("LibraryWindow") }
         window.minSize = NSSize(width: 720, height: 360)
         window.tabbingMode = .disallowed
         super.init(window: window)
