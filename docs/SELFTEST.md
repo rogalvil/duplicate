@@ -227,3 +227,18 @@ las trampas, todas medidas al escribir los primeros:
    con `cacheDisplay` que con `screencapture -l` de la ventana mostrada. Por eso `make ui` no muestra ventanas.
 6. **`screencapture` solo con `-l <windowNumber>`**, la ventana de la app y nada más. Una captura de la pantalla
    completa se llevó una pestaña del navegador del usuario.
+
+7. **Un `await` en el nivel superior de `main.swift` antes de `application.run()` congela todo lo que viene
+   después.** Tras ese `await`, el resto corre como un trabajo de la cola principal, y un run loop anidado en él
+   no vacía esa cola: ninguna tarea del main actor arranca. El trabajo asíncrono va **dentro** de la tarea.
+8. **Una tecla sintética no llega al menú de una app que no está activa.** Lanzada desde la terminal, la app no
+   tiene ventana clave, y un ⌘Q enviado con `postEvent` o `performKeyEquivalent` dice «atendido» sin llamar a
+   nada. Lo fiel es la acción del ítem (`NSApp.terminate`), disparada desde un `Timer` del run loop. Desde una
+   tarea, una espera modal como la de `terminateLater` se anida en un trabajo de la cola principal y se atasca.
+9. **`CFFIXED_USER_HOME` redirige la carpeta personal, las cachés, Application Support y las preferencias de un
+   proceso, pero no la Papelera.** Un `trashItem` de prueba cayó en la Papelera real. Para un apply de verdad,
+   el árbol va en una imagen de disco desechable (`hdiutil create -type SPARSE` + `attach -mountpoint`, sin
+   root): lo movido cae en el `.Trashes` de la imagen y se va al desmontarla.
+10. **Afirmar el predicado no es afirmar lo que pasa.** Las pruebas de #165 afirmaban `hasApplyInFlight` y
+    pasaban, pero AppKit nunca consulta ese predicado mientras la hoja de aplicar está abierta: rechaza la salida
+    antes. Solo el chequeo que mandó ⌘Q a la app real lo mostró, y el issue resultó no reproducible.

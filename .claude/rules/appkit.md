@@ -150,3 +150,7 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **La selección de la tabla se restaura por `scan_id`, no por índice de fila.** Un escaneo nuevo
   aparece arriba y corre todos los índices de abajo; reaplicar el índice movería la selección a otro
   escaneo sin avisar.
+- **Con una hoja pegada a una ventana, AppKit no deja salir, y ni le pregunta a la app.** `terminate` (⌘Q, Salir
+  del Dock) se rechaza **antes** de llamar a `applicationShouldTerminate`; sin hoja, el mismo `terminate` sí llega
+  y la app sale. Medido con trazas sobre la app real. Por eso la hoja de aplicar ya protege el apply y #145 no se
+  reproducía, y por eso ⌘Q "no funciona" mientras la hoja de resultado sigue abierta: es lo esperado.

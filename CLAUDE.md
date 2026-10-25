@@ -202,6 +202,21 @@ por URL. Solo capturas de `make ui`, nunca la pantalla del usuario: el repo es p
 de los chequeos temporales (eventos sintéticos, autosave, live resize) están en
 [`docs/SELFTEST.md`](docs/SELFTEST.md).
 
+**Un issue se trabaja con evidencia visual comprobada.** Al confirmar que un issue sigue vigente, se le agrega
+la captura que lo muestra, de `make ui` o de un chequeo temporal, y su PR lleva el antes y el después. Si el
+issue no tiene pantalla (un tiempo, el contenido de un archivo, un menú del sistema, ⌘Q), no se fabrica una
+captura que no muestra nada: **se le dice al usuario, y se decide con él qué evidencia vale**. Puede ser un
+selftest que falla y pasa, un archivo antes y después, o una medición.
+
+**Un issue se cierra solo cuando se demostró que no existe, nunca porque no se pudo reproducir.** Hay dos
+resultados distintos y no se confunden:
+- **No existe:** la causa está medida y explica por qué el problema no puede pasar. Ejemplo: #145, donde la hoja
+  de aplicar hace que AppKit rechace la salida antes de consultar a la app, trazado sobre la app real y
+  confirmado a mano. Se cierra con esa evidencia.
+- **No se pudo reproducir:** el entorno de prueba no alcanza el caso (un permiso de TCC, un volumen de red, un
+  clic que no se puede emular, un tiempo que no se puede forzar). **El issue se queda abierto**, con un comentario
+  que dice qué se intentó y qué límite técnico lo impidió, y se le dice al usuario.
+
 ## Qué no tocar sin plantearlo
 
 - **No agregar dependencias externas.** Cero dependencias es requisito del proyecto. `libsqlite3`
