@@ -104,6 +104,7 @@
 "review.unsaved.title" = "¿Guardar esta revisión?";
 /* %d es cuántos grupos se decidieron. */
 "review.unsaved.body" = "Decidiste %d grupos. Los grupos que no revisaste no se registran ni a favor ni en contra.";
+"review.unsaved.cleared" = "Quitaste todas las decisiones de este escaneo. Si no guardas, el archivo conserva las anteriores, y el CLI o la próxima vez que lo abras actuarán sobre ellas.";
 "review.unsaved.save" = "Guardar";
 "review.unsaved.discard" = "Descartar";
 "button.cancel" = "Cancelar";

@@ -105,6 +105,7 @@
 "review.unsaved.title" = "Save this review?";
 /* %d is how many groups were decided. */
 "review.unsaved.body" = "You decided %d groups. Groups you did not look at are not recorded either way.";
+"review.unsaved.cleared" = "You removed every decision for this scan. If you do not save, the file keeps the earlier ones, and the CLI or the next opening will act on them.";
 "review.unsaved.save" = "Save";
 "review.unsaved.discard" = "Discard";
 "button.cancel" = "Cancel";

@@ -252,6 +252,18 @@ public struct ScanStore: Sendable {
         try delete(id: id, scan: .scans, decisions: .decisions)
     }
 
+    /// Removes the decisions saved for a scan, and nothing else.
+    ///
+    /// For a review that took back every decision it had. The file is what tells the CLI, and the library's
+    /// "reviewed" badge, that the scan was reviewed, so writing an empty one would say something false.
+    @discardableResult
+    public func deleteDecisions(scanID: String) throws -> Bool {
+        let path = try state.filePath(for: .decisions, id: scanID)
+        guard FileManager.default.fileExists(atPath: path) else { return false }
+        try FileManager.default.removeItem(atPath: path)
+        return true
+    }
+
     /// Removes a folder scan and the decisions saved beside it, for the reason ``delete(id:)`` removes both.
     @discardableResult
     public func deleteFolderScan(id: String) throws -> Bool {
