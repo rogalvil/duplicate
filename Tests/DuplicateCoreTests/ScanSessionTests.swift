@@ -260,6 +260,24 @@ struct ScanSessionTests {
         #expect(Array(phases.suffix(2)) == [.saving, .finished])
     }
 
+    /// **Every phase, in order, `.grouping` included** (#157). The panel's label reads them one by one, and a phase
+    /// that went missing would leave the label on the one before -- "hashing" while the groups are being built.
+    @Test("The phases run in order: indexing, hashing, grouping, saving, finished")
+    func runsThePhasesInOrder() async throws {
+        let scratch = try SessionScratch()
+        defer { scratch.remove() }
+        for index in 0..<4 { try scratch.write("f\(index).txt", "shared contents") }
+        let counters = ProgressCounters()
+        _ = try await scratch.session().run(
+            ScanSession.Request(root: scratch.tree), instant: noon, progress: counters)
+        let phases = counters.phaseLog.withLock { $0 }
+        let expected: [ScanPhase] = [.indexing, .hashing, .grouping, .saving, .finished]
+        // In this order, with others allowed between: probing runs only when sizes collide past its threshold.
+        var remaining = expected[...]
+        for phase in phases where phase == remaining.first { remaining.removeFirst() }
+        #expect(remaining.isEmpty, "phases were \(phases), missing \(Array(remaining))")
+    }
+
     @Test("Progress counters reach the caller")
     func reportsProgress() async throws {
         let scratch = try SessionScratch()
