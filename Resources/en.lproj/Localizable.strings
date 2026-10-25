@@ -252,6 +252,8 @@
 "review.imported.body" = "The rav duplicate CLI writes a decision for every group, including ones nobody opened, filled in with its own guess. So these check marks may not be choices you made. Reviewing again keeps them as a starting point; starting over clears them. Nothing is written either way until you save or apply.";
 "review.imported.keep" = "Keep Them";
 "review.imported.discard" = "Start Over";
+"similar.imported.title" = "This scan already comes with a decision for all %d pairs";
+"similar.imported.body" = "The rav duplicate CLI writes a decision for every pair it shows, including the ones nobody looked at closely. So these marks may not be your choices. Reviewing anyway keeps them as a starting point; starting over removes them, from the file too, because this viewer saves every change.";
 "review.filter.anySize" = "Any size";
 "review.filter.atLeast" = "%@ and up";
 "review.filter.onlyUndecided" = "Not decided yet";

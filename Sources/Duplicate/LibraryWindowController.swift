@@ -632,6 +632,7 @@ final class LibraryWindowController: NSWindowController, NSToolbarItemValidation
             }
         }
         controller.showWindow(nil)
+        controller.presentImportWarningIfNeeded()
     }
 
     /// Opens a folder scan's pairs.

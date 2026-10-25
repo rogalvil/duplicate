@@ -4671,6 +4671,42 @@ enum SelfTest {
         print("  the library lists it and the viewer names the overlap and the difference")
         print("  every saved pair is oriented by bytes, which is what folders-move deletes on")
 
+        // **The sheet says when a folder went to quarantine** (#155), for the reason the perceptual mode gives.
+        // Teeth: drop the quarantine line from the sheet's `finish` and this fails.
+        let quarantineTree = root + "/quarantined"
+        for folder in ["keep", "gone"] {
+            try FileManager.default.createDirectory(
+                atPath: quarantineTree + "/" + folder, withIntermediateDirectories: true)
+            try Data("same".utf8).write(to: URL(filePath: quarantineTree + "/\(folder)/one.txt"))
+        }
+        var quarantineReview = FolderReviewState(
+            scan: FolderScan(
+                scanID: "20260813-150000-000000", root: quarantineTree, createdAt: "t",
+                threshold: 0.9,
+                pairs: [
+                    FolderPair(
+                        folderA: quarantineTree + "/keep", folderB: quarantineTree + "/gone",
+                        similarity: 1.0, matching: 1, onlyInA: [], onlyInB: [], changed: [],
+                        totalA: 1, totalB: 1)
+                ]))
+        quarantineReview.keep(quarantineTree + "/keep")
+        let quarantineSession = ScanIdentifier.Instant(
+            year: 2026, month: 8, day: 13, hour: 15, minute: 0, second: 0, microsecond: 0)
+        let quarantineReport = try await FolderApplyRunner(
+            state: state, cacheURL: URL(filePath: root + "/quarantine-hashes.v1")
+        ).run(
+            FolderApplyPlan.from(quarantineReview), sessionID: quarantineSession.identifier,
+            instant: quarantineSession,
+            disposer: QuarantineDisposer(
+                root: root + "/quarantine", sessionID: quarantineSession.identifier))
+        try expect(
+            quarantineReport.quarantinedCount == 1, "the runner did not quarantine the folder")
+        folderSheet.finishForSelftest(quarantineReport)
+        try expect(
+            folderSheet.listText.contains(
+                String(format: Strings.string("apply.done.quarantined"), 1)),
+            "the sheet does not say a folder went to quarantine: \(folderSheet.listText)")
+
         // **A decision that could not be saved says so** (#152). The save was a `try?`: with the decisions directory
         // read-only the window showed the pair decided and the file did not have it, and nothing on screen said so.
         // Teeth: make the save a `try?` again and the footer stays silent.
@@ -5180,6 +5216,71 @@ enum SelfTest {
         print(
             "  narrowing decided nothing; accepting \(undecidedShown) shown pairs wrote exactly those"
         )
+
+        // **A decisions file covering every pair is questioned, as the exact review always did** (#155). The CLI
+        // writes a decision for every pair it shows -- 17 of the 18 real perceptual decision files cover their whole
+        // scan -- and this viewer loaded them as the user's own without a word. Five pairs: the warning's threshold.
+        // Teeth: classify with `decided: 0` in the viewer's init and the first assertion fails.
+        let importedPairs = (0..<5).map {
+            SimilarPair(
+                fileA: tree + "/imported-\($0)-a.png", fileB: tree + "/imported-\($0)-b.png",
+                similarity: 1.0, mediaKind: .image)
+        }
+        let importedScan = SimilarScan(
+            scanID: "20260813-140000-000000", root: tree, createdAt: "t", imageThreshold: 5,
+            videoThreshold: 0.7, pairs: importedPairs)
+        // A state directory of its own: the library below counts the perceptual scans in `state`.
+        let importedState = StateDirectory(
+            environment: ["XDG_STATE_HOME": root + "/imported-state"], homePath: root)
+        let importedStore = ScanStore(state: importedState)
+        try importedStore.save(importedScan)
+        try importedStore.save(
+            SimilarDecisionsDocument(
+                entries: importedPairs.map { (key: SimilarPairKey.key(for: $0), decision: .keepA) }),
+            scanID: importedScan.scanID)
+        let imported = SimilarPairWindowController(
+            scan: importedScan, stateDirectory: importedState)
+        defer { imported.window?.close() }
+        try expect(
+            imported.warnsAboutImportedForSelftest,
+            "a decisions file covering all 5 pairs was loaded without a question")
+        imported.discardImportedForSelftest()
+        try expect(
+            imported.reviewTallyForSelftest.decided == 0,
+            "starting over left \(imported.reviewTallyForSelftest.decided) pairs decided")
+        try expect(
+            try importedStore.loadSimilarDecisions(scanID: importedScan.scanID).count == 0,
+            "starting over left the CLI's decisions in the file")
+
+        // **And the sheet says when something went to quarantine** (#155), which only the exact sheet did. The
+        // sheet's own apply goes to the Trash first and a test cannot make it refuse, so the report comes from the
+        // runner with the quarantine as its disposer, and is shown the way the end of a run shows it.
+        // Teeth: drop the quarantine line from the sheet's `finish` and this fails.
+        let quarantineTree = root + "/quarantined"
+        try FileManager.default.createDirectory(
+            atPath: quarantineTree, withIntermediateDirectories: true)
+        let qa = try SyntheticImage.write(
+            .rampWithCorner, width: 96, height: 96, format: .png, to: quarantineTree + "/a.png")
+        let qb = try SyntheticImage.write(
+            .rampWithCorner, width: 96, height: 96, format: .png, to: quarantineTree + "/b.png")
+        var quarantineReview = SimilarReviewState(
+            scan: SimilarScan(
+                scanID: "20260813-150000-000000", root: quarantineTree, createdAt: "t",
+                imageThreshold: 5, videoThreshold: 0.7,
+                pairs: [SimilarPair(fileA: qa, fileB: qb, similarity: 1.0, mediaKind: .image)]))
+        quarantineReview.confirm(.keepA)
+        let quarantineSession = ScanIdentifier.Instant(
+            year: 2026, month: 8, day: 13, hour: 15, minute: 0, second: 0, microsecond: 0)
+        let quarantineReport = try await SimilarApplyRunner(state: state).run(
+            SimilarApplyPlan.from(quarantineReview), sessionID: quarantineSession.identifier,
+            instant: quarantineSession,
+            disposer: QuarantineDisposer(
+                root: root + "/quarantine", sessionID: quarantineSession.identifier))
+        try expect(quarantineReport.quarantinedCount == 1, "the runner did not quarantine the file")
+        sheet.finishForSelftest(quarantineReport)
+        try expect(
+            sheet.listText.contains(String(format: Strings.string("apply.done.quarantined"), 1)),
+            "the sheet does not say a file went to quarantine: \(sheet.listText)")
 
         // **A decision that could not be saved says so, readably.** The footer carried `String(describing:)` of the
         // error -- the whole `NSError`, `UserInfo` and all -- and now carries the localized description after the

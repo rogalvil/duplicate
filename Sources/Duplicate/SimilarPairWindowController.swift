@@ -62,6 +62,9 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         return manager
     }()
 
+    /// What the decisions loaded at open look like: a file covering every pair is most likely the CLI's.
+    private var provenance: DecisionsProvenance
+
     init(scan: SimilarScan, stateDirectory: StateDirectory = StateDirectory.current()) {
         self.scan = scan
         self.allPairs = scan.pairs
@@ -73,6 +76,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             priorDecisions: ScanStore(state: stateDirectory)
                 .priorSimilarDecisions(scanID: scan.scanID)
         )
+        self.provenance = DecisionsProvenance.classify(
+            decided: review.tally.decided, total: scan.pairs.count)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 940, height: 620),
@@ -640,6 +645,35 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Asks, once, about a decisions file that covers every pair (#155).
+    ///
+    /// The exact review always asked this and this viewer never did, though the CLI writes a decision for every
+    /// pair it was shown: 17 of the 18 perceptual decision files in this user's corpus cover every pair. Shown
+    /// as decided with no word, those marks read as the user's own and pressing Simulate plans over all of them.
+    /// Starting over here also clears the file, because this viewer saves every change -- which the text says.
+    func presentImportWarningIfNeeded() {
+        guard provenance.deservesAWarning, let window else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(
+            format: Strings.string("similar.imported.title"), provenance.decidedCount)
+        alert.informativeText = Strings.string("similar.imported.body")
+        alert.addButton(withTitle: Strings.string("review.imported.keep"))
+        alert.addButton(withTitle: Strings.string("review.imported.discard"))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertSecondButtonReturn, let self else { return }
+            MainActor.assumeIsolated { self.clearImportedDecisions() }
+        }
+    }
+
+    /// Drops every decision, as one undoable step that is saved like any other.
+    private func clearImportedDecisions() {
+        mutate { state in
+            for index in state.scan.pairs.indices { state.clearDecision(at: index) }
+        }
+        provenance = .none
+    }
+
     /// Simulates, then -- only from the sheet -- applies.
     @objc private func simulateAndApply(_ sender: Any?) {
         let plan = SimilarApplyPlan.from(review)
@@ -738,6 +772,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
     var adviceText: String { adviceLabel.stringValue }
     var tallyText: String { tallyLabel.stringValue }
     var reviewTallyForSelftest: (decided: Int, skipped: Int, undecided: Int) { review.tally }
+    var warnsAboutImportedForSelftest: Bool { provenance.deservesAWarning }
+    func discardImportedForSelftest() { clearImportedDecisions() }
     var contradictionsForSelftest: [String] { review.contradictions }
 
     var ambiguousKeysForSelftest: [String] { review.ambiguousKeys }

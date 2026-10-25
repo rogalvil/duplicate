@@ -56,6 +56,17 @@ struct DecisionsProvenanceTests {
 
     /// A small scan whose groups really were all reviewed is the honest case, and interrupting for it would
     /// train the user to dismiss the warning.
+    /// The same question asked by count, for the perceptual viewer, whose decisions are keyed by pair.
+    @Test("Classifying by count matches classifying by group")
+    func classifiesByCount() {
+        #expect(DecisionsProvenance.classify(decided: 0, total: 9) == .none)
+        #expect(
+            DecisionsProvenance.classify(decided: 4, total: 9) == .partial(decided: 4, groups: 9))
+        #expect(DecisionsProvenance.classify(decided: 9, total: 9) == .coversEveryGroup(groups: 9))
+        #expect(DecisionsProvenance.classify(decided: 9, total: 9).deservesAWarning)
+        #expect(!DecisionsProvenance.classify(decided: 2, total: 2).deservesAWarning)
+    }
+
     @Test("Full coverage of a tiny scan is not worth a warning")
     func staysQuietForTinyScans() {
         let subject = scan(groupCount: 3)
