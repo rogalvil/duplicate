@@ -68,7 +68,8 @@ Toda clave nueva va en **las dos** tablas. `make selftest MODE=l10n` falla si di
 `protect main`, sin bypass para nadie: se exige PR, CI verde y rama al día con `main`, solo merge commit, y no
 hay force-push ni borrado. `approval for collaborators` exige además la aprobación de un **code owner** (`.github/CODEOWNERS`), que
 caduca con un push nuevo, y exime **solo** al admin, porque GitHub no deja aprobar el PR propio. Code owner y no
-cualquiera: el bot de Greptile aprueba PRs, y GitHub contaba su aprobación. Van separados a propósito: un bypass en
+cualquiera: el bot de Greptile deja un review `APPROVED` en cada PR, y con "una aprobación cualquiera" nada
+garantizaba que no contara. Que no cuenta ahora es lo que GitHub documenta; no está probado con un colaborador real. Van separados a propósito: un bypass en
 el primero eximiría al dueño también del CI. La única excepción ya ocurrió: el commit inicial de boilerplate que
 creó la rama, porque GitHub no puede abrir un PR sin rama base.
 
