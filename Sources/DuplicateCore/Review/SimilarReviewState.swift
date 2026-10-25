@@ -36,6 +36,30 @@ public enum PairDecision: Sendable, Equatable {
     }
 }
 
+/// What a review has settled about one group of alike files (#217), read from the decisions of its pairs.
+///
+/// **Derived, never stored.** The decisions file is the CLI's map of pairs, so a group's state is whatever its pairs
+/// say -- which is also how a file the CLI wrote, or one decided pair by pair, reads as groups.
+public enum SimilarGroupState: Sendable, Equatable {
+    /// No pair decided.
+    case undecided
+    /// Every pair passed over.
+    case skipped
+    /// Every pair decided, and no member is kept by one and removed by another. The positions in the group's
+    /// ``SimilarGroup/files`` that survive; empty when every pair said "discard both".
+    case decided(keep: Set<Int>)
+    /// Some pairs decided and some not, or decisions that contradict each other. Deciding the group replaces them.
+    case mixed
+
+    /// Whether the group still needs someone to decide it.
+    public var needsDecision: Bool {
+        switch self {
+        case .undecided, .mixed: return true
+        case .skipped, .decided: return false
+        }
+    }
+}
+
 /// The review of one perceptual scan: where the cursor is, what has been decided, and what would be moved.
 ///
 /// A value type, so a window can snapshot it for undo without any bookkeeping -- the same trade the exact
@@ -50,6 +74,10 @@ public struct SimilarReviewState: Sendable {
     public private(set) var pairIndex: Int = 0
     /// Pairs the user has landed on, so "seen but not decided" is distinguishable from "never reached".
     public private(set) var visited: Set<Int> = []
+    /// The scan's pairs joined into groups of alike files.
+    public let groups: [SimilarGroup]
+    /// Keep sets edited on screen and not yet confirmed, by group. **Not decisions**: nothing here reaches the file.
+    private var pendingKeep: [Int: Set<Int>] = [:]
 
     /// Builds a review, optionally rehydrating decisions already on disk.
     ///
@@ -61,6 +89,7 @@ public struct SimilarReviewState: Sendable {
         facts: [String: MediaFacts] = [:]
     ) {
         self.scan = scan
+        self.groups = SimilarGrouping.groups(of: scan.pairs)
         self.suggestions = scan.pairs.map { pair in
             SimilarDecisionDefaults.suggestion(
                 for: pair, root: scan.root, factsA: facts[pair.fileA], factsB: facts[pair.fileB])
@@ -210,6 +239,190 @@ public struct SimilarReviewState: Sendable {
         guard scan.pairs.indices.contains(index) else { return }
         suggestions[index] = SimilarDecisionDefaults.suggestion(
             for: scan.pairs[index], root: scan.root, factsA: factsA, factsB: factsB)
+    }
+
+    // MARK: - Groups
+
+    /// What the pairs of a group say about it.
+    public func groupState(at index: Int) -> SimilarGroupState {
+        guard groups.indices.contains(index) else { return .undecided }
+        let group = groups[index]
+        var decided = 0
+        var skipped = 0
+        var kept = Set<Int>()
+        var removed = Set<Int>()
+        for link in group.links {
+            switch decision(at: link.pairIndex) {
+            case .decided(let choice):
+                decided += 1
+                switch choice {
+                case .keepA:
+                    kept.insert(link.a)
+                    removed.insert(link.b)
+                case .keepB:
+                    kept.insert(link.b)
+                    removed.insert(link.a)
+                case .keepBoth:
+                    kept.formUnion([link.a, link.b])
+                case .keepNone:
+                    removed.formUnion([link.a, link.b])
+                }
+            case .skipped: skipped += 1
+            case .undecided: break
+            }
+        }
+        if decided == 0 { return skipped == group.links.count ? .skipped : .undecided }
+        if decided < group.links.count || !kept.isDisjoint(with: removed) { return .mixed }
+        return .decided(keep: kept)
+    }
+
+    /// The members of a group from most to least worth keeping, by how many of their pairs' suggestions keep them.
+    ///
+    /// **Counted from the pair suggestions** -- copy-looking name, then the media advice, then pixels and bytes, then
+    /// depth -- so the group and its pairs never disagree about which of two files is better. Ties go to byte order.
+    public func rankedFiles(inGroup index: Int) -> [Int] {
+        guard groups.indices.contains(index) else { return [] }
+        let group = groups[index]
+        var wins = Array(repeating: 0, count: group.files.count)
+        for link in group.links {
+            let keepsB =
+                suggestions.indices.contains(link.pairIndex)
+                && suggestions[link.pairIndex].decision == .keepB
+            wins[keepsB ? link.b : link.a] += 1
+        }
+        return group.files.indices.sorted {
+            wins[$0] != wins[$1] ? wins[$0] > wins[$1] : $0 < $1
+        }
+    }
+
+    /// What a group would keep before anyone touched it.
+    ///
+    /// The best member, then every member alike to none of those already kept. For a set of copies that is one file;
+    /// **for a chain it keeps more**, because discarding a file is only safe next to a kept file it was found alike
+    /// to -- the same rule ``confirmGroup(_:keep:)`` enforces.
+    public func suggestedKeep(inGroup index: Int) -> Set<Int> {
+        guard groups.indices.contains(index) else { return [] }
+        let group = groups[index]
+        var keep = Set<Int>()
+        for file in rankedFiles(inGroup: index)
+        where group.neighbours(of: file).isDisjoint(with: keep) {
+            keep.insert(file)
+        }
+        return keep
+    }
+
+    /// What the window shows checked: an edit not yet confirmed, then the decision, then the suggestion.
+    public func effectiveKeep(inGroup index: Int) -> Set<Int> {
+        if let pending = pendingKeep[index] { return pending }
+        if case .decided(let keep) = groupState(at: index) { return keep }
+        return suggestedKeep(inGroup: index)
+    }
+
+    /// Members a keep set would discard although none of their pairs is with a kept file.
+    ///
+    /// **The safety rule of a group.** In a chain A~B~C, keeping only A discards C on the strength of B, which is
+    /// being discarded too: nothing that stays was ever found alike to C. And the apply checks each file against a
+    /// counterpart before moving it, so C would have nothing to be checked against.
+    public func unmatched(keep: Set<Int>, inGroup index: Int) -> [Int] {
+        guard groups.indices.contains(index) else { return [] }
+        let group = groups[index]
+        return group.files.indices.filter { file in
+            !keep.contains(file) && group.neighbours(of: file).isDisjoint(with: keep)
+        }
+    }
+
+    /// Checks or unchecks one member, without deciding anything.
+    ///
+    /// - Returns: `false`, and nothing changes, when it would uncheck the last kept member: a group with nothing kept
+    ///   is a mistake, not a choice -- the same refusal the exact review makes.
+    @discardableResult
+    public mutating func toggleKeep(_ file: Int, inGroup index: Int) -> Bool {
+        guard groups.indices.contains(index), groups[index].files.indices.contains(file) else {
+            return false
+        }
+        var keep = effectiveKeep(inGroup: index)
+        if keep.contains(file) {
+            guard keep.count > 1 else { return false }
+            keep.remove(file)
+        } else {
+            keep.insert(file)
+        }
+        pendingKeep[index] = keep
+        return true
+    }
+
+    /// Why a group confirmation did not happen, so a caller does not have to infer it.
+    public enum GroupConfirmOutcome: Sendable, Equatable {
+        case confirmed
+        case nothingKept
+        /// Members that would be discarded with no kept file they were found alike to.
+        case unmatched([Int])
+        case noSuchGroup
+    }
+
+    /// Decides a group: every one of its pairs gets the decision the keep set implies.
+    ///
+    /// Both kept is `keep_both`, one kept is `keep_a` or `keep_b`, neither is `keep_none` -- so the file stays the
+    /// CLI's map of pairs, and **no member can be kept by one pair and removed by another**.
+    @discardableResult
+    public mutating func confirmGroup(_ index: Int, keep: Set<Int>? = nil) -> GroupConfirmOutcome {
+        guard groups.indices.contains(index) else { return .noSuchGroup }
+        let keep = keep ?? effectiveKeep(inGroup: index)
+        guard !keep.isEmpty else { return .nothingKept }
+        let lonely = unmatched(keep: keep, inGroup: index)
+        guard lonely.isEmpty else { return .unmatched(lonely) }
+        for link in groups[index].links {
+            let decision: SimilarDecision
+            switch (keep.contains(link.a), keep.contains(link.b)) {
+            case (true, true): decision = .keepBoth
+            case (true, false): decision = .keepA
+            case (false, true): decision = .keepB
+            case (false, false): decision = .keepNone
+            }
+            decisions[link.pairIndex] = .decided(decision)
+            visited.insert(link.pairIndex)
+        }
+        pendingKeep[index] = nil
+        return .confirmed
+    }
+
+    /// Passes over a group: every pair is skipped, and an unconfirmed edit is dropped.
+    public mutating func skipGroup(_ index: Int) {
+        guard groups.indices.contains(index) else { return }
+        for link in groups[index].links {
+            decisions[link.pairIndex] = .skipped
+            visited.insert(link.pairIndex)
+        }
+        pendingKeep[index] = nil
+    }
+
+    /// Confirms what is shown for each listed group that nobody has decided.
+    ///
+    /// **Only `undecided` groups.** A skipped group was passed over on purpose, a decided one carries a choice, and
+    /// a mixed one holds pair decisions somebody made: accepting a suggestion over any of them would undo a choice.
+    ///
+    /// - Returns: how many groups were decided.
+    @discardableResult
+    public mutating func confirmGroups(_ indices: [Int]) -> Int {
+        var decided = 0
+        for index in indices where groupState(at: index) == .undecided {
+            if confirmGroup(index) == .confirmed { decided += 1 }
+        }
+        return decided
+    }
+
+    /// Groups by state, with mixed ones counted as undecided: they still need someone to decide them.
+    public var groupTally: (decided: Int, skipped: Int, undecided: Int) {
+        var decided = 0
+        var skipped = 0
+        for index in groups.indices {
+            switch groupState(at: index) {
+            case .decided: decided += 1
+            case .skipped: skipped += 1
+            case .undecided, .mixed: break
+            }
+        }
+        return (decided, skipped, groups.count - decided - skipped)
     }
 
     // MARK: - Output
