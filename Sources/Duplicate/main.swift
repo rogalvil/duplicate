@@ -17,7 +17,19 @@ let application = NSApplication.shared
 application.setActivationPolicy(.regular)
 
 if CommandLine.arguments.contains("--selftest") {
+    // **A selftest that ends early has to fail, not pass.** The async main exits with status 0 whenever the main run
+    // loop stops, and a selftest once stopped it halfway through a mode -- a `performClick` on a window with a sheet
+    // attached -- so the process ended with 0, no `OK` and no `FAILED`, and `--mode all` would have skipped every
+    // mode after it with CI green (#217). The guard turns any exit that `SelfTest.run` did not return into a failure.
+    atexit {
+        guard !SelfTest.hasFinished else { return }
+        fflush(stdout)
+        FileHandle.standardError.write(
+            Data("FAILED: the process exited before the selftest finished\n".utf8))
+        _exit(1)
+    }
     let status = await SelfTest.run(arguments: CommandLine.arguments)
+    SelfTest.hasFinished = true
     exit(status)
 }
 

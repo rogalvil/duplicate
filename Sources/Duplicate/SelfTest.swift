@@ -24,6 +24,9 @@ import Synchronization
 /// Output is English: this is developer-facing diagnostics, not user-facing UI.
 @MainActor
 enum SelfTest {
+    /// Set once ``run(arguments:)`` returns. Read by the exit guard in `main.swift`: an exit before this is a failure.
+    nonisolated(unsafe) static var hasFinished = false
+
     static func run(arguments: [String]) async -> Int32 {
         let mode = value(for: "--mode", in: arguments) ?? "all"
 
