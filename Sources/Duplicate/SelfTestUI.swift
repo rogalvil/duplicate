@@ -429,6 +429,16 @@ private struct UISweep {
                 "\(place): an NSTextView holds \(text.string.count) characters in "
                     + "\(Int(text.frame.width)) points of width, so it draws nothing")
         }
+        // **Ambiguous: more than one layout satisfies the constraints** (#214), so what is drawn depends on what was
+        // drawn before -- a row that kept its last width, a gap that landed between a checkbox and its explanation.
+        // **Before the visibility guard**, because an ambiguous view can resolve to nothing at all, and that is the
+        // worst case of it rather than a reason to skip it (found in review on #221). The views TextKit puts inside a
+        // text view are AppKit's, and theirs to settle.
+        if view.hasAmbiguousLayout, !(view.superview is NSTextView) {
+            findings.append(
+                "\(place): \(Self.describe(view)) has an ambiguous layout, "
+                    + "\(Int(view.frame.width))x\(Int(view.frame.height)) this time")
+        }
         guard !view.visibleRect.isEmpty else { return }
         let what = Self.describe(view)
 
@@ -441,12 +451,6 @@ private struct UISweep {
         }
         if let cut = Self.clipping(of: view) {
             findings.append("\(place): \(what) is cut \(cut)")
-        }
-        // **Ambiguous: more than one layout satisfies the constraints** (#214), so what is drawn depends on what was
-        // drawn before -- a row that kept its last width, a gap that landed between a checkbox and its explanation.
-        // The views TextKit puts inside a text view are AppKit's, and theirs to settle.
-        if view.hasAmbiguousLayout, !(view.superview is NSTextView) {
-            findings.append("\(place): \(what) has an ambiguous layout")
         }
         // Cut by the edge of its list: a cell wider than what its scroll view shows loses its end with no ellipsis,
         // because the cell truncates to its own width and not to the part of it on screen.
