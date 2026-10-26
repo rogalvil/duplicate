@@ -90,11 +90,12 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         self.scan = scan
         self.stateDirectory = stateDirectory
         // Rehydrated from disk, so reopening a scan shows what was already decided -- including a document the
-        // CLI wrote, which decides every pair and so reads as decided groups.
+        // CLI wrote, which decides every pair and so reads as decided groups -- and which names were chosen (#228).
+        let store = ScanStore(state: stateDirectory)
         self.review = SimilarReviewState(
             scan: scan,
-            priorDecisions: ScanStore(state: stateDirectory)
-                .priorSimilarDecisions(scanID: scan.scanID)
+            priorDecisions: store.priorSimilarDecisions(scanID: scan.scanID),
+            priorRenames: store.priorSimilarRenames(scanID: scan.scanID)
         )
         self.provenance = DecisionsProvenance.classify(
             decided: review.tally.decided, total: scan.pairs.count)
@@ -159,7 +160,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         }
         fileTable.onToggle = { [weak self] in self?.toggle(member: self?.cursor) }
         for (identifier, key, width) in [
-            ("keep", "similar.column.keep", 64.0),
+            ("keep", "similar.column.keep", 60.0),
+            ("takeName", "similar.column.name", 52.0),
             ("file", "similar.column.a", 220.0),
         ] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
@@ -168,6 +170,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             fileTable.addTableColumn(column)
         }
         fileTable.tableColumns[0].minWidth = 44
+        fileTable.tableColumns[1].minWidth = 44
+        fileTable.tableColumns[1].headerToolTip = Strings.string("similar.column.name.help")
         fileTable.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
 
         let groupScroll = NSScrollView()
@@ -344,7 +348,8 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             // comparison is the reason this window exists, so the lists are the parts that get bounded.
             groupScroll.heightAnchor.constraint(
                 lessThanOrEqualTo: container.heightAnchor, multiplier: 0.3),
-            fileScroll.widthAnchor.constraint(equalToConstant: 240),
+            // 280 since the «Name» column (#228): at 240 it left the file names three characters wide.
+            fileScroll.widthAnchor.constraint(equalToConstant: 280),
             panes.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
             // **As tall as their row** (#214). A horizontal stack centres its views rather than stretching them, so a
             // pane could be anything from its content's height to the row's, and the thumbnail landed wherever the
@@ -431,6 +436,12 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             format: Strings.string("similar.group.header"),
             (visible.firstIndex(of: index) ?? 0) + 1, visible.count,
             Strings.count("count.files", group.files.count))
+        // The name it will have, said where the group is named: the radio column says whose, this says what (#228).
+        if let rename = review.rename(inGroup: index) {
+            headerLabel.stringValue += String(
+                format: Strings.string("similar.group.keepsAs"),
+                (rename.targetPath as NSString).lastPathComponent)
+        }
         refreshWarning(index: index, keep: keep)
         showPanes(group: group)
         refreshAdvice(index: index)
@@ -779,6 +790,19 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         toggle(file: fileOrder[sender.tag])
     }
 
+    /// The kept file takes this row's name, or -- on the kept file's own row -- keeps its own (#228).
+    ///
+    /// **Saved at once, like a decision**, and undoable like one; but it is not a decision, so it goes to its own
+    /// document and never into the CLI's.
+    @objc private func nameChosen(_ sender: NSButton) {
+        guard let index = selectedGroup, fileOrder.indices.contains(sender.tag) else { return }
+        var accepted = true
+        mutate(saving: false) { accepted = $0.setNameSource(fileOrder[sender.tag], inGroup: index) }
+        saveRenames()
+        refreshFooter()
+        if !accepted { NSSound.beep() }
+    }
+
     /// Moves to the next group, which is what makes deciding a rhythm rather than a click-and-hunt. With "not
     /// decided yet" on, the decided group has already left the list and the selection moved with it.
     private func advance(from index: Int) {
@@ -827,7 +851,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// Writes what has been decided, and **only** what has been decided.
+    /// Writes what has been decided, and **only** what has been decided -- then the names chosen beside it.
     private func saveDecisions() {
         let document = review.decisionsForSaving
         do {
@@ -838,6 +862,17 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
             // Reported in the footer rather than in a sheet: losing a decision matters, and a modal over every
             // click would make deciding hundreds of groups impossible. The localized description:
             // `String(describing:)` is the whole `NSError`, `UserInfo` and all, which no footer can show.
+            saveFailure = error.localizedDescription
+            return
+        }
+        saveRenames()
+    }
+
+    private func saveRenames() {
+        do {
+            try ScanStore(state: stateDirectory).save(review.renamesForSaving, scanID: scan.scanID)
+        } catch {
+            // In the footer, for the reason a decision's failure is.
             saveFailure = error.localizedDescription
         }
     }
@@ -1017,6 +1052,28 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         refreshDetail()
     }
 
+    /// The «Name» radios as drawn, through the table's own cells: whether each is on, and whether it can be pressed.
+    var nameRadiosForSelftest: [(on: Bool, enabled: Bool)] {
+        fileOrder.indices.compactMap { row in
+            let column = fileTable.column(withIdentifier: .init("takeName"))
+            guard column >= 0,
+                let radio = fileTable.view(atColumn: column, row: row, makeIfNecessary: true)
+                    as? NSButton
+            else { return nil }
+            return (radio.state == .on, radio.isEnabled)
+        }
+    }
+
+    /// Clicks a row's «Name» radio: the cell's own button, so its target and action are what is tested.
+    func clickNameForSelftest(row: Int) {
+        let column = fileTable.column(withIdentifier: .init("takeName"))
+        guard column >= 0,
+            let radio = fileTable.view(atColumn: column, row: row, makeIfNecessary: true)
+                as? NSButton
+        else { return }
+        radio.performClick(nil)
+    }
+
     /// The file list as drawn: each member's path and whether its box is checked.
     var fileRowsForSelftest: [(path: String, kept: Bool)] {
         guard let index = selectedGroup else { return [] }
@@ -1136,6 +1193,24 @@ extension SimilarPairWindowController: NSTableViewDataSource, NSTableViewDelegat
             button.state = keep.contains(member) ? .on : .off
             button.tag = row
             return button
+        }
+        if column == "takeName" {
+            let radio =
+                fileTable.makeView(withIdentifier: .init("takeName"), owner: self) as? NSButton
+                ?? {
+                    let created = NSButton(
+                        radioButtonWithTitle: "", target: self, action: #selector(nameChosen(_:)))
+                    created.identifier = .init("takeName")
+                    return created
+                }()
+            // **Only with one file kept**: with two, "this file under that name" names no file. The kept file's own
+            // radio is on until another is chosen. Each cell is its own superview, so AppKit does not group these:
+            // the table redraws them all from the state on every change.
+            let holder = review.nameSource(inGroup: index) ?? (keep.count == 1 ? keep.first : nil)
+            radio.state = member == holder ? .on : .off
+            radio.isEnabled = keep.count == 1
+            radio.tag = row
+            return radio
         }
         let cell = labelCell(in: fileTable, identifier: .init(column))
         let path = group.files[member]

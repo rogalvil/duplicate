@@ -354,6 +354,12 @@
 "similar.apply.refused.changed" = "now %1$.2f%% alike, under %2$.2f%%";
 "similar.apply.refused.unreadable" = "%@ could not be read";
 "similar.apply.refused.missing" = "already gone";
+"similar.column.name" = "Name";
+"similar.column.name.help" = "The file kept takes the name of the one marked here, in its own folder and with its own extension. Only when the group keeps one file.";
+"similar.group.keepsAs" = " - kept as “%@”";
+"similar.apply.willBeNamed" = "stays, named %@";
+"similar.apply.rename.sourceStayed" = "“%@” is still there, so its name is not free";
+"similar.apply.rename.taken" = "another file is already named “%@”";
 "similar.review.apply" = "Simulate and apply...";
 "folders.apply.verifyNote" = "Each folder is checked when it moves: one holding a file the kept folder does not have is skipped.";
 "folders.apply.nothing" = "Nothing to move.";

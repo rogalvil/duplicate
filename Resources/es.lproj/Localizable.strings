@@ -353,6 +353,12 @@
 "similar.apply.refused.changed" = "ahora %1$.2f%% parecidos, por debajo de %2$.2f%%";
 "similar.apply.refused.unreadable" = "no se pudo leer %@";
 "similar.apply.refused.missing" = "ya no está";
+"similar.column.name" = "Nombre";
+"similar.column.name.help" = "El archivo que se conserva toma el nombre del que marques aquí, en su propia carpeta y con su propia extensión. Solo cuando el grupo conserva un archivo.";
+"similar.group.keepsAs" = " - se conserva como «%@»";
+"similar.apply.willBeNamed" = "se queda, con el nombre %@";
+"similar.apply.rename.sourceStayed" = "«%@» sigue ahí, así que su nombre no está libre";
+"similar.apply.rename.taken" = "otro archivo ya se llama «%@»";
 "similar.review.apply" = "Simular y aplicar…";
 "folders.apply.verifyNote" = "Cada carpeta se revisa al moverla: una que tenga un archivo que la conservada no tiene se salta.";
 "folders.apply.nothing" = "Nada que mover.";

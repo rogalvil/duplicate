@@ -124,12 +124,23 @@ extension SelfTest {
             scan: fixture.similar, stateDirectory: fixture.state)
         defer { similar.window?.close() }
         // One render per group, named by its kind: the images are a group of three, the clips a group of two.
-        for (row, group) in SimilarGrouping.groups(of: fixture.similar.pairs).enumerated() {
+        let similarGroups = SimilarGrouping.groups(of: fixture.similar.pairs)
+        for (row, group) in similarGroups.enumerated() {
             similar.selectGroupForSelftest(row)
             await similar.awaitFactsForSelftest()
             try await sweep.render(
                 similar.window, as: "similar-\(group.mediaKind == .video ? "video" : "image")")
         }
+        // **A name chosen** (#228): the image kept under another member's name, the header saying which. Confirmed,
+        // so the dry run below lists the rename too.
+        let imageRow = try expectSome(
+            similarGroups.firstIndex { $0.mediaKind == .image }, "the fixture has no image group")
+        similar.selectGroupForSelftest(imageRow)
+        let lender = try expectSome(
+            similar.fileRowsForSelftest.firstIndex { !$0.kept }, "the image group keeps every file")
+        similar.clickNameForSelftest(row: lender)
+        try await sweep.render(similar.window, as: "similar-renamed")
+        similar.pressConfirmForSelftest()
 
         // **Two sessions, so the history shows rows**: an empty table renders fine and says nothing about the
         // columns. One was put back entirely and one in part, which are the two states a row can describe.

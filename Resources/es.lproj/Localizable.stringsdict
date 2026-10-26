@@ -754,6 +754,54 @@
 			<string>%1$d archivos de %2$@ irían al basurero</string>
 		</dict>
 	</dict>
+	<key>similar.apply.renames</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo que se queda tomará otro nombre.</string>
+			<key>other</key>
+			<string>%d archivos que se quedan tomarán otro nombre.</string>
+		</dict>
+	</dict>
+	<key>similar.apply.renamed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 archivo se quedó con otro nombre:</string>
+			<key>other</key>
+			<string>%d archivos se quedaron con otro nombre:</string>
+		</dict>
+	</dict>
+	<key>similar.apply.renameRefusedHeader</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 conservó su propio nombre:</string>
+			<key>other</key>
+			<string>%d conservaron su propio nombre:</string>
+		</dict>
+	</dict>
 	<key>similar.apply.refusedHeader</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

@@ -174,6 +174,9 @@ final class SimilarApplySheetController: NSWindowController {
                 String(
                     format: Strings.string("similar.apply.excluded"), plan.contradicted.count))
         }
+        if !plan.renames.isEmpty {
+            details.append(Strings.count("similar.apply.renames", plan.renames.count))
+        }
         detailLabel.stringValue = details.joined(separator: "\n")
 
         listView.string = Self.listing(for: plan)
@@ -184,14 +187,24 @@ final class SimilarApplySheetController: NSWindowController {
     /// **The other file, not the pair's key** (#184). The `a||b` key stood here: the interop format, which repeated
     /// the path above it and named the other file nowhere. The other file is usually the one that stays; after
     /// "discard both" it goes too, unless another decision keeps it, and the line says which.
+    ///
+    /// Then each file that stays under another name (#228), with the name: what a rename does is only clear from the
+    /// name it ends with.
     static func listing(for plan: SimilarApplyPlan) -> String {
         guard !plan.isEmpty else { return Strings.string("similar.apply.nothing") }
         let moving = Set(plan.items.map(\.path))
-        return plan.items.map { item in
+        let moves = plan.items.map { item in
             let key =
                 moving.contains(item.counterpart) ? "similar.apply.alsoGoes" : "similar.apply.stays"
             return item.path + "\n    " + String(format: Strings.string(key), item.counterpart)
-        }.joined(separator: "\n")
+        }
+        let renames = plan.renames.map { rename in
+            rename.keptPath + "\n    "
+                + String(
+                    format: Strings.string("similar.apply.willBeNamed"),
+                    (rename.targetPath as NSString).lastPathComponent)
+        }
+        return (moves + renames).joined(separator: "\n")
     }
 
     @objc private func applyNow(_ sender: Any?) {
@@ -310,6 +323,16 @@ final class SimilarApplySheetController: NSWindowController {
                         "    \(failure.path)  —  \(disposalFailureText(failure.reason))")
                 }
             }
+            // A name left as it was is not a failure either: the file is there, under its own name.
+            if !result.renameRefusals.isEmpty {
+                lines.append(
+                    Strings.count("similar.apply.renameRefusedHeader", result.renameRefusals.count))
+                for entry in result.renameRefusals.prefix(50) {
+                    lines.append(
+                        "    \(entry.rename.keptPath)  —  \(Self.reason(entry.reason, for: entry.rename))"
+                    )
+                }
+            }
             if result.stoppedEarly { lines.append(Strings.string("apply.done.stoppedEarly")) }
             // Where the Trash refused: those are in quarantine, where Finder's "Put Back" cannot find them. Said
             // only in the exact sheet until now (#155).
@@ -318,10 +341,19 @@ final class SimilarApplySheetController: NSWindowController {
                     String(
                         format: Strings.string("apply.done.quarantined"), result.quarantinedCount))
             }
+            if !result.renamed.isEmpty {
+                lines.append(Strings.count("similar.apply.renamed", result.renamed.count))
+                for rename in result.renamed.prefix(200) {
+                    lines.append(
+                        "    \(rename.keptPath)  →  \((rename.targetPath as NSString).lastPathComponent)"
+                    )
+                }
+            }
             for outcome in result.moved.prefix(200) { lines.append(outcome.originalPath) }
             listView.string = lines.joined(separator: "\n")
 
-            undoButton.isHidden = result.moved.isEmpty
+            // A rename is undone like a move: the journal holds it.
+            undoButton.isHidden = result.moved.isEmpty && result.renamed.isEmpty
             onApplied?(result)
         }
     }
@@ -341,8 +373,27 @@ final class SimilarApplySheetController: NSWindowController {
         }
     }
 
+    static func reason(_ refusal: SimilarRenameRefusal, for rename: SimilarRename) -> String {
+        switch refusal {
+        case .keptMissing:
+            return Strings.string("similar.apply.refused.missing")
+        case .nameSourceStayed:
+            return String(
+                format: Strings.string("similar.apply.rename.sourceStayed"),
+                (rename.nameFromPath as NSString).lastPathComponent)
+        case .nameTaken:
+            return String(
+                format: Strings.string("similar.apply.rename.taken"),
+                (rename.targetPath as NSString).lastPathComponent)
+        case .unreadable:
+            return String(
+                format: Strings.string("similar.apply.refused.unreadable"),
+                (rename.keptPath as NSString).lastPathComponent)
+        }
+    }
+
     @objc private func undoNow(_ sender: Any?) {
-        guard let report, !report.moved.isEmpty else { return }
+        guard let report, !report.moved.isEmpty || !report.renamed.isEmpty else { return }
         undoButton.isEnabled = false
         // A folder undo now awaits its manifests, built against the cache instead of on this thread.
         undoTask = Task { @MainActor [weak self] in
