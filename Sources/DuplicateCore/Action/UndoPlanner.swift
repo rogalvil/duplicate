@@ -161,38 +161,56 @@ public enum UndoPlanner {
                 sameFile: FileIdentity.same
             )
         }
+    }
 
-        /// This environment as it will be once `entries` are put back: their originals filled, where they went freed.
-        func after(restoring entries: [JournalEntry]) -> Environment {
-            guard !entries.isEmpty else { return self }
-            var filled: [[UInt8]: (digest: Digest32, isDirectory: Bool)] = [:]
-            var freed = Set<[UInt8]>()
-            for entry in entries {
-                let restored = Array(entry.originalPath.utf8)
-                filled[restored] = (entry.digest, isDirectory(entry.resultingPath))
-                freed.remove(restored)
-                let left = Array(entry.resultingPath.utf8)
-                if filled.removeValue(forKey: left) == nil { freed.insert(left) }
-            }
-            let base = self
-            let filledPaths = filled
-            let freedPaths = freed
+    /// The filesystem as it will be once some entries are put back: their originals filled, where they went freed.
+    ///
+    /// **Updated one restore at a time.** It was rebuilt from every earlier rename at each step, so planning n renames
+    /// cost n²/2 lookups, synchronously, while the window waited (found in review on #229).
+    struct Projection: Sendable {
+        private struct Filled: Sendable {
+            let digest: Digest32
+            let isDirectory: Bool
+        }
+        private var filled: [[UInt8]: Filled] = [:]
+        private var freed = Set<[UInt8]>()
+
+        mutating func restore(_ entry: JournalEntry, in base: Environment) {
+            let isDirectory = isDirectory(entry.resultingPath, in: base)
+            let left = Array(entry.resultingPath.utf8)
+            filled[left] = nil
+            freed.insert(left)
+            let restored = Array(entry.originalPath.utf8)
+            freed.remove(restored)
+            filled[restored] = Filled(digest: entry.digest, isDirectory: isDirectory)
+        }
+
+        func exists(_ path: String, in base: Environment) -> Bool {
+            let key = Array(path.utf8)
+            if filled[key] != nil { return true }
+            return !freed.contains(key) && base.exists(path)
+        }
+
+        func isDirectory(_ path: String, in base: Environment) -> Bool {
+            let key = Array(path.utf8)
+            if let known = filled[key] { return known.isDirectory }
+            return !freed.contains(key) && base.isDirectory(path)
+        }
+
+        func digest(_ path: String, in base: Environment) -> Digest32? {
+            let key = Array(path.utf8)
+            if let known = filled[key] { return known.digest }
+            return freed.contains(key) ? nil : base.digest(path)
+        }
+
+        /// The projection as an environment, for one step. Without restores it is the base itself.
+        func view(over base: Environment) -> Environment {
+            guard !filled.isEmpty || !freed.isEmpty else { return base }
+            let projection = self
             return Environment(
-                exists: { path in
-                    let key = Array(path.utf8)
-                    if filledPaths[key] != nil { return true }
-                    return !freedPaths.contains(key) && base.exists(path)
-                },
-                isDirectory: { path in
-                    let key = Array(path.utf8)
-                    if let known = filledPaths[key] { return known.isDirectory }
-                    return !freedPaths.contains(key) && base.isDirectory(path)
-                },
-                digest: { path in
-                    let key = Array(path.utf8)
-                    if let known = filledPaths[key] { return known.digest }
-                    return freedPaths.contains(key) ? nil : base.digest(path)
-                },
+                exists: { projection.exists($0, in: base) },
+                isDirectory: { projection.isDirectory($0, in: base) },
+                digest: { projection.digest($0, in: base) },
                 sameFile: base.sameFile
             )
         }
@@ -213,17 +231,16 @@ public enum UndoPlanner {
         environment: Environment
     ) -> UndoPlan {
         var steps: [UndoStep] = []
-        var renamedBack: [JournalEntry] = []
+        var projection = Projection()
         for entry in entries.reversed() where entry.mechanism == .rename {
             let step = step(
                 for: entry, restoredPaths: restoredPaths,
-                environment: environment.after(restoring: renamedBack))
-            if case .restore(let restored) = step { renamedBack.append(restored) }
+                environment: projection.view(over: environment))
+            if case .restore(let restored) = step { projection.restore(restored, in: environment) }
             steps.append(step)
         }
-        // Built once: rebuilt for each of 4,000 entries it would be quadratic, and without renames it is the
-        // environment itself.
-        let afterRenames = environment.after(restoring: renamedBack)
+        // One view for the rest; without renames it is the environment itself.
+        let afterRenames = projection.view(over: environment)
         for entry in entries where entry.mechanism != .rename {
             steps.append(step(for: entry, restoredPaths: restoredPaths, environment: afterRenames))
         }

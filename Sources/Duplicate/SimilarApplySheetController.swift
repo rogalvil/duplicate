@@ -95,7 +95,8 @@ final class SimilarApplySheetController: NSWindowController {
 
         progressBar.isIndeterminate = false
         progressBar.minValue = 0
-        progressBar.maxValue = Double(max(1, plan.items.count))
+        // The renames are steps too: the runner reports them after the moves (#228).
+        progressBar.maxValue = Double(max(1, plan.items.count + plan.renames.count))
         progressBar.isHidden = true
         progressLabel.isHidden = true
         progressLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -442,6 +443,7 @@ final class SimilarApplySheetController: NSWindowController {
     var isApplyEnabled: Bool { applyButton.isEnabled }
     var isApplyHiddenForSelftest: Bool { applyButton.isHidden }
     var isUndoVisible: Bool { !undoButton.isHidden }
+    var progressMaximumForSelftest: Double { progressBar.maxValue }
     var requiredContentSize: NSSize {
         window?.contentView?.layoutSubtreeIfNeeded()
         return window?.contentView?.fittingSize ?? .zero

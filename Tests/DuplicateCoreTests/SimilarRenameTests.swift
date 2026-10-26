@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import DuplicateCore
@@ -63,16 +64,17 @@ struct SimilarRenameTests {
 
     @Test("The document round-trips, and one from a future layout is refused")
     func roundTrips() throws {
-        let document = SimilarRenamesDocument(renames: [
-            SimilarRename(keptPath: "/r/a/caf\u{00E9}.png", nameFromPath: "/r/b/cafe\u{0301}.png")
+        let document = SimilarRenamesDocument(nameSources: [
+            "/r/a/caf\u{00E9}.png", "/r/b/cafe\u{0301}.png",
         ])
         let data = try JSONWriter.document(SimilarRenamesCodec.encode(document))
         let decoded = try SimilarRenamesCodec.decode(JSONReader.parse(data))
-        // Byte for byte: the NFC and the NFD spelling stay what they were.
-        #expect(Array(decoded.renames[0].keptPath.utf8) == Array("/r/a/caf\u{00E9}.png".utf8))
-        #expect(Array(decoded.renames[0].nameFromPath.utf8) == Array("/r/b/cafe\u{0301}.png".utf8))
+        // Byte for byte: the NFC and the NFD spelling stay two entries, each what it was.
+        #expect(
+            decoded.nameSources.map { Array($0.utf8) }
+                == [Array("/r/a/caf\u{00E9}.png".utf8), Array("/r/b/cafe\u{0301}.png".utf8)])
 
-        let future = try JSONReader.parse(Data(#"{"format_version": 2, "renames": []}"#.utf8))
+        let future = try JSONReader.parse(Data(#"{"format_version": 2, "name_from": []}"#.utf8))
         #expect(throws: (any Error).self) { try SimilarRenamesCodec.decode(future) }
     }
 }
@@ -86,7 +88,6 @@ struct SimilarReviewNameTests {
         state.confirmGroup(0, keep: [0])
         #expect(state.nameSource(inGroup: 0) == nil)
         let outcome1 = state.setNameSource(1, inGroup: 0)
-
         #expect(outcome1)
         #expect(state.nameSource(inGroup: 0) == 1)
         #expect(
@@ -96,7 +97,6 @@ struct SimilarReviewNameTests {
 
         // The kept file's own name is the way back.
         let outcome2 = state.setNameSource(0, inGroup: 0)
-
         #expect(outcome2)
         #expect(state.nameSource(inGroup: 0) == nil)
         #expect(state.renamePlan.isEmpty)
@@ -110,16 +110,30 @@ struct SimilarReviewNameTests {
         state.confirmGroup(0, keep: [0])
         state.setNameSource(1, inGroup: 0)
         let outcome3 = state.toggleKeep(2, inGroup: 0)
-
         #expect(outcome3)
         #expect(state.nameSource(inGroup: 0) == nil)
         let outcome4 = state.setNameSource(1, inGroup: 0)
-
         #expect(!outcome4)
         let outcome5 = state.toggleKeep(2, inGroup: 0)
-
         #expect(outcome5)
         #expect(state.nameSource(inGroup: 0) == 1)
+    }
+
+    /// **Set aside on disk too** (found in review on #229). The document held only active renames, so confirming two
+    /// kept files saved it without the name, and a reopened review keeping one file again had forgotten it.
+    @Test("A name set aside by keeping two files is still saved, and comes back with one kept")
+    func savesASetAsideName() {
+        var state = SimilarReviewState(scan: scan(threeCopies))
+        state.confirmGroup(0, keep: [0])
+        state.setNameSource(1, inGroup: 0)
+        state.confirmGroup(0, keep: [0, 2])
+        #expect(state.nameSource(inGroup: 0) == nil)
+        #expect(state.renamesForSaving.nameSources == ["/r/b/photo.jpg"])
+
+        var reopened = SimilarReviewState(
+            scan: scan(threeCopies), priorNameSources: state.renamesForSaving.nameSources)
+        reopened.confirmGroup(0, keep: [0])
+        #expect(reopened.nameSource(inGroup: 0) == 1)
     }
 
     /// A name is not a decision. It is saved so it survives the window, and planned only once its group is decided.
@@ -129,26 +143,23 @@ struct SimilarReviewNameTests {
         let kept = try #require(state.effectiveKeep(inGroup: 0).first)
         let other = (kept + 1) % 3
         let outcome6 = state.setNameSource(other, inGroup: 0)
-
         #expect(outcome6)
-        #expect(state.renamesForSaving.renames.count == 1)
+        #expect(state.renamesForSaving.nameSources.count == 1)
         #expect(state.renamePlan.isEmpty)
         #expect(SimilarApplyPlan.from(state).isEmpty)
         state.confirmGroup(0)
         #expect(state.renamePlan.count == 1)
     }
 
-    @Test("A name saved earlier comes back, and one whose files are not in one group is dropped")
+    @Test("A name saved earlier comes back, and one that is no longer in the scan is dropped")
     func rehydrates() {
         let state = SimilarReviewState(
             scan: scan(threeCopies + [pair("/r/x.png", "/r/y.png")]),
-            priorRenames: [
-                SimilarRename(keptPath: "/r/a/photo copy.png", nameFromPath: "/r/c/photo 2.png"),
-                SimilarRename(keptPath: "/r/x.png", nameFromPath: "/r/b/photo.jpg"),
-            ])
+            priorNameSources: ["/r/c/photo 2.png", "/r/gone.png"])
         #expect(state.groups.count == 2)
+        #expect(state.renamesForSaving.nameSources == ["/r/c/photo 2.png"])
         // Group 0's suggestion keeps one file; whether the name shows depends on which, so read the stored choice
-        // through a state that keeps the file the rename names.
+        // through a state that keeps another file.
         var decided = state
         decided.confirmGroup(0, keep: [0])
         #expect(decided.nameSource(inGroup: 0) == 2)
@@ -209,6 +220,32 @@ struct UndoPlannerRenameTests {
         let plan = UndoPlanner.plan(sessionID: "s", entries: session, environment: environment())
         #expect(plan.blocked.isEmpty)
         #expect(plan.restorable.map(\.mechanism) == [.rename, .trash])
+    }
+
+    /// **Each rename asks the filesystem a fixed number of questions** (found in review on #229). The projection was
+    /// rebuilt from every earlier rename at each step, so 300 renames asked about 45,000 times instead of about 1,500.
+    @Test("Planning n renames asks the filesystem in proportion to n")
+    func plansRenamesInLinearTime() {
+        let asked = Mutex(0)
+        let digest = photo
+        let environment = UndoPlanner.Environment(
+            exists: { path in
+                asked.withLock { $0 += 1 }
+                return path.hasPrefix("/r/new") || path == "/r"
+            },
+            isDirectory: { path in
+                asked.withLock { $0 += 1 }
+                return path == "/r"
+            },
+            digest: { path in
+                asked.withLock { $0 += 1 }
+                return path.hasPrefix("/r/new") ? digest : nil
+            })
+        let renames = (0..<300).map { entry("/r/old\($0)", "/r/new\($0)", .rename, photo) }
+        let plan = UndoPlanner.plan(sessionID: "s", entries: renames, environment: environment)
+        #expect(plan.restorable.count == 300)
+        #expect(
+            asked.withLock { $0 } < 300 * 10, "\(asked.withLock { $0 }) questions for 300 renames")
     }
 
     @Test(
@@ -291,7 +328,6 @@ struct SimilarApplyRunnerRenameTests {
         let confirmed = review.confirmGroup(0, keep: [keep])
         #expect(confirmed == .confirmed)
         let outcome7 = review.setNameSource(name, inGroup: 0)
-
         #expect(outcome7)
         return SimilarApplyPlan.from(review)
     }
@@ -431,6 +467,70 @@ struct SimilarApplyRunnerRenameTests {
         #expect(FileManager.default.fileExists(atPath: copy))
     }
 
+    /// **A stop halfway through reading the kept file is a stop** (found in review on #229). The read came back as
+    /// "unreadable", which blames a healthy file, and with no rename after it nothing said the run was stopped.
+    @Test("Stopping while the kept file is read is a stop, not an unreadable file")
+    func stopsDuringTheRenameRead() async throws {
+        let scratch = try RenameScratch()
+        defer { scratch.remove() }
+        let photo = try scratch.image("photo.png")
+        let copy = try scratch.image("sub/photo copy.png", side: 128)
+        let plan = try plan(scratch, keep: copy, nameFrom: photo)
+        // The first read is the move's digest, the second the kept file's.
+        let runner = SimilarApplyRunner(state: scratch.state, hasher: StoppingHasher(onCall: 2))
+        let disposer = scratch.quarantine(instant.identifier)
+        let instant = instant
+        let report = try await Task {
+            try await runner.run(
+                plan, sessionID: instant.identifier, instant: instant, disposer: disposer)
+        }.value
+        #expect(report.moved.map(\.originalPath) == [photo])
+        #expect(report.wasCancelled)
+        #expect(report.renameRefusals.isEmpty, "a stop was reported as \(report.renameRefusals)")
+        #expect(FileManager.default.fileExists(atPath: copy))
+    }
+
+    /// The same rule for the move's own digest, which had the same `try?` before this feature.
+    @Test("Stopping while a file to move is read is a stop, not an unreadable file")
+    func stopsDuringTheMoveRead() async throws {
+        let scratch = try RenameScratch()
+        defer { scratch.remove() }
+        let photo = try scratch.image("photo.png")
+        let copy = try scratch.image("sub/photo copy.png", side: 128)
+        let plan = try plan(scratch, keep: copy, nameFrom: photo)
+        let runner = SimilarApplyRunner(state: scratch.state, hasher: StoppingHasher(onCall: 1))
+        let disposer = scratch.quarantine(instant.identifier)
+        let instant = instant
+        let report = try await Task {
+            try await runner.run(
+                plan, sessionID: instant.identifier, instant: instant, disposer: disposer)
+        }.value
+        #expect(report.moved.isEmpty)
+        #expect(report.wasCancelled)
+        #expect(report.refused.isEmpty, "a stop was reported as \(report.refused.map(\.reason))")
+        #expect(FileManager.default.fileExists(atPath: photo))
+    }
+
+    /// **The bar counts the renames** (found in review on #229): each reads a whole file, and a bar already full while
+    /// a 4 GB video is read looks finished, or stuck.
+    @Test("Progress counts each rename as a step, and says when it renames")
+    func reportsRenameProgress() async throws {
+        let scratch = try RenameScratch()
+        defer { scratch.remove() }
+        let photo = try scratch.image("photo.png")
+        let copy = try scratch.image("sub/photo copy.png", side: 128)
+        let seen = Mutex<[ApplyProgress]>([])
+        _ = try await SimilarApplyRunner(state: scratch.state).run(
+            try plan(scratch, keep: copy, nameFrom: photo), sessionID: instant.identifier,
+            instant: instant, disposer: scratch.quarantine(instant.identifier),
+            onProgress: { report in seen.withLock { $0.append(report) } })
+        let reports = seen.withLock { $0 }
+        #expect(reports.allSatisfy { $0.itemCount == 2 }, "\(reports.map(\.itemCount))")
+        #expect(reports.contains { $0.stage == .renaming && $0.path == copy })
+        #expect(reports.last?.itemsDone == 2)
+        #expect(reports.last?.stage == .done)
+    }
+
     /// **Stopped after one group's file left.** Twenty failures in a row stop the run, and that one group's name is
     /// free -- but a stopped run is not the plan the user approved.
     @Test("A run stopped by failures renames nothing, even where the name came free")
@@ -460,6 +560,31 @@ struct SimilarApplyRunnerRenameTests {
         #expect(report.stoppedEarly)
         #expect(report.renamed.isEmpty)
         #expect(report.renameRefusals.isEmpty)
+    }
+}
+
+/// Hashes like the real one until its `call`th read, which it stops halfway: cancels the task and throws, as the real
+/// hasher does between two chunks.
+private final class StoppingHasher: FileHashing, @unchecked Sendable {
+    private let call: Int
+    private let calls = Mutex(0)
+
+    init(onCall call: Int) { self.call = call }
+
+    func usesPrefixStage(forSize size: Int64) -> Bool { false }
+    func prefixDigest(atPath path: String, size: Int64) throws -> Digest32 {
+        try ContentHasher().prefixDigest(atPath: path, size: size)
+    }
+    func fullDigest(atPath path: String) throws -> HashResult {
+        let count = calls.withLock { value in
+            value += 1
+            return value
+        }
+        if count == call {
+            withUnsafeCurrentTask { $0?.cancel() }
+            throw CancellationError()
+        }
+        return try ContentHasher().fullDigest(atPath: path)
     }
 }
 
@@ -526,16 +651,16 @@ struct ScanStoreRenameTests {
         let store = ScanStore(state: state)
         let id = "20261025-120000-000000"
         let path = try state.filePath(for: .similarRenames, id: id)
-        let rename = SimilarRename(keptPath: "/r/a.png", nameFromPath: "/r/b.png")
+        let chosen = SimilarRenamesDocument(nameSources: ["/r/b.png"])
 
-        #expect(store.priorSimilarRenames(scanID: id).isEmpty)
-        try store.save(SimilarRenamesDocument(renames: [rename]), scanID: id)
-        #expect(store.priorSimilarRenames(scanID: id) == [rename])
+        #expect(store.priorSimilarNameSources(scanID: id).isEmpty)
+        try store.save(chosen, scanID: id)
+        #expect(store.priorSimilarNameSources(scanID: id) == ["/r/b.png"])
 
-        try store.save(SimilarRenamesDocument(renames: []), scanID: id)
+        try store.save(SimilarRenamesDocument(nameSources: []), scanID: id)
         #expect(!FileManager.default.fileExists(atPath: path))
 
-        try store.save(SimilarRenamesDocument(renames: [rename]), scanID: id)
+        try store.save(chosen, scanID: id)
         _ = try store.deleteSimilarScan(id: id)
         #expect(!FileManager.default.fileExists(atPath: path))
     }

@@ -4241,12 +4241,12 @@ enum SelfTest {
         defer { sheet.window?.close() }
         try expect(sheet.canApply, "the sheet will not let a real plan be applied")
 
-        // The progress line: hidden until an apply starts, and it has three distinct things to say. Asserted on
+        // The progress line: hidden until an apply starts, and it has four distinct things to say. Asserted on
         // the renderer rather than on the label after a two-file apply, because the label is written by a timer
         // at 10 Hz and two files move in less than one tick -- an assertion on the text would be a race.
         //
-        // Teeth: return the moving string for the verifying cases and the distinctness check fails; return a
-        // string for `.done` and the last one does.
+        // Teeth: return the moving string for the verifying cases, or for renaming (#228), and the distinctness
+        // check fails; return a string for `.done` and the last one does.
         try expect(
             sheet.progressLineForSelftest.hidden, "the progress line shows before an apply starts")
         let sample = "/Volumes/Externo/Fotos/2019/verano/copias"
@@ -4260,9 +4260,11 @@ enum SelfTest {
             ),
             applyProgressText(
                 ApplyProgress(itemsDone: 0, itemCount: 8, path: sample, stage: .moving)),
+            applyProgressText(
+                ApplyProgress(itemsDone: 0, itemCount: 8, path: sample, stage: .renaming)),
         ].compactMap { $0 }
-        try expect(sentences.count == 3, "a stage rendered nothing to say")
-        try expect(Set(sentences).count == 3, "two stages read the same: \(sentences)")
+        try expect(sentences.count == 4, "a stage rendered nothing to say")
+        try expect(Set(sentences).count == 4, "two stages read the same: \(sentences)")
         for sentence in sentences {
             try expect(
                 !sentence.hasPrefix("apply.progress"),
@@ -6028,22 +6030,23 @@ enum SelfTest {
             viewer.headerText.hasSuffix(keepsAs),
             "the header does not say the name it keeps: '\(viewer.headerText)'")
         try expect(
-            store.priorSimilarRenames(scanID: scan.scanID) == [expected],
-            "the saved names are \(store.priorSimilarRenames(scanID: scan.scanID))")
+            store.priorSimilarNameSources(scanID: scan.scanID) == [expected.nameFromPath],
+            "the saved names are \(store.priorSimilarNameSources(scanID: scan.scanID))")
 
         // 3. ⌘Z takes the name back, on disk too: this viewer saves as it goes, so an undo only in memory would leave
         // the document naming a file the window no longer shows.
         // Teeth: drop `saveRenames()` from `saveDecisions` and the document keeps the name.
         viewer.undoForSelftest()
         try expect(
-            store.priorSimilarRenames(scanID: scan.scanID).isEmpty,
-            "an undone name is still saved: \(store.priorSimilarRenames(scanID: scan.scanID))")
+            store.priorSimilarNameSources(scanID: scan.scanID).isEmpty,
+            "an undone name is still saved: \(store.priorSimilarNameSources(scanID: scan.scanID))")
         try expect(
             !viewer.headerText.hasSuffix(keepsAs), "the header still names an undone choice")
 
-        // 4. Keeping a second file greys the radios and drops the name from the header; keeping one again brings
-        // the choice back.
-        // Teeth: draw `radio.isEnabled = true` and the first assertion fails.
+        // 4. Keeping a second file greys the radios and drops the name from the header -- and confirmed that way,
+        // still saves the choice it set aside (found in review on #229). Keeping one again brings it back.
+        // Teeth: draw `radio.isEnabled = true` and the first assertion fails; save only active renames in
+        // `renamesForSaving` and the third does.
         viewer.clickNameForSelftest(row: nameRow)
         viewer.clickKeepForSelftest(row: otherRow)
         try expect(
@@ -6051,6 +6054,10 @@ enum SelfTest {
             "with two files kept the radios can still be pressed: \(viewer.nameRadiosForSelftest)")
         try expect(
             !viewer.headerText.hasSuffix(keepsAs), "with two files kept the header still names one")
+        viewer.pressConfirmForSelftest()
+        try expect(
+            store.priorSimilarNameSources(scanID: scan.scanID) == [expected.nameFromPath],
+            "confirming two kept files erased the chosen name from disk")
         viewer.clickKeepForSelftest(row: otherRow)
         try expect(
             viewer.headerText.hasSuffix(keepsAs), "keeping one file again lost the chosen name")
@@ -6068,7 +6075,7 @@ enum SelfTest {
             "the sheet does not say which file stays under which name")
 
         // 6. Reopened, the viewer reads the choice back.
-        // Teeth: drop `priorRenames:` from the viewer's `init` and the header loses the name.
+        // Teeth: drop `priorNameSources:` from the viewer's `init` and the header loses the name.
         let reopened = SimilarPairWindowController(scan: scan, stateDirectory: state)
         defer { reopened.window?.close() }
         reopened.selectGroupForSelftest(0)
@@ -6097,6 +6104,12 @@ enum SelfTest {
         try expect(
             sheet.detailText.contains(Strings.count("similar.apply.renames", 1)),
             "the dry run does not say a file will take another name: \(sheet.detailText)")
+        // The bar has a step for the rename too (found in review on #229).
+        // Teeth: size the bar by `plan.items.count` alone and this fails.
+        try expect(
+            sheet.progressMaximumForSelftest == Double(plan.items.count + plan.renames.count),
+            "the progress bar has \(sheet.progressMaximumForSelftest) steps for "
+                + "\(plan.items.count) moves and \(plan.renames.count) rename")
         sheet.finishForSelftest(report)
         try expect(
             sheet.listText.contains(Strings.count("similar.apply.renamed", 1))

@@ -98,6 +98,8 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   adversario.
 - **El nombre elegido se guarda como se eligió y se valida al leer (#228).** Con dos archivos conservados, "este
   archivo con aquel nombre" no nombra ningún archivo, así que `nameSource` devuelve `nil`; volver a conservar uno
-  recupera la elección en vez de perderla. No es una decisión: se guarda al elegir, también en un grupo sin decidir,
-  pero solo `renamePlan` —grupos decididos que conservan uno— actúa. Y va en `similar-renames/`, no en el archivo
+  recupera la elección en vez de perderla, **también en disco**: `renamesForSaving` escribe toda elección guardada,
+  activa o no, porque guardar solo las activas borraba el nombre al confirmar dos conservados (revisión de #229). No
+  es una decisión: se guarda al elegir, también en un grupo sin decidir, pero solo `renamePlan` —grupos decididos que
+  conservan uno— actúa. Y va en `similar-renames/`, no en el archivo
   de decisiones: es el mapa de pares del CLI y no tiene dónde poner un nombre.

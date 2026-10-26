@@ -397,6 +397,7 @@
 /* %4$@ es count.filesChecked, de Localizable.stringsdict. */
 "apply.progress.verifying.files" = "Verificando %1$d de %2$d: %3$@ — %4$@";
 "apply.progress.moving" = "Moviendo %1$d de %2$d: %3$@";
+"apply.progress.renaming" = "Renombrando %1$d de %2$d: %3$@";
 "apply.failure.missing" = "%@ ya no está, así que no se movió nada";
 "apply.failure.contentChanged" = "%@ cambió desde el escaneo, así que se dejó en paz";
 "apply.failure.trashUnavailable" = "el basurero rechazó este archivo y la cuarentena tampoco pudo recibirlo: %@";

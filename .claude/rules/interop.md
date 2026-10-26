@@ -83,5 +83,5 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   conteos de decisiones necesitaría más que esto.
 - **`similar-renames/` es solo de esta app (#228)**, y por eso `isSharedWithCLI` es falso para él, como para
   `journal/`. `json-roundtrip` recorre solo los subdirectorios compartidos y `scans` solo los de escaneos, así que
-  ninguno lo lee; su codec lo cubren los tests unitarios. Una lista de `{keep, name_from}`, no un mapa por ruta, por la misma razón NFC/NFD de
-  siempre.
+  ninguno lo lee; su codec lo cubren los tests unitarios. Una lista de rutas `name_from`, no un conjunto de `String`, por la misma razón NFC/NFD
+  de siempre; sin `keep`, porque con dos conservados no hay uno que escribir.

@@ -168,6 +168,15 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   y `appendingPathComponent` colapsan un `//`, así que el destino del renombrado dejó de ser, byte a byte, la ruta que
   el otro archivo dejó libre, y el plan de deshacer —que empata rutas por bytes— lo bloqueó. Lo destapó el test de
   punta a punta, porque `NSTemporaryDirectory()` termina en `/`. El destino se corta sobre bytes UTF-8.
+- **Un `try?` sobre `fullDigest` vuelve "ilegible" un Detener a media lectura.** El hasher lanza `CancellationError`
+  entre dos chunks, y el chequeo de `Task.isCancelled` *antes* de leer no cubre eso. Lo encontró la revisión de #229 en
+  el renombrado, y el mismo `try?` estaba desde antes en el digest de cada ítem del runner perceptual: los dos atrapan
+  ahora el error y preguntan por la cancelación antes de culpar al archivo.
+- **Los renombrados son pasos de la barra (#228)**: cada uno lee su archivo entero, y una barra llena mientras se
+  hashea un video de 4 GB parece terminada o colgada. Tienen su propia etapa, `renaming`.
+- **La proyección del deshacer se actualiza paso a paso.** La primera versión la reconstruía con todos los renombrados
+  anteriores en cada paso: n²/2 preguntas al sistema de archivos, síncronas, con la ventana esperando. Un test cuenta
+  las preguntas para 300 renombrados.
 - **Un test de cancelación que cancela antes de que el nombre se libere no prueba la guarda.** El primero pasaba
   con las dos guardas de cancelación quitadas: el archivo que prestaba el nombre seguía ahí, y la otra guarda
   ("su dueño sigue") detenía el renombrado. El que muerde cancela **después** de que ese archivo se movió, con un

@@ -211,7 +211,7 @@ public struct ScanStore: Sendable {
     /// Removed rather than written empty: a scan reviewed without renaming anything should not grow a file that says so.
     public func save(_ renames: SimilarRenamesDocument, scanID: String) throws {
         let path = try state.filePath(for: .similarRenames, id: scanID)
-        guard !renames.renames.isEmpty else {
+        guard !renames.nameSources.isEmpty else {
             if FileManager.default.fileExists(atPath: path) {
                 try FileManager.default.removeItem(atPath: path)
             }
@@ -222,16 +222,16 @@ public struct ScanStore: Sendable {
         try data.write(to: URL(filePath: path), options: .atomic)
     }
 
-    /// The names chosen for a perceptual scan, or none.
+    /// The members whose names were chosen for a perceptual scan, or none.
     ///
     /// Empty rather than throwing, like ``priorSimilarDecisions(scanID:)``: no document is the ordinary case, and one
     /// this build cannot read costs a choice of name, never a file.
-    public func priorSimilarRenames(scanID: String) -> [SimilarRename] {
+    public func priorSimilarNameSources(scanID: String) -> [String] {
         guard let path = try? state.filePath(for: .similarRenames, id: scanID),
             let data = FileManager.default.contents(atPath: path),
             let document = try? SimilarRenamesCodec.decode(JSONReader.parse(data))
         else { return [] }
-        return document.renames
+        return document.nameSources
     }
 
     /// Whether a perceptual scan has a decisions document beside it.

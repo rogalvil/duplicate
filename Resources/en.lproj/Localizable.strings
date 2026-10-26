@@ -398,6 +398,7 @@
 /* %4$@ is count.filesChecked, from Localizable.stringsdict. */
 "apply.progress.verifying.files" = "Verifying %1$d of %2$d: %3$@ — %4$@";
 "apply.progress.moving" = "Moving %1$d of %2$d: %3$@";
+"apply.progress.renaming" = "Renaming %1$d of %2$d: %3$@";
 "apply.failure.missing" = "%@ is not there any more, so nothing was moved";
 "apply.failure.contentChanged" = "%@ changed since the scan, so it was left alone";
 "apply.failure.trashUnavailable" = "the Trash refused this file and quarantine could not take it either: %@";

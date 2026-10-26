@@ -193,7 +193,7 @@ Una hoja por detector, con la misma forma:
 | Qué dice la simulación | archivos y **bytes** que se liberarían | carpetas que se moverían | archivos y de cuántos pares, y qué archivo se queda con qué nombre |
 | Qué verifica antes de mover | re-hash contra el digest del escaneo | **contención**: cada archivo con gemelo byte-idéntico en la misma ruta relativa, ocultos, paquetes y vacíos incluidos; solo el ruido de Finder (`.DS_Store`) queda fuera | **re-puntúa** el par contra el umbral, contra un archivo que se queda cuando alguno de sus pares lo tiene |
 | Qué excluye y nombra | — | pares anidados colapsados, contradicciones | contradicciones |
-| Durante | Verifying / Moving N of N, Stop | igual, más archivos revisados | igual |
+| Durante | Verifying / Moving N of N, Stop | igual, más archivos revisados | igual, más Renaming N of N: cada renombrado es un paso |
 | Después | movidos, fallas, rehúsas, aviso de cuarentena | igual | igual, más los renombrados y los que conservaron su nombre, con la razón |
 | Deshacer desde la hoja | Undo This Session | igual | igual |
 

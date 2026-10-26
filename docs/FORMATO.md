@@ -169,14 +169,19 @@ se llama «foto copia.png» y el nombre que vale es el de «foto.png», que se v
 pares del CLI y no tiene dónde poner un nombre, así que la elección va en un documento aparte, que el CLI no lee:
 
 ```
-{"format_version": 1, "renames": [{"keep": "<archivo que se queda>", "name_from": "<miembro que presta el nombre>"}]}
+{"format_version": 1, "name_from": ["<miembro que presta el nombre>", ...]}
 ```
 
-- **Una lista, no un mapa por ruta.** Con `String` como clave, una ruta NFC y otra NFD de dos archivos distintos
-  serían una sola entrada.
+- **Solo el miembro que presta el nombre, no el archivo que se queda.** Cada archivo está en un solo grupo, así que
+  el miembro dice de qué grupo es; el archivo que se queda sale de las decisiones. Y con dos archivos conservados la
+  elección se aparta sin perderse, cuando no hay un único archivo que escribir: una primera versión guardaba pares
+  `keep`/`name_from` y, al confirmar dos conservados, borraba del disco el nombre elegido (lo encontró la revisión
+  de #229).
+- **Una lista, no un conjunto de `String`.** Un `Set<String>` compara por equivalencia canónica y juntaría una ruta
+  NFC y otra NFD de dos archivos distintos.
 - **No es una decisión.** Se guarda al elegir, también en un grupo sin decidir, para que la elección sobreviva a
-  cerrar la ventana; solo se aplica en un grupo decidido que conserva exactamente un archivo. Una entrada cuyos
-  archivos ya no están en un mismo grupo del escaneo se ignora.
+  cerrar la ventana; solo se aplica en un grupo decidido que conserva exactamente un archivo. Una ruta que ya no está
+  en el escaneo se ignora.
 - **Sin elecciones no hay archivo**: guardar una lista vacía borra el documento. Y se borra junto con su escaneo.
 
 ## Por qué el escritor de JSON está hecho a mano

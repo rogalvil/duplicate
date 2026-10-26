@@ -89,13 +89,13 @@ public struct SimilarReviewState: Sendable {
     /// - Parameter facts: metadata by path, when a caller has probed it. Absent facts mean the suggestion falls
     ///   through to the parts of the chain that do not need them.
     ///
-    /// - Parameter priorRenames: names chosen in an earlier session (#228). One whose files are no longer members of a
-    ///   single group of this scan is dropped.
+    /// - Parameter priorNameSources: members whose names were chosen in an earlier session (#228). One that is no
+    ///   longer a member of this scan is dropped.
     public init(
         scan: SimilarScan,
         priorDecisions: [String: SimilarDecision] = [:],
         facts: [String: MediaFacts] = [:],
-        priorRenames: [SimilarRename] = []
+        priorNameSources: [String] = []
     ) {
         self.scan = scan
         self.groups = SimilarGrouping.groups(of: scan.pairs)
@@ -103,7 +103,7 @@ public struct SimilarReviewState: Sendable {
             SimilarDecisionDefaults.suggestion(
                 for: pair, root: scan.root, factsA: facts[pair.fileA], factsB: facts[pair.fileB])
         }
-        if !priorRenames.isEmpty {
+        if !priorNameSources.isEmpty {
             // By bytes: a `String` key would put an NFC and an NFD spelling of two files in one slot.
             var member: [[UInt8]: (group: Int, file: Int)] = [:]
             for (group, members) in groups.enumerated() {
@@ -111,12 +111,9 @@ public struct SimilarReviewState: Sendable {
                     member[Array(path.utf8)] = (group, file)
                 }
             }
-            for rename in priorRenames {
-                guard let kept = member[Array(rename.keptPath.utf8)],
-                    let source = member[Array(rename.nameFromPath.utf8)],
-                    kept.group == source.group, kept.file != source.file
-                else { continue }
-                nameSources[kept.group] = source.file
+            for path in priorNameSources {
+                guard let source = member[Array(path.utf8)] else { continue }
+                nameSources[source.group] = source.file
             }
         }
         guard !priorDecisions.isEmpty else { return }
@@ -504,12 +501,19 @@ public struct SimilarReviewState: Sendable {
         return SimilarDecisionsDocument(entries: entries)
     }
 
-    /// What belongs in `similar-renames/<scan_id>.json`: every name chosen for what is shown, in group order.
+    /// What belongs in `similar-renames/<scan_id>.json`: every name chosen, in group order.
     ///
     /// **Not only decided groups**, unlike the decisions: a name is not a decision until its group is one, and
-    /// ``renamePlan`` is what acts. Saved so a chosen name survives closing the window.
+    /// ``renamePlan`` is what acts. **And not only active choices**: one set aside while two files are kept is
+    /// written too, or keeping a second file would erase it from disk (found in review on #229).
     public var renamesForSaving: SimilarRenamesDocument {
-        SimilarRenamesDocument(renames: groups.indices.compactMap { rename(inGroup: $0) })
+        SimilarRenamesDocument(
+            nameSources: nameSources.keys.sorted().compactMap { index in
+                guard let source = nameSources[index], groups.indices.contains(index),
+                    groups[index].files.indices.contains(source)
+                else { return nil }
+                return groups[index].files[source]
+            })
     }
 
     /// The renames an apply would carry out: only groups decided to keep one file.

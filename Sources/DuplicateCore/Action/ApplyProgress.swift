@@ -19,6 +19,8 @@ public enum ApplyStage: Sendable, Equatable {
     case verifying(filesChecked: Int)
     /// Sending the item to the Trash, or to quarantine when the Trash refuses.
     case moving
+    /// Giving a kept file the name of one that left (#228).
+    case renaming
     /// The item is finished: moved, refused, or failed.
     ///
     /// **A separate case because otherwise the report is ambiguous.** With only two stages, a `.moving` report

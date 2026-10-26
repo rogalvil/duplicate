@@ -85,6 +85,10 @@ func applyProgressText(_ progress: ApplyProgress) -> String? {
         return String(
             format: Strings.string("apply.progress.moving"),
             min(progress.itemsDone + 1, progress.itemCount), progress.itemCount, name)
+    case .renaming:
+        return String(
+            format: Strings.string("apply.progress.renaming"),
+            min(progress.itemsDone + 1, progress.itemCount), progress.itemCount, name)
     // The bar advances on this; the label keeps what it last said rather than flashing a line for an item that
     // is already behind us.
     case .done:

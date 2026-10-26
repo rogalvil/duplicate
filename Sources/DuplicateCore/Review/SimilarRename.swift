@@ -60,34 +60,31 @@ public enum SimilarRenameRefusal: Sendable, Equatable {
     case unreadable
 }
 
-/// The renames chosen for one perceptual scan, in the order they were chosen.
+/// The names chosen for one perceptual scan: for each group, the member whose name its kept file takes.
 ///
-/// **A list, not a map keyed by path.** A `String` key compares canonical equivalence, so an NFC and an NFD spelling
-/// of two different files would collapse into one entry.
+/// **Only that member, not the kept file.** A choice is set aside, not lost, while its group keeps two files -- and
+/// then there is no single kept file to write down. The file that stays comes from the decisions; the member
+/// identifies its group, since a file is in one group only (found in review on #229: a document of `keep`/`name_from`
+/// pairs could only hold choices that were active, so keeping a second file erased the name from disk).
+///
+/// **A list, not a set of `String`s**, which would compare canonical equivalence and merge an NFC and an NFD spelling
+/// of two files.
 public struct SimilarRenamesDocument: Hashable, Sendable {
-    public let renames: [SimilarRename]
+    public let nameSources: [String]
 
-    public init(renames: [SimilarRename]) {
-        self.renames = renames
+    public init(nameSources: [String]) {
+        self.nameSources = nameSources
     }
 }
 
-/// `similar-renames/<scan_id>.json`: `{"format_version": 1, "renames": [{"keep": ..., "name_from": ...}]}`.
+/// `similar-renames/<scan_id>.json`: `{"format_version": 1, "name_from": [...]}`.
 public enum SimilarRenamesCodec {
     public static let formatVersion = 1
 
     public static func encode(_ document: SimilarRenamesDocument) -> JSONValue {
         .object([
             JSONMember(key: "format_version", value: .int(Int64(formatVersion))),
-            JSONMember(
-                key: "renames",
-                value: .array(
-                    document.renames.map {
-                        .object([
-                            JSONMember(key: "keep", value: .string($0.keptPath)),
-                            JSONMember(key: "name_from", value: .string($0.nameFromPath)),
-                        ])
-                    })),
+            JSONMember(key: "name_from", value: .array(document.nameSources.map { .string($0) })),
         ])
     }
 
@@ -96,18 +93,15 @@ public enum SimilarRenamesCodec {
         guard value["format_version"]?.intValue == Int64(formatVersion) else {
             throw ScanDecodingError.notAnObject(field: "format_version")
         }
-        guard let items = value["renames"]?.arrayValue else {
-            throw ScanDecodingError.notAnObject(field: "renames")
+        guard let items = value["name_from"]?.arrayValue else {
+            throw ScanDecodingError.notAnObject(field: "name_from")
         }
         return SimilarRenamesDocument(
-            renames: try items.map { item in
-                guard let keep = item["keep"]?.stringValue else {
-                    throw ScanDecodingError.notAString(field: "keep")
-                }
-                guard let nameFrom = item["name_from"]?.stringValue else {
+            nameSources: try items.map { item in
+                guard let path = item.stringValue else {
                     throw ScanDecodingError.notAString(field: "name_from")
                 }
-                return SimilarRename(keptPath: keep, nameFromPath: nameFrom)
+                return path
             })
     }
 }

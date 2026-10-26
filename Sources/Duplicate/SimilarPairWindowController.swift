@@ -95,7 +95,7 @@ final class SimilarPairWindowController: NSWindowController, NSWindowDelegate {
         self.review = SimilarReviewState(
             scan: scan,
             priorDecisions: store.priorSimilarDecisions(scanID: scan.scanID),
-            priorRenames: store.priorSimilarRenames(scanID: scan.scanID)
+            priorNameSources: store.priorSimilarNameSources(scanID: scan.scanID)
         )
         self.provenance = DecisionsProvenance.classify(
             decided: review.tally.decided, total: scan.pairs.count)
