@@ -36,6 +36,10 @@ public struct SimilarDisposalReport: Sendable {
     /// user with moved files and a window that never learned about them.
     public var wasCancelled = false
     public let journalPath: String?
+    /// Kept files now under the name of a file this run moved (#228).
+    public var renamed: [SimilarRename] = []
+    /// Renames left undone, with why. Like ``refused``, not failures: the file is untouched under its own name.
+    public var renameRefusals: [(rename: SimilarRename, reason: SimilarRenameRefusal)] = []
 
     public var movedBytes: Int64 { moved.reduce(0) { $0 + $1.byteCount } }
     /// Moved into quarantine because the Trash refused, so not where "Put Back" can find them.
@@ -181,6 +185,66 @@ public struct SimilarApplyRunner: Sendable {
                     stage: .done))
         }
 
+        // **Renames last, and only after a run that went through** (#228). A name is free only once the file that had
+        // it is in the Trash, and a cancelled or stopped run is not the plan the user approved.
+        var renamed: [SimilarRename] = []
+        var renameRefusals: [(rename: SimilarRename, reason: SimilarRenameRefusal)] = []
+        if !cancelled, !stoppedEarly {
+            for rename in plan.renames {
+                if Task.isCancelled {
+                    cancelled = true
+                    break
+                }
+                let manager = FileManager.default
+                guard manager.fileExists(atPath: rename.keptPath) else {
+                    renameRefusals.append((rename, .keptMissing))
+                    continue
+                }
+                guard !manager.fileExists(atPath: rename.nameFromPath) else {
+                    renameRefusals.append((rename, .nameSourceStayed))
+                    continue
+                }
+                // Read before the rename, for the same reason as a move: an undo puts back only what it can verify.
+                guard let digest = try? hasher.fullDigest(atPath: rename.keptPath) else {
+                    renameRefusals.append((rename, .unreadable))
+                    continue
+                }
+                let target = rename.targetPath
+                // **Exclusive, so the filesystem itself refuses a taken name**, with no gap between a check and the
+                // move for another file to land in. Measured on the boot volume: refused with EEXIST and the other
+                // file intact, and still allowed when the new name differs only in case -- a check with
+                // `fileExists` first would have refused that one, because the old name answers for the new.
+                guard renamex_np(rename.keptPath, target, UInt32(RENAME_EXCL)) == 0 else {
+                    let code = errno
+                    if code == EEXIST {
+                        renameRefusals.append((rename, .nameTaken))
+                    } else {
+                        failures.append(
+                            ApplyFailure(
+                                path: rename.keptPath,
+                                reason: .renameFailed(
+                                    path: rename.keptPath, reason: String(cString: strerror(code))))
+                        )
+                    }
+                    continue
+                }
+                renamed.append(rename)
+                pending.append(
+                    JournalEntry(
+                        originalPath: rename.keptPath,
+                        resultingPath: target,
+                        mechanism: .rename,
+                        byteCount: 0,
+                        digest: digest.digest,
+                        groupKey: rename.keptPath + "||" + rename.nameFromPath,
+                        scanID: plan.scanID,
+                        timestamp: instant.timestamp
+                    )
+                )
+                if pending.count >= 32 { try flush() }
+            }
+        }
+
         // Flushed even when the run stopped early or was cancelled, or the files that did move would be
         // unrecoverable.
         try flush()
@@ -191,9 +255,11 @@ public struct SimilarApplyRunner: Sendable {
             failures: failures,
             refused: refused,
             stoppedEarly: stoppedEarly,
-            journalPath: moved.isEmpty ? nil : journalPath
+            journalPath: moved.isEmpty && renamed.isEmpty ? nil : journalPath
         )
         report.wasCancelled = cancelled
+        report.renamed = renamed
+        report.renameRefusals = renameRefusals
         return report
     }
 

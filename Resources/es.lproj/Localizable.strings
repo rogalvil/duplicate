@@ -396,4 +396,5 @@
 "apply.failure.trashUnavailable" = "el basurero rechazó este archivo y la cuarentena tampoco pudo recibirlo: %@";
 "apply.failure.quarantineFailed" = "la cuarentena no pudo recibir este archivo: %@";
 "apply.failure.noFreeName" = "todos los nombres de la carpeta de cuarentena estaban tomados, así que el archivo se quedó donde está";
+"apply.failure.renameFailed" = "no se pudo renombrar (%@), así que conservó su propio nombre";
 "apply.failure.cancelled" = "se detuvo antes de revisar este archivo, así que se quedó donde está";

@@ -78,21 +78,46 @@ public struct SimilarReviewState: Sendable {
     public let groups: [SimilarGroup]
     /// Keep sets edited on screen and not yet confirmed, by group. **Not decisions**: nothing here reaches the file.
     private var pendingKeep: [Int: Set<Int>] = [:]
+    /// The member whose name a group's one kept file takes (#228), by group.
+    ///
+    /// **Stored as chosen and checked when read**, so keeping a second file sets the choice aside instead of losing it:
+    /// a name only makes sense for a group that keeps one file.
+    private var nameSources: [Int: Int] = [:]
 
     /// Builds a review, optionally rehydrating decisions already on disk.
     ///
     /// - Parameter facts: metadata by path, when a caller has probed it. Absent facts mean the suggestion falls
     ///   through to the parts of the chain that do not need them.
+    ///
+    /// - Parameter priorRenames: names chosen in an earlier session (#228). One whose files are no longer members of a
+    ///   single group of this scan is dropped.
     public init(
         scan: SimilarScan,
         priorDecisions: [String: SimilarDecision] = [:],
-        facts: [String: MediaFacts] = [:]
+        facts: [String: MediaFacts] = [:],
+        priorRenames: [SimilarRename] = []
     ) {
         self.scan = scan
         self.groups = SimilarGrouping.groups(of: scan.pairs)
         self.suggestions = scan.pairs.map { pair in
             SimilarDecisionDefaults.suggestion(
                 for: pair, root: scan.root, factsA: facts[pair.fileA], factsB: facts[pair.fileB])
+        }
+        if !priorRenames.isEmpty {
+            // By bytes: a `String` key would put an NFC and an NFD spelling of two files in one slot.
+            var member: [[UInt8]: (group: Int, file: Int)] = [:]
+            for (group, members) in groups.enumerated() {
+                for (file, path) in members.files.enumerated() {
+                    member[Array(path.utf8)] = (group, file)
+                }
+            }
+            for rename in priorRenames {
+                guard let kept = member[Array(rename.keptPath.utf8)],
+                    let source = member[Array(rename.nameFromPath.utf8)],
+                    kept.group == source.group, kept.file != source.file
+                else { continue }
+                nameSources[kept.group] = source.file
+            }
         }
         guard !priorDecisions.isEmpty else { return }
         for (index, pair) in scan.pairs.enumerated() {
@@ -386,6 +411,45 @@ public struct SimilarReviewState: Sendable {
         return .confirmed
     }
 
+    /// The member whose name the group's kept file takes, or `nil` for its own name.
+    ///
+    /// Only while the group keeps exactly one file, and only when the name would change: two files with one name and
+    /// one extension in one folder leave nothing to rename.
+    public func nameSource(inGroup index: Int) -> Int? {
+        rename(inGroup: index).flatMap { _ in nameSources[index] }
+    }
+
+    /// The rename the group would carry with what is shown checked.
+    public func rename(inGroup index: Int) -> SimilarRename? {
+        rename(inGroup: index, keep: effectiveKeep(inGroup: index))
+    }
+
+    private func rename(inGroup index: Int, keep: Set<Int>) -> SimilarRename? {
+        guard let source = nameSources[index], keep.count == 1, let kept = keep.first,
+            kept != source, groups.indices.contains(index)
+        else { return nil }
+        let files = groups[index].files
+        let rename = SimilarRename(keptPath: files[kept], nameFromPath: files[source])
+        return rename.isNoOp ? nil : rename
+    }
+
+    /// Chooses whose name the kept file takes. `nil`, or the kept file itself, means its own name.
+    ///
+    /// - Returns: `false`, and nothing changes, when the group does not keep exactly one file: with two kept, "the
+    ///   file of one under the name of another" names no file.
+    @discardableResult
+    public mutating func setNameSource(_ file: Int?, inGroup index: Int) -> Bool {
+        guard groups.indices.contains(index) else { return false }
+        let keep = effectiveKeep(inGroup: index)
+        guard let file, !keep.contains(file) else {
+            nameSources[index] = nil
+            return true
+        }
+        guard keep.count == 1, groups[index].files.indices.contains(file) else { return false }
+        nameSources[index] = file
+        return true
+    }
+
     /// Passes over a group: every pair is skipped, and an unconfirmed edit is dropped.
     public mutating func skipGroup(_ index: Int) {
         guard groups.indices.contains(index) else { return }
@@ -438,6 +502,25 @@ public struct SimilarReviewState: Sendable {
             entries.append((SimilarPairKey.key(for: pair), decision))
         }
         return SimilarDecisionsDocument(entries: entries)
+    }
+
+    /// What belongs in `similar-renames/<scan_id>.json`: every name chosen for what is shown, in group order.
+    ///
+    /// **Not only decided groups**, unlike the decisions: a name is not a decision until its group is one, and
+    /// ``renamePlan`` is what acts. Saved so a chosen name survives closing the window.
+    public var renamesForSaving: SimilarRenamesDocument {
+        SimilarRenamesDocument(renames: groups.indices.compactMap { rename(inGroup: $0) })
+    }
+
+    /// The renames an apply would carry out: only groups decided to keep one file.
+    ///
+    /// Taken from the decision, not from what is shown: an edit not yet confirmed changes neither what is moved nor
+    /// what is renamed.
+    public var renamePlan: [SimilarRename] {
+        groups.indices.compactMap { index in
+            guard case .decided(let keep) = groupState(at: index) else { return nil }
+            return rename(inGroup: index, keep: keep)
+        }
     }
 
     /// The files a decided review would move, in pair order, with the pair they came from.

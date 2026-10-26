@@ -207,7 +207,7 @@ enum SelfTest {
         // The six shared slots must be spelled exactly as the CLI spells them.
         let expected = [
             "scans", "decisions", "folder-scans", "folder-decisions",
-            "similar-scans", "similar-decisions", "journal",
+            "similar-scans", "similar-decisions", "similar-renames", "journal",
         ]
         let actual = StateDirectory.Slot.allCases.map(\.rawValue)
         try expect(actual == expected, "slot names drifted: \(actual)")

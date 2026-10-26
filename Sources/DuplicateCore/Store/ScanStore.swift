@@ -206,6 +206,34 @@ public struct ScanStore: Sendable {
         (try? loadSimilarDecisions(scanID: scanID))?.byKey ?? [:]
     }
 
+    /// Saves the names a perceptual review chose (#228), or removes the document when none is left.
+    ///
+    /// Removed rather than written empty: a scan reviewed without renaming anything should not grow a file that says so.
+    public func save(_ renames: SimilarRenamesDocument, scanID: String) throws {
+        let path = try state.filePath(for: .similarRenames, id: scanID)
+        guard !renames.renames.isEmpty else {
+            if FileManager.default.fileExists(atPath: path) {
+                try FileManager.default.removeItem(atPath: path)
+            }
+            return
+        }
+        try state.create(.similarRenames)
+        let data = try JSONWriter.document(SimilarRenamesCodec.encode(renames))
+        try data.write(to: URL(filePath: path), options: .atomic)
+    }
+
+    /// The names chosen for a perceptual scan, or none.
+    ///
+    /// Empty rather than throwing, like ``priorSimilarDecisions(scanID:)``: no document is the ordinary case, and one
+    /// this build cannot read costs a choice of name, never a file.
+    public func priorSimilarRenames(scanID: String) -> [SimilarRename] {
+        guard let path = try? state.filePath(for: .similarRenames, id: scanID),
+            let data = FileManager.default.contents(atPath: path),
+            let document = try? SimilarRenamesCodec.decode(JSONReader.parse(data))
+        else { return [] }
+        return document.renames
+    }
+
     /// Whether a perceptual scan has a decisions document beside it.
     public func hasSimilarDecisions(scanID: String) -> Bool {
         guard let path = try? state.filePath(for: .similarDecisions, id: scanID) else {
@@ -274,14 +302,16 @@ public struct ScanStore: Sendable {
     /// Removes a perceptual scan and the decisions saved beside it, for the reason ``delete(id:)`` removes both.
     @discardableResult
     public func deleteSimilarScan(id: String) throws -> Bool {
-        try delete(id: id, scan: .similarScans, decisions: .similarDecisions)
+        try delete(
+            id: id, scan: .similarScans, decisions: .similarDecisions, also: [.similarRenames])
     }
 
     private func delete(
-        id: String, scan: StateDirectory.Slot, decisions: StateDirectory.Slot
+        id: String, scan: StateDirectory.Slot, decisions: StateDirectory.Slot,
+        also others: [StateDirectory.Slot] = []
     ) throws -> Bool {
         var removed = false
-        for slot in [scan, decisions] {
+        for slot in [scan, decisions] + others {
             let path = try state.filePath(for: slot, id: id)
             guard FileManager.default.fileExists(atPath: path) else { continue }
             try FileManager.default.removeItem(atPath: path)

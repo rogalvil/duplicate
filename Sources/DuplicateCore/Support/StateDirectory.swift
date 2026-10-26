@@ -46,10 +46,13 @@ public struct StateDirectory: Sendable, Equatable {
         case folderDecisions = "folder-decisions"
         case similarScans = "similar-scans"
         case similarDecisions = "similar-decisions"
+        /// Which file a perceptual group keeps under another's name (#228). This app's own: the CLI's decisions are a
+        /// bare map of pairs, with nowhere to put a name.
+        case similarRenames = "similar-renames"
         case journal = "journal"
 
         /// Whether the CLI also reads and writes this subdirectory.
-        public var isSharedWithCLI: Bool { self != .journal }
+        public var isSharedWithCLI: Bool { self != .journal && self != .similarRenames }
     }
 
     /// The `rav` root as a path string, without a trailing slash.

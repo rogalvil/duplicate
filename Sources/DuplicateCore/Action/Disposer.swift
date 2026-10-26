@@ -6,6 +6,9 @@ public enum DisposalMechanism: String, Sendable, Codable, CaseIterable {
     case trash
     /// Moved into a quarantine directory, because the Trash was not available.
     case quarantine
+    /// Renamed in its own folder: the file a perceptual group kept, under the name of one it discarded (#228).
+    /// **Nothing is removed**, so its journal entry records a size of 0 -- it freed nothing.
+    case rename
 }
 
 /// What happened to one file.
@@ -41,6 +44,8 @@ public enum DisposalError: Error, Equatable, Sendable {
     case noFreeName(path: String)
     /// The file on disk no longer matches the digest the scan recorded.
     case contentChanged(path: String)
+    /// A rename could not be carried out.
+    case renameFailed(path: String, reason: String)
     /// The verification was cancelled before it finished.
     ///
     /// **Its own case because every other one accuses the file.** `missing` says it is gone, `contentChanged`

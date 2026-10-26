@@ -55,6 +55,8 @@ func disposalFailureText(_ error: DisposalError) -> String {
         return String(format: Strings.string("apply.failure.quarantineFailed"), reason)
     case .noFreeName:
         return Strings.string("apply.failure.noFreeName")
+    case .renameFailed(_, let reason):
+        return String(format: Strings.string("apply.failure.renameFailed"), reason)
     // Not expected in a report -- the runners break out of the loop on a cancellation instead of recording it --
     // but a case that says "cancelled" is better than a case that says nothing if one ever arrives.
     case .cancelled:
