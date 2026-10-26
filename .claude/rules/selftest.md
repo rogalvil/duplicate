@@ -61,7 +61,8 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   manifiesto de una carpeta de cien archivos, y corre en 43 ms.
 - **Afirmar sobre la etiqueta después de un apply de dos archivos es una carrera.** La escribe un `Timer` a 10 Hz y
   dos archivos se mueven en menos de un tick. Lo que sí se afirma es determinista: que la línea arranca oculta, y
-  que el renderizador da **tres frases distintas** para las tres etapas y **nada** para `done`.
+  que el renderizador da **cuatro frases distintas** para las cuatro etapas —`renaming` llegó con #228— y **nada**
+  para `done`.
 - **Un modo de selftest no abre el panel de Quick Look.** `QLPreviewPanel` es una ventana **compartida del
   sistema**: abrirla la dejaría en pantalla para el siguiente modo, que además afirmaría sobre una ventana que no
   es suya. Se afirma la lista de rutas que el panel recibiría.

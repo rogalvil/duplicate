@@ -22,6 +22,7 @@ $XDG_STATE_HOME/rav/duplicate/      (o ~/.local/state/rav/duplicate/ si no está
 ├── folder-decisions/<scan_id>.json      qué conservar, por par de carpetas
 ├── similar-scans/<scan_id>.json         imágenes y videos parecidos
 ├── similar-decisions/<scan_id>.json     qué conservar, por par de archivos
+├── similar-renames/<scan_id>.json       con qué nombre se conserva un archivo (solo esta app)
 └── journal/<session_id>.jsonl           qué se movió y a dónde, para poder deshacerlo
 ```
 
@@ -161,6 +162,28 @@ Un solo tipo no puede representar las dos formas honestamente, así que son dos 
 - **Una decisión desconocida se rechaza, no se salta.** Saltarla convertiría en silencio un par revisado en uno sin
   revisar.
 
+### `similar-renames` es solo de esta app
+
+Un grupo de parecidos que conserva un archivo puede conservarlo con el nombre de otro miembro (#228): la foto buena
+se llama «foto copia.png» y el nombre que vale es el de «foto.png», que se va. `similar-decisions` es el mapa de
+pares del CLI y no tiene dónde poner un nombre, así que la elección va en un documento aparte, que el CLI no lee:
+
+```
+{"format_version": 1, "name_from": ["<miembro que presta el nombre>", ...]}
+```
+
+- **Solo el miembro que presta el nombre, no el archivo que se queda.** Cada archivo está en un solo grupo, así que
+  el miembro dice de qué grupo es; el archivo que se queda sale de las decisiones. Y con dos archivos conservados la
+  elección se aparta sin perderse, cuando no hay un único archivo que escribir: una primera versión guardaba pares
+  `keep`/`name_from` y, al confirmar dos conservados, borraba del disco el nombre elegido (lo encontró la revisión
+  de #229).
+- **Una lista, no un conjunto de `String`.** Un `Set<String>` compara por equivalencia canónica y juntaría una ruta
+  NFC y otra NFD de dos archivos distintos.
+- **No es una decisión.** Se guarda al elegir, también en un grupo sin decidir, para que la elección sobreviva a
+  cerrar la ventana; solo se aplica en un grupo decidido que conserva exactamente un archivo. Una ruta que ya no está
+  en el escaneo se ignora.
+- **Sin elecciones no hay archivo**: guardar una lista vacía borra el documento. Y se borra junto con su escaneo.
+
 ## Por qué el escritor de JSON está hecho a mano
 
 El formato es el de `json.dumps(obj, indent=2)` de Python, y `JSONEncoder` y `JSONSerialization` fallan cada uno en
@@ -187,9 +210,18 @@ del corpus es `0.75`.
 {"format_version": 1, "original_path": "/Users/t/Downloads/a-2.pdf", "resulting_path": "/Users/t/.Trash/a-2.pdf", "mechanism": "trash", "size": 20480, "sha256": "a1b2...", "group_key": "20480:a1b2...", "scan_id": "20260511-064716-685054", "timestamp": "2026-08-12T04:20:00.000001Z"}
 ```
 
-`mechanism` es `trash` o `quarantine`: la app manda al basurero y solo cae a mover a una carpeta de cuarentena
-cuando el basurero no está disponible, como en un montaje de red. Para una carpeta, `sha256` es el digest de su
-manifiesto (cada archivo con su ruta relativa) y `size` la suma de sus archivos.
+`mechanism` es `trash`, `quarantine` o `rename`: la app manda al basurero y solo cae a mover a una carpeta de
+cuarentena cuando el basurero no está disponible, como en un montaje de red. Para una carpeta, `sha256` es el
+digest de su manifiesto (cada archivo con su ruta relativa) y `size` la suma de sus archivos.
+
+**`rename` es el archivo que se queda, con el nombre de otro** (#228): `original_path` es su nombre de antes,
+`resulting_path` el nuevo, en la misma carpeta y con su propia extensión. `size` es **0**, porque no liberó nada;
+`sha256` es el del archivo, leído antes de renombrar; `group_key` es `"<conservado>||<quien prestó el nombre>"`. Se
+escribe después de los movimientos de su sesión, porque el nombre solo está libre cuando el otro archivo ya se fue.
+Y al deshacer se procesa **antes**, del último al primero: el nombre nuevo suele ser la ruta original de un archivo
+que la misma sesión mandó al basurero, y ese archivo no puede volver mientras el renombrado la ocupe. Una versión
+anterior de la app no conoce `rename` y lee esa línea como ilegible: su deshacer deja el renombrado como está, y si
+el nombre nuevo es la ruta del archivo que se fue, ese archivo queda bloqueado en vez de escribirse encima.
 
 - **`.jsonl` y no `.json`**: no se puede agregar a un `[…]` con indentación sin reescribirlo, y un crash a media
   escritura tiene que dejar legible todo lo anterior. Una línea truncada cuesta esa línea y nada más.

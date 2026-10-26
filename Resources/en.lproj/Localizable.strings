@@ -354,6 +354,12 @@
 "similar.apply.refused.changed" = "now %1$.2f%% alike, under %2$.2f%%";
 "similar.apply.refused.unreadable" = "%@ could not be read";
 "similar.apply.refused.missing" = "already gone";
+"similar.column.name" = "Name";
+"similar.column.name.help" = "The file kept takes the name of the one marked here, in its own folder and with its own extension. Only when the group keeps one file.";
+"similar.group.keepsAs" = " - kept as “%@”";
+"similar.apply.willBeNamed" = "stays, named %@";
+"similar.apply.rename.sourceStayed" = "“%@” is still there, so its name is not free";
+"similar.apply.rename.taken" = "another file is already named “%@”";
 "similar.review.apply" = "Simulate and apply...";
 "folders.apply.verifyNote" = "Each folder is checked when it moves: one holding a file the kept folder does not have is skipped.";
 "folders.apply.nothing" = "Nothing to move.";
@@ -392,9 +398,11 @@
 /* %4$@ is count.filesChecked, from Localizable.stringsdict. */
 "apply.progress.verifying.files" = "Verifying %1$d of %2$d: %3$@ — %4$@";
 "apply.progress.moving" = "Moving %1$d of %2$d: %3$@";
+"apply.progress.renaming" = "Renaming %1$d of %2$d: %3$@";
 "apply.failure.missing" = "%@ is not there any more, so nothing was moved";
 "apply.failure.contentChanged" = "%@ changed since the scan, so it was left alone";
 "apply.failure.trashUnavailable" = "the Trash refused this file and quarantine could not take it either: %@";
 "apply.failure.quarantineFailed" = "quarantine could not take this file: %@";
 "apply.failure.noFreeName" = "every name in the quarantine folder was taken, so the file stayed where it is";
+"apply.failure.renameFailed" = "it could not be renamed (%@), so it kept its own name";
 "apply.failure.cancelled" = "stopped before this file was checked, so it was left where it is";

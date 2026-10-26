@@ -36,6 +36,10 @@ public struct SimilarDisposalReport: Sendable {
     /// user with moved files and a window that never learned about them.
     public var wasCancelled = false
     public let journalPath: String?
+    /// Kept files now under the name of a file this run moved (#228).
+    public var renamed: [SimilarRename] = []
+    /// Renames left undone, with why. Like ``refused``, not failures: the file is untouched under its own name.
+    public var renameRefusals: [(rename: SimilarRename, reason: SimilarRenameRefusal)] = []
 
     public var movedBytes: Int64 { moved.reduce(0) { $0 + $1.byteCount } }
     /// Moved into quarantine because the Trash refused, so not where "Put Back" can find them.
@@ -97,6 +101,9 @@ public struct SimilarApplyRunner: Sendable {
         }
 
         var cancelled = false
+        // The renames count as steps of the bar, after the moves (#228): each one reads its file whole, and a bar
+        // already full while a 4 GB video is hashed reads as finished, or stuck.
+        let total = plan.items.count + plan.renames.count
         for (index, item) in plan.items.enumerated() {
             // **Checked here and the journal flushed on the way out.** An earlier version threw from this point,
             // which skipped the flush below and left up to 31 already-moved files with no journal entry -- in the
@@ -109,7 +116,7 @@ public struct SimilarApplyRunner: Sendable {
             // for two videos. Said before it starts.
             onProgress?(
                 ApplyProgress(
-                    itemsDone: index, itemCount: plan.items.count, path: item.path,
+                    itemsDone: index, itemCount: total, path: item.path,
                     stage: .verifying(filesChecked: 0)))
             let verdict = await verifier.verify(
                 item, imageThreshold: plan.imageThreshold, videoThreshold: plan.videoThreshold)
@@ -123,7 +130,7 @@ public struct SimilarApplyRunner: Sendable {
                 refused.append((item.path, refusal))
                 onProgress?(
                     ApplyProgress(
-                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        itemsDone: index + 1, itemCount: total, path: item.path,
                         stage: .done))
                 continue
             }
@@ -139,17 +146,26 @@ public struct SimilarApplyRunner: Sendable {
                 cancelled = true
                 break
             }
-            guard let digest = try? hasher.fullDigest(atPath: item.path) else {
+            let digest: HashResult
+            do {
+                digest = try hasher.fullDigest(atPath: item.path)
+            } catch {
+                // **And a read stopped halfway is a stop too**: the hasher throws `CancellationError` between
+                // chunks, and reported as unreadable it blames a healthy file (found in review on #229).
+                if Task.isCancelled {
+                    cancelled = true
+                    break
+                }
                 refused.append((item.path, .unreadable(path: item.path)))
                 onProgress?(
                     ApplyProgress(
-                        itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                        itemsDone: index + 1, itemCount: total, path: item.path,
                         stage: .done))
                 continue
             }
             onProgress?(
                 ApplyProgress(
-                    itemsDone: index, itemCount: plan.items.count, path: item.path, stage: .moving))
+                    itemsDone: index, itemCount: total, path: item.path, stage: .moving))
             do {
                 let outcome = try disposer.dispose(path: item.path)
                 moved.append(outcome)
@@ -177,8 +193,98 @@ public struct SimilarApplyRunner: Sendable {
             }
             onProgress?(
                 ApplyProgress(
-                    itemsDone: index + 1, itemCount: plan.items.count, path: item.path,
+                    itemsDone: index + 1, itemCount: total, path: item.path,
                     stage: .done))
+        }
+
+        // **Renames last, and only after a run that went through** (#228). A name is free only once the file that had
+        // it is in the Trash, and a cancelled or stopped run is not the plan the user approved.
+        var renamed: [SimilarRename] = []
+        var renameRefusals: [(rename: SimilarRename, reason: SimilarRenameRefusal)] = []
+        if !cancelled, !stoppedEarly {
+            for (offset, rename) in plan.renames.enumerated() {
+                if Task.isCancelled {
+                    cancelled = true
+                    break
+                }
+                let step = plan.items.count + offset
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: step, itemCount: total, path: rename.keptPath,
+                        stage: .verifying(filesChecked: 0)))
+                // Every way out of this step advances the bar, except a stop: nothing finished there.
+                defer {
+                    if !cancelled {
+                        onProgress?(
+                            ApplyProgress(
+                                itemsDone: step + 1, itemCount: total, path: rename.keptPath,
+                                stage: .done))
+                    }
+                }
+                let manager = FileManager.default
+                guard manager.fileExists(atPath: rename.keptPath) else {
+                    renameRefusals.append((rename, .keptMissing))
+                    continue
+                }
+                guard !manager.fileExists(atPath: rename.nameFromPath) else {
+                    renameRefusals.append((rename, .nameSourceStayed))
+                    continue
+                }
+                // Read before the rename, for the same reason as a move: an undo puts back only what it can verify.
+                let digest: HashResult
+                do {
+                    digest = try hasher.fullDigest(atPath: rename.keptPath)
+                } catch {
+                    // A stop, not a file that cannot be read -- the same rule as the moves above.
+                    if Task.isCancelled {
+                        cancelled = true
+                        break
+                    }
+                    renameRefusals.append((rename, .unreadable))
+                    continue
+                }
+                // The last chance to honour a stop: past this line the file has another name.
+                if Task.isCancelled {
+                    cancelled = true
+                    break
+                }
+                onProgress?(
+                    ApplyProgress(
+                        itemsDone: step, itemCount: total, path: rename.keptPath, stage: .renaming))
+                let target = rename.targetPath
+                // **Exclusive, so the filesystem itself refuses a taken name**, with no gap between a check and the
+                // move for another file to land in. Measured on the boot volume: refused with EEXIST and the other
+                // file intact, and still allowed when the new name differs only in case -- a check with
+                // `fileExists` first would have refused that one, because the old name answers for the new.
+                guard renamex_np(rename.keptPath, target, UInt32(RENAME_EXCL)) == 0 else {
+                    let code = errno
+                    if code == EEXIST {
+                        renameRefusals.append((rename, .nameTaken))
+                    } else {
+                        failures.append(
+                            ApplyFailure(
+                                path: rename.keptPath,
+                                reason: .renameFailed(
+                                    path: rename.keptPath, reason: String(cString: strerror(code))))
+                        )
+                    }
+                    continue
+                }
+                renamed.append(rename)
+                pending.append(
+                    JournalEntry(
+                        originalPath: rename.keptPath,
+                        resultingPath: target,
+                        mechanism: .rename,
+                        byteCount: 0,
+                        digest: digest.digest,
+                        groupKey: rename.keptPath + "||" + rename.nameFromPath,
+                        scanID: plan.scanID,
+                        timestamp: instant.timestamp
+                    )
+                )
+                if pending.count >= 32 { try flush() }
+            }
         }
 
         // Flushed even when the run stopped early or was cancelled, or the files that did move would be
@@ -191,9 +297,11 @@ public struct SimilarApplyRunner: Sendable {
             failures: failures,
             refused: refused,
             stoppedEarly: stoppedEarly,
-            journalPath: moved.isEmpty ? nil : journalPath
+            journalPath: moved.isEmpty && renamed.isEmpty ? nil : journalPath
         )
         report.wasCancelled = cancelled
+        report.renamed = renamed
+        report.renameRefusals = renameRefusals
         return report
     }
 

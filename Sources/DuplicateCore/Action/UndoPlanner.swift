@@ -90,15 +90,23 @@ public enum UndoPlanner {
         public var isDirectory: @Sendable (String) -> Bool
         /// The digest of a file, or `nil` when it cannot be read.
         public var digest: @Sendable (String) -> Digest32?
+        /// Whether two paths name one file.
+        ///
+        /// **Only a rename needs it** (#228). Renaming `IMG.JPG` to `img.JPG` on a volume that ignores case leaves
+        /// the old name "existing" -- it is the renamed file itself -- and without this the planner reads that as the
+        /// original already being back, so the undo would report a restore it never made.
+        public var sameFile: @Sendable (String, String) -> Bool
 
         public init(
             exists: @escaping @Sendable (String) -> Bool,
             isDirectory: @escaping @Sendable (String) -> Bool,
-            digest: @escaping @Sendable (String) -> Digest32?
+            digest: @escaping @Sendable (String) -> Digest32?,
+            sameFile: @escaping @Sendable (String, String) -> Bool = { _, _ in false }
         ) {
             self.exists = exists
             self.isDirectory = isDirectory
             self.digest = digest
+            self.sameFile = sameFile
         }
 
         /// The real filesystem.
@@ -149,7 +157,61 @@ public enum UndoPlanner {
                     )
                     return found && isDirectory.boolValue
                 },
-                digest: hash
+                digest: hash,
+                sameFile: FileIdentity.same
+            )
+        }
+    }
+
+    /// The filesystem as it will be once some entries are put back: their originals filled, where they went freed.
+    ///
+    /// **Updated one restore at a time.** It was rebuilt from every earlier rename at each step, so planning n renames
+    /// cost n²/2 lookups, synchronously, while the window waited (found in review on #229).
+    struct Projection: Sendable {
+        private struct Filled: Sendable {
+            let digest: Digest32
+            let isDirectory: Bool
+        }
+        private var filled: [[UInt8]: Filled] = [:]
+        private var freed = Set<[UInt8]>()
+
+        mutating func restore(_ entry: JournalEntry, in base: Environment) {
+            let isDirectory = isDirectory(entry.resultingPath, in: base)
+            let left = Array(entry.resultingPath.utf8)
+            filled[left] = nil
+            freed.insert(left)
+            let restored = Array(entry.originalPath.utf8)
+            freed.remove(restored)
+            filled[restored] = Filled(digest: entry.digest, isDirectory: isDirectory)
+        }
+
+        func exists(_ path: String, in base: Environment) -> Bool {
+            let key = Array(path.utf8)
+            if filled[key] != nil { return true }
+            return !freed.contains(key) && base.exists(path)
+        }
+
+        func isDirectory(_ path: String, in base: Environment) -> Bool {
+            let key = Array(path.utf8)
+            if let known = filled[key] { return known.isDirectory }
+            return !freed.contains(key) && base.isDirectory(path)
+        }
+
+        func digest(_ path: String, in base: Environment) -> Digest32? {
+            let key = Array(path.utf8)
+            if let known = filled[key] { return known.digest }
+            return freed.contains(key) ? nil : base.digest(path)
+        }
+
+        /// The projection as an environment, for one step. Without restores it is the base itself.
+        func view(over base: Environment) -> Environment {
+            guard !filled.isEmpty || !freed.isEmpty else { return base }
+            let projection = self
+            return Environment(
+                exists: { projection.exists($0, in: base) },
+                isDirectory: { projection.isDirectory($0, in: base) },
+                digest: { projection.digest($0, in: base) },
+                sameFile: base.sameFile
             )
         }
     }
@@ -157,6 +219,11 @@ public enum UndoPlanner {
     /// Builds a plan for a session's entries.
     ///
     /// - Parameter restoredPaths: original paths a later `undone_at` record already marked as put back.
+    ///
+    /// **Renames are planned first, newest first** (#228), and the rest are planned against the filesystem those
+    /// renames leave. A perceptual apply can keep a file under the name of one it put in the Trash, so that file's
+    /// original path is taken until the rename is undone: planned in journal order, it would be blocked as occupied
+    /// by the very file this undo is about to move out of the way. ``UndoRunner`` runs the steps in this order.
     public static func plan(
         sessionID: String,
         entries: [JournalEntry],
@@ -164,8 +231,18 @@ public enum UndoPlanner {
         environment: Environment
     ) -> UndoPlan {
         var steps: [UndoStep] = []
-        for entry in entries {
-            steps.append(step(for: entry, restoredPaths: restoredPaths, environment: environment))
+        var projection = Projection()
+        for entry in entries.reversed() where entry.mechanism == .rename {
+            let step = step(
+                for: entry, restoredPaths: restoredPaths,
+                environment: projection.view(over: environment))
+            if case .restore(let restored) = step { projection.restore(restored, in: environment) }
+            steps.append(step)
+        }
+        // One view for the rest; without renames it is the environment itself.
+        let afterRenames = projection.view(over: environment)
+        for entry in entries where entry.mechanism != .rename {
+            steps.append(step(for: entry, restoredPaths: restoredPaths, environment: afterRenames))
         }
         return UndoPlan(sessionID: sessionID, steps: steps)
     }
@@ -182,8 +259,11 @@ public enum UndoPlanner {
 
         // The original path is occupied. Byte-identical content means the restore already happened --
         // possibly by Finder's own Put Back, which the app cannot see. Anything else is a conflict, and a
-        // conflict is never resolved by overwriting.
-        if environment.exists(entry.originalPath) {
+        // conflict is never resolved by overwriting. Unless what occupies it is the moved file itself, under a name
+        // that differs only in case.
+        if environment.exists(entry.originalPath),
+            !environment.sameFile(entry.originalPath, entry.resultingPath)
+        {
             if environment.isDirectory(entry.originalPath) {
                 return .blocked(entry, .originalPathIsDirectory)
             }
@@ -237,7 +317,10 @@ public struct UndoRunner: Sendable {
         var report = Report()
         let manager = FileManager.default
         for entry in plan.restorable {
-            guard !manager.fileExists(atPath: entry.originalPath) else {
+            guard
+                !manager.fileExists(atPath: entry.originalPath)
+                    || FileIdentity.same(entry.originalPath, entry.resultingPath)
+            else {
                 // Appeared between planning and running. Refusing is the only safe answer.
                 report.failed.append((entry, "the original path is occupied"))
                 continue

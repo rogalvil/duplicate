@@ -754,6 +754,54 @@
 			<string>%1$d files from %2$@ would go to the Trash</string>
 		</dict>
 	</dict>
+	<key>similar.apply.renames</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file that stays will take another name.</string>
+			<key>other</key>
+			<string>%d files that stay will take other names.</string>
+		</dict>
+	</dict>
+	<key>similar.apply.renamed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 file now has another name:</string>
+			<key>other</key>
+			<string>%d files now have other names:</string>
+		</dict>
+	</dict>
+	<key>similar.apply.renameRefusedHeader</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>1 kept its own name:</string>
+			<key>other</key>
+			<string>%d kept their own names:</string>
+		</dict>
+	</dict>
 	<key>similar.apply.refusedHeader</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

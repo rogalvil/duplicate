@@ -137,6 +137,11 @@ Las de aquí cruzan todo el proyecto. No re-descubrirlas:
   trata como distintas y perdería una de sus dos decisiones — o sea, un archivo mandado a la Papelera
   sin haberse revisado nunca. Y `String <` no es orden de code point, así que ordenar con él
   divergiría del `sorted()` de Python. Todo pasa por `PathOrder`, que compara bytes UTF-8.
+- **Los métodos de ruta de `NSString` limpian lo que devuelven.** `deletingLastPathComponent` y
+  `appendingPathComponent` colapsan un `//`, así que una ruta armada con ellos deja de ser, byte a byte, la ruta de
+  la que salió, y todo lo que aquí empata rutas por bytes deja de verla. Pasó con el destino de un renombrado (#228),
+  que el deshacer ya no reconocía como la ruta que el otro archivo dejó libre. Una ruta que se va a comparar se corta
+  sobre sus bytes UTF-8.
 - **el externo es APFS case-sensitive.** `Foo.jpg` y `foo.jpg` son dos archivos ahí y uno en el volumen
   de arranque. Otra razón para no normalizar rutas nunca.
 - **`resolvingSymlinksInPath` agrega slash final en macOS 15 y no en macOS 26.** Lo destapó CI: un

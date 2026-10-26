@@ -86,10 +86,13 @@ struct StateDirectoryTests {
         #expect(
             StateDirectory.Slot.allCases.map(\.rawValue) == [
                 "scans", "decisions", "folder-scans", "folder-decisions",
-                "similar-scans", "similar-decisions", "journal",
+                "similar-scans", "similar-decisions", "similar-renames", "journal",
             ]
         )
-        #expect(StateDirectory.Slot.allCases.filter { !$0.isSharedWithCLI } == [.journal])
+        #expect(
+            StateDirectory.Slot.allCases.filter { !$0.isSharedWithCLI } == [
+                .similarRenames, .journal,
+            ])
     }
 
     @Test("Maps every detector to its scan and decision slots")

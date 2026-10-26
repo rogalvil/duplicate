@@ -45,7 +45,8 @@ enum SelfTest {
             "walk-permissions", "trash-exclusion", "scan", "about", "icon", "cache", "storage",
             "trash", "undo", "review", "decisions", "gate", "library", "review-window", "preview",
             "fdlimit", "scan-window", "apply-window", "lifecycle", "folder-window", "phash",
-            "similar-window", "video", "similar-apply", "folder-apply", "cancel", "keeper",
+            "similar-window", "video", "similar-apply", "similar-rename", "folder-apply", "cancel",
+            "keeper",
             "format", "progress", "volumes", "realroot", "phash-differential", "history",
             "cache-liveness", "video-timing", "corpus", "network-fallback",
         ]
@@ -98,6 +99,7 @@ enum SelfTest {
                 case "similar-window": try await checkSimilarWindow()
                 case "video": try await checkVideoHashing()
                 case "similar-apply": try await checkSimilarApply()
+                case "similar-rename": try await checkSimilarRename()
                 case "folder-apply": try await checkFolderApply()
                 case "cancel": try await checkCancellation()
                 case "keeper": try checkKeeperHeuristic()
@@ -207,7 +209,7 @@ enum SelfTest {
         // The six shared slots must be spelled exactly as the CLI spells them.
         let expected = [
             "scans", "decisions", "folder-scans", "folder-decisions",
-            "similar-scans", "similar-decisions", "journal",
+            "similar-scans", "similar-decisions", "similar-renames", "journal",
         ]
         let actual = StateDirectory.Slot.allCases.map(\.rawValue)
         try expect(actual == expected, "slot names drifted: \(actual)")
@@ -4239,12 +4241,12 @@ enum SelfTest {
         defer { sheet.window?.close() }
         try expect(sheet.canApply, "the sheet will not let a real plan be applied")
 
-        // The progress line: hidden until an apply starts, and it has three distinct things to say. Asserted on
+        // The progress line: hidden until an apply starts, and it has four distinct things to say. Asserted on
         // the renderer rather than on the label after a two-file apply, because the label is written by a timer
         // at 10 Hz and two files move in less than one tick -- an assertion on the text would be a race.
         //
-        // Teeth: return the moving string for the verifying cases and the distinctness check fails; return a
-        // string for `.done` and the last one does.
+        // Teeth: return the moving string for the verifying cases, or for renaming (#228), and the distinctness
+        // check fails; return a string for `.done` and the last one does.
         try expect(
             sheet.progressLineForSelftest.hidden, "the progress line shows before an apply starts")
         let sample = "/Volumes/Externo/Fotos/2019/verano/copias"
@@ -4258,9 +4260,11 @@ enum SelfTest {
             ),
             applyProgressText(
                 ApplyProgress(itemsDone: 0, itemCount: 8, path: sample, stage: .moving)),
+            applyProgressText(
+                ApplyProgress(itemsDone: 0, itemCount: 8, path: sample, stage: .renaming)),
         ].compactMap { $0 }
-        try expect(sentences.count == 3, "a stage rendered nothing to say")
-        try expect(Set(sentences).count == 3, "two stages read the same: \(sentences)")
+        try expect(sentences.count == 4, "a stage rendered nothing to say")
+        try expect(Set(sentences).count == 4, "two stages read the same: \(sentences)")
         for sentence in sentences {
             try expect(
                 !sentence.hasPrefix("apply.progress"),
@@ -5953,6 +5957,205 @@ enum SelfTest {
             "  a stopped apply moved 2 of 5 and journalled both, so undo can still reach them")
         print(
             "  a pair that stopped looking alike was refused: \(refusedReport.refused.count) of 1")
+    }
+
+    // MARK: - similar-rename
+
+    /// Keeps one file of a group under another member's name (#228): the «Name» radios, the header, the document the
+    /// choice is saved to, the sheet's listing and report, and an undo through the coordinator that puts both back.
+    ///
+    /// Nothing reaches the real Trash: the apply runs with a quarantine inside the mode's own directory.
+    ///
+    /// Proof of teeth: one break beside each assertion.
+    private static func checkSimilarRename() async throws {
+        let manager = FileManager.default
+        let root = NSTemporaryDirectory() + "duplicate-selftest-rename-\(UUID().uuidString)"
+        let tree = root + "/tree"
+        try manager.createDirectory(atPath: tree + "/sub", withIntermediateDirectories: true)
+        defer { try? manager.removeItem(atPath: root) }
+        let state = StateDirectory(environment: ["XDG_STATE_HOME": root], homePath: root)
+        let store = ScanStore(state: state)
+
+        // One picture three times: alike to the verifier, three different files to SHA-256.
+        func image(_ name: String, side: Int) throws -> String {
+            try SyntheticImage.write(
+                .rampWithCorner, width: side, height: side, format: .png, to: tree + "/" + name)
+        }
+        let files = PathOrder.sorted([
+            try image("foto.png", side: 96), try image("sub/foto copy.png", side: 128),
+            try image("sub/otra.png", side: 112),
+        ])
+        func alike(_ a: Int, _ b: Int) -> SimilarPair {
+            SimilarPair(fileA: files[a], fileB: files[b], similarity: 1.0, mediaKind: .image)
+        }
+        let scan = SimilarScan(
+            scanID: "20261025-140000-000000", root: tree, createdAt: "t", imageThreshold: 5,
+            videoThreshold: 0.7, pairs: [alike(0, 1), alike(0, 2), alike(1, 2)])
+        try store.save(scan)
+
+        let viewer = SimilarPairWindowController(scan: scan, stateDirectory: state)
+        defer { viewer.window?.close() }
+        viewer.selectGroupForSelftest(0)
+        await viewer.awaitFactsForSelftest()
+        let rows = viewer.fileRowsForSelftest
+        let keptRow = try expectSome(rows.firstIndex(where: \.kept), "the group keeps nothing")
+        try expect(
+            rows.count(where: \.kept) == 1,
+            "the group suggests keeping \(rows.count(where: \.kept))")
+        let kept = rows[keptRow].path
+        let nameRow = (keptRow + 1) % 3
+        let otherRow = (keptRow + 2) % 3
+        let expected = SimilarRename(keptPath: kept, nameFromPath: rows[nameRow].path)
+        let keepsAs = String(
+            format: Strings.string("similar.group.keepsAs"),
+            (expected.targetPath as NSString).lastPathComponent)
+
+        // 1. With one file kept, its own radio is on and every radio can be pressed.
+        // Teeth: draw every radio `isEnabled = false` and this fails.
+        try expect(
+            viewer.nameRadiosForSelftest.map(\.on) == rows.indices.map { $0 == keptRow },
+            "the radios before a choice are \(viewer.nameRadiosForSelftest)")
+        try expect(
+            viewer.nameRadiosForSelftest.allSatisfy(\.enabled),
+            "a group keeping one file greys its name radios")
+
+        // 2. A click on another row's radio, through the cell's own button: that row is on, the header says the name,
+        // and the choice is on disk at once.
+        // Teeth: drop `saveRenames()` from `nameChosen` and the document stays empty.
+        viewer.clickNameForSelftest(row: nameRow)
+        try expect(
+            viewer.nameRadiosForSelftest.map(\.on) == rows.indices.map { $0 == nameRow },
+            "after choosing a name the radios are \(viewer.nameRadiosForSelftest)")
+        try expect(
+            viewer.headerText.hasSuffix(keepsAs),
+            "the header does not say the name it keeps: '\(viewer.headerText)'")
+        try expect(
+            store.priorSimilarNameSources(scanID: scan.scanID) == [expected.nameFromPath],
+            "the saved names are \(store.priorSimilarNameSources(scanID: scan.scanID))")
+
+        // 3. ⌘Z takes the name back, on disk too: this viewer saves as it goes, so an undo only in memory would leave
+        // the document naming a file the window no longer shows.
+        // Teeth: drop `saveRenames()` from `saveDecisions` and the document keeps the name.
+        viewer.undoForSelftest()
+        try expect(
+            store.priorSimilarNameSources(scanID: scan.scanID).isEmpty,
+            "an undone name is still saved: \(store.priorSimilarNameSources(scanID: scan.scanID))")
+        try expect(
+            !viewer.headerText.hasSuffix(keepsAs), "the header still names an undone choice")
+
+        // 4. Keeping a second file greys the radios and drops the name from the header -- and confirmed that way,
+        // still saves the choice it set aside (found in review on #229). Keeping one again brings it back.
+        // Teeth: draw `radio.isEnabled = true` and the first assertion fails; save only active renames in
+        // `renamesForSaving` and the third does.
+        viewer.clickNameForSelftest(row: nameRow)
+        viewer.clickKeepForSelftest(row: otherRow)
+        try expect(
+            viewer.nameRadiosForSelftest.allSatisfy { !$0.enabled },
+            "with two files kept the radios can still be pressed: \(viewer.nameRadiosForSelftest)")
+        try expect(
+            !viewer.headerText.hasSuffix(keepsAs), "with two files kept the header still names one")
+        viewer.pressConfirmForSelftest()
+        try expect(
+            store.priorSimilarNameSources(scanID: scan.scanID) == [expected.nameFromPath],
+            "confirming two kept files erased the chosen name from disk")
+        viewer.clickKeepForSelftest(row: otherRow)
+        try expect(
+            viewer.headerText.hasSuffix(keepsAs), "keeping one file again lost the chosen name")
+
+        // 5. Confirmed, the plan carries the rename and the sheet lists it under the kept file.
+        // Teeth: drop the renames from `SimilarApplySheetController.listing` and this fails.
+        viewer.pressConfirmForSelftest()
+        let plan = viewer.applyPlanForSelftest
+        try expect(plan.renames == [expected], "the plan renames \(plan.renames)")
+        let named = String(
+            format: Strings.string("similar.apply.willBeNamed"),
+            (expected.targetPath as NSString).lastPathComponent)
+        try expect(
+            SimilarApplySheetController.listing(for: plan).contains(kept + "\n    " + named),
+            "the sheet does not say which file stays under which name")
+
+        // 6. Reopened, the viewer reads the choice back.
+        // Teeth: drop `priorNameSources:` from the viewer's `init` and the header loses the name.
+        let reopened = SimilarPairWindowController(scan: scan, stateDirectory: state)
+        defer { reopened.window?.close() }
+        reopened.selectGroupForSelftest(0)
+        try expect(
+            reopened.headerText.hasSuffix(keepsAs),
+            "a reopened viewer forgot the name: '\(reopened.headerText)'")
+
+        // 7. Applied, the report says what took a name, and its undo -- through the coordinator, as the button does --
+        // puts the renamed file back first, so the file whose name it took can return to its own path.
+        // Teeth: plan renames in journal order in `UndoPlanner.plan` and the file whose name was taken stays out.
+        let digests = try files.map { try ContentHasher().fullDigest(atPath: $0).digest }
+        let session = ScanIdentifier.Instant(
+            year: 2026, month: 10, day: 25, hour: 14, minute: 0, second: 0, microsecond: 0)
+        let report = try await SimilarApplyRunner(state: state).run(
+            plan, sessionID: session.identifier, instant: session,
+            disposer: QuarantineDisposer(root: root + "/quarantine", sessionID: session.identifier))
+        try expect(report.renamed == [expected], "the apply renamed \(report.renamed)")
+        try expect(manager.fileExists(atPath: expected.targetPath), "the kept file has no new name")
+
+        var flow = ReviewFlow()
+        flow.decisionsChanged(hasAny: true)
+        _ = flow.advance(.dryRun, fingerprint: plan.fingerprint)
+        let sheet = SimilarApplySheetController(
+            plan: plan, fingerprint: plan.fingerprint, flow: flow, stateDirectory: state)
+        defer { sheet.window?.close() }
+        try expect(
+            sheet.detailText.contains(Strings.count("similar.apply.renames", 1)),
+            "the dry run does not say a file will take another name: \(sheet.detailText)")
+        // The bar has a step for the rename too (found in review on #229).
+        // Teeth: size the bar by `plan.items.count` alone and this fails.
+        try expect(
+            sheet.progressMaximumForSelftest == Double(plan.items.count + plan.renames.count),
+            "the progress bar has \(sheet.progressMaximumForSelftest) steps for "
+                + "\(plan.items.count) moves and \(plan.renames.count) rename")
+        sheet.finishForSelftest(report)
+        try expect(
+            sheet.listText.contains(Strings.count("similar.apply.renamed", 1))
+                && sheet.listText.contains(
+                    "  →  " + (expected.targetPath as NSString).lastPathComponent),
+            "the report does not say what took a name: \(sheet.listText)")
+        try expect(sheet.isUndoVisible, "the report offers no undo")
+        sheet.undoForSelftest()
+        await sheet.awaitUndoForSelftest()
+        for (path, digest) in zip(files, digests) {
+            try expect(
+                manager.fileExists(atPath: path)
+                    && (try? ContentHasher().fullDigest(atPath: path).digest) == digest,
+                "\((path as NSString).lastPathComponent) is not back as it was: \(sheet.headlineText)"
+            )
+        }
+
+        // 8. A run that only renames -- the files it discards left in an earlier run -- still offers its undo.
+        // Teeth: show the undo button only when `moved` is not empty and this fails.
+        try manager.createDirectory(atPath: root + "/aside", withIntermediateDirectories: true)
+        for (index, path) in files.enumerated() where path != kept {
+            try manager.moveItem(atPath: path, toPath: root + "/aside/\(index).png")
+        }
+        let renameOnly = try await SimilarApplyRunner(state: state).run(
+            plan, sessionID: session.nextMicrosecond.identifier, instant: session.nextMicrosecond,
+            disposer: QuarantineDisposer(
+                root: root + "/quarantine", sessionID: session.nextMicrosecond.identifier))
+        try expect(
+            renameOnly.moved.isEmpty && renameOnly.renamed == [expected],
+            "the second run moved \(renameOnly.moved.count) and renamed \(renameOnly.renamed)")
+        let renameSheet = SimilarApplySheetController(
+            plan: plan, fingerprint: plan.fingerprint, flow: flow, stateDirectory: state)
+        defer { renameSheet.window?.close() }
+        renameSheet.finishForSelftest(renameOnly)
+        try expect(renameSheet.isUndoVisible, "a run that only renamed offers no undo")
+        renameSheet.undoForSelftest()
+        await renameSheet.awaitUndoForSelftest()
+        try expect(
+            manager.fileExists(atPath: kept) && !manager.fileExists(atPath: expected.targetPath),
+            "the rename-only undo did not give the file its own name back: \(renameSheet.headlineText)"
+        )
+
+        print("  chose a name with the radio, saved it, undid it, and read it back in a new viewer")
+        print(
+            "  applied into a quarantine: 1 renamed, and the undo put all three files back byte-identically"
+        )
     }
 
     // MARK: - folder-apply

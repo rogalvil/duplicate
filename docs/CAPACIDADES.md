@@ -176,6 +176,7 @@ Confirmar es lo que la vuelve decisión.
 | Accept the N undecided | botón | Acepta la sugerencia de los grupos mostrados que nadie ha decidido, saltado ni dejado sin cuadrar, diciendo antes archivos y bytes |
 | Tabla de grupos | — | % parecido (rango si los pares difieren), tipo, archivos, decisión ("keeps 1 of 3", saltado, "conflicting"), mejor archivo |
 | Archivos del grupo | — | Casilla Keep por archivo, del mejor al peor; espacio alterna el seleccionado; doble clic lo abre (#226) |
+| Conservar con otro nombre | columna **Name** (radio por archivo) | Con un solo archivo conservado, ese archivo toma el nombre del miembro marcado, en su propia carpeta y con su propia extensión (#228); el encabezado dice "kept as «…»". Con dos conservados los radios se apagan y la elección se guarda aparte. Se guarda al elegir, en `similar-renames/`, y ⌘Z la deshace |
 | Aviso | — | Por prioridad: un archivo que no se parece a ninguno conservado, decisiones guardadas que no cuadran, un grupo encadenado |
 | Dos lados | — | El mejor archivo conservado contra el seleccionado: miniatura, nombre, ruta, metadata (tamaño, fecha, resolución, codec, duración) y "this file is no longer there". Botones **Open** y **Show in Finder** por lado, apagados si el archivo ya no está (#226) |
 | Línea del par | — | Imagen: bits que difieren de 64. Video: % de cuadros que coinciden, y "judged on N of 8 frames" si son menos. Si los dos no son par: lo dice |
@@ -189,11 +190,11 @@ Una hoja por detector, con la misma forma:
 
 | | Exactos | Carpetas | Parecidos |
 |---|---|---|---|
-| Qué dice la simulación | archivos y **bytes** que se liberarían | carpetas que se moverían | archivos y de cuántos pares |
+| Qué dice la simulación | archivos y **bytes** que se liberarían | carpetas que se moverían | archivos y de cuántos pares, y qué archivo se queda con qué nombre |
 | Qué verifica antes de mover | re-hash contra el digest del escaneo | **contención**: cada archivo con gemelo byte-idéntico en la misma ruta relativa, ocultos, paquetes y vacíos incluidos; solo el ruido de Finder (`.DS_Store`) queda fuera | **re-puntúa** el par contra el umbral, contra un archivo que se queda cuando alguno de sus pares lo tiene |
 | Qué excluye y nombra | — | pares anidados colapsados, contradicciones | contradicciones |
-| Durante | Verifying / Moving N of N, Stop | igual, más archivos revisados | igual |
-| Después | movidos, fallas, rehúsas, aviso de cuarentena | igual | igual |
+| Durante | Verifying / Moving N of N, Stop | igual, más archivos revisados | igual, más Renaming N of N: cada renombrado es un paso |
+| Después | movidos, fallas, rehúsas, aviso de cuarentena | igual | igual, más los renombrados y los que conservaron su nombre, con la razón |
 | Deshacer desde la hoja | Undo This Session | igual | igual |
 
 En los tres: aplicar exige una simulación **vigente** (editar una decisión la invalida); va a la Papelera real,
@@ -210,7 +211,9 @@ veinte fallas seguidas detienen; cancelar devuelve reporte de lo que sí se movi
 | Clean Up… / Clean Up Undone Sessions… | botón o menú | Borra journals cuyos archivos ya volvieron **todos**; nunca uno ilegible o vacío |
 
 Deshacer nunca sobrescribe: una ruta ocupada por contenido idéntico cuenta como ya devuelta, y cualquier otra
-cosa se bloquea y se dice por qué.
+cosa se bloquea y se dice por qué. Los renombrados de una sesión de parecidos se deshacen **primero** (#228), porque
+el nombre que tomaron suele ser la ruta original de un archivo de esa misma sesión. En el historial, un renombrado
+cuenta como un archivo de la sesión, con tamaño 0.
 
 ### 1.10 Lo que la app recuerda
 
@@ -221,7 +224,7 @@ cosa se bloquea y se dice por qué.
 | Tamaño de ventana | biblioteca, revisión exacta y carpetas; **el visor de parecidos no** |
 | Resultado del chequeo de disco | `~/Library/Caches`, por clave de grupo |
 | Cachés de digests y de hashes perceptuales | `~/Library/Caches` |
-| Escaneos, decisiones y journals | `~/.local/state/rav/duplicate/` ([`FORMATO.md`](FORMATO.md)) |
+| Escaneos, decisiones, nombres elegidos y journals | `~/.local/state/rav/duplicate/` ([`FORMATO.md`](FORMATO.md)) |
 
 ---
 
@@ -320,6 +323,7 @@ implementación llame casi idéntico y la otra ajeno. Lo vuelve a medir el modo 
 | Papelera real | `trashItem`, que da el "Sacar del basurero" de Finder. Medido en APFS, FAT32 y los externos |
 | Cuarentena como fallback | Probada en un montaje `smbfs` real; no rescata un volumen de solo lectura |
 | Verificar antes de actuar | Exactos re-hashean, parecidos re-puntúan, carpetas exigen contención |
+| Renombrar al conservar | `renamex_np` con `RENAME_EXCL`, al final y solo si la corrida terminó y el dueño del nombre ya se fue: el sistema de archivos mismo rehúsa un nombre ocupado. En el journal como `rename`, tamaño 0 |
 | Compuerta de simulación | Huella FNV-1a del plan; editar una decisión invalida la aprobación |
 | Journal JSON Lines | Lotes de 32; un `undone_at` se agrega, nunca reescribe |
 | Cancelar | Devuelve reporte y hace el flush; una cancelación nunca se reporta como archivo ilegible |
@@ -330,6 +334,7 @@ implementación llame casi idéntico y la otra ajeno. Lo vuelve a medir el modo 
 |---|---|
 | JSON escrito a mano | `\uXXXX`, `1.0` para doubles enteros, indent 2, orden de inserción: el formato de `json.dumps` de Python |
 | Seis formatos | `scans`, `decisions`, `folder-scans`, `folder-decisions`, `similar-scans`, `similar-decisions` — tres formas distintas de documento de decisiones |
+| Uno propio | `similar-renames`, que el CLI no lee: su mapa de pares no tiene dónde poner un nombre |
 | Orden por bytes UTF-8 | `PathOrder`: NFC y NFD son rutas distintas |
 | Escrituras atómicas | Temporal y rename: quien lee ve el documento viejo o el nuevo |
 

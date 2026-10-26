@@ -164,6 +164,7 @@ $XDG_STATE_HOME/rav/duplicate/      (o ~/.local/state/rav/duplicate/)
 ├── folder-decisions/
 ├── similar-scans/          imágenes y videos parecidos
 ├── similar-decisions/
+├── similar-renames/        con qué nombre se conserva un archivo parecido (solo esta app)
 └── journal/                qué se movió y a dónde, para poder deshacerlo
 ```
 

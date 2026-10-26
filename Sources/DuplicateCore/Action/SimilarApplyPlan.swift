@@ -46,22 +46,26 @@ public struct SimilarApplyPlan: Sendable {
     public let imageThreshold: Int
     public let videoThreshold: Double
     public let scanID: String
+    /// Kept files that take the name of a file this plan moves (#228), carried out after every move.
+    public let renames: [SimilarRename]
 
     public init(
         items: [SimilarApplyItem],
         contradicted: [String],
         imageThreshold: Int,
         videoThreshold: Double,
-        scanID: String
+        scanID: String,
+        renames: [SimilarRename] = []
     ) {
         self.items = items
         self.contradicted = contradicted
         self.imageThreshold = imageThreshold
         self.videoThreshold = videoThreshold
         self.scanID = scanID
+        self.renames = renames
     }
 
-    public var isEmpty: Bool { items.isEmpty }
+    public var isEmpty: Bool { items.isEmpty && renames.isEmpty }
     public var pairCount: Int { Set(items.map(\.pairKey)).count }
 
     /// Builds the plan from a review.
@@ -113,7 +117,8 @@ public struct SimilarApplyPlan: Sendable {
             contradicted: PathOrder.sorted(state.contradictions),
             imageThreshold: state.scan.imageThreshold,
             videoThreshold: state.scan.videoThreshold,
-            scanID: state.scan.scanID
+            scanID: state.scan.scanID,
+            renames: state.renamePlan
         )
     }
 
@@ -127,6 +132,13 @@ public struct SimilarApplyPlan: Sendable {
             hash.combine("\u{1}")
             hash.combine(item.path)
             hash.combine("\u{2}")
+        }
+        // A name chosen after the dry run changes what the apply does, so it changes what was approved.
+        for rename in renames {
+            hash.combine("\u{3}")
+            hash.combine(rename.keptPath)
+            hash.combine("\u{1}")
+            hash.combine(rename.nameFromPath)
         }
         return hash.value
     }
