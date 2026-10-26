@@ -150,3 +150,25 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
   tres runners llaman a `MoveJournal.ensureWritable` antes del primer movimiento. Con `access`, no creando el
   archivo: un journal vacío sería una sesión que el historial lista y la poda nunca puede quitar. Un disco que se
   llena a media corrida sigue siendo posible.
+- **Conservar con el nombre de otro es un renombrado exclusivo, al final (#228).** `renamex_np` con `RENAME_EXCL`,
+  medido en el volumen de arranque: con el destino ocupado devuelve `EEXIST` y deja el otro archivo intacto, y con un
+  nombre que solo cambia mayúsculas **sí** renombra. Un `fileExists` antes del renombrado habría rehusado ese segundo
+  caso, porque en un volumen que ignora mayúsculas el nombre viejo contesta por el nuevo. Corre solo si la corrida
+  terminó (ni cancelada ni detenida) y solo si el archivo que presta el nombre ya no está: el nombre se libera
+  cuando el otro se va.
+- **Al deshacer, los renombrados van primero, del último al primero.** El nombre nuevo suele ser la ruta original de
+  un archivo que la misma sesión mandó al basurero; planeado en orden de journal, ese archivo quedaba bloqueado como
+  "ruta ocupada" por el archivo que el mismo deshacer iba a quitar de ahí. El resto se planea contra el sistema de
+  archivos **como quedará** tras esos renombrados, construido **una vez**: reconstruirlo por cada una de 4,000
+  entradas sería cuadrático, y sin renombrados es el entorno mismo.
+- **Y un renombrado que solo cambia mayúsculas no está "ya devuelto".** `IMG.png` → `img.png` deja el nombre viejo
+  "existiendo" en un volumen que ignora mayúsculas, y el planificador lo leía como restaurado. El entorno pregunta
+  ahora si dos rutas son el mismo archivo (`FileIdentity.same`, por dispositivo e inodo).
+- **Los métodos de ruta de `NSString` limpian lo que devuelven, y eso rompió el deshacer.** `deletingLastPathComponent`
+  y `appendingPathComponent` colapsan un `//`, así que el destino del renombrado dejó de ser, byte a byte, la ruta que
+  el otro archivo dejó libre, y el plan de deshacer —que empata rutas por bytes— lo bloqueó. Lo destapó el test de
+  punta a punta, porque `NSTemporaryDirectory()` termina en `/`. El destino se corta sobre bytes UTF-8.
+- **Un test de cancelación que cancela antes de que el nombre se libere no prueba la guarda.** El primero pasaba
+  con las dos guardas de cancelación quitadas: el archivo que prestaba el nombre seguía ahí, y la otra guarda
+  ("su dueño sigue") detenía el renombrado. El que muerde cancela **después** de que ese archivo se movió, con un
+  hasher que cancela su propia tarea al contestar.

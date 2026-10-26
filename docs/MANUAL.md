@@ -163,7 +163,7 @@ Un escaneo de carpetas muestra pares de carpetas con casi el mismo contenido:
 Un escaneo de imágenes muestra **grupos**: todos los archivos que se parecen entre sí, juntos. Tres copias del mismo
 video son un grupo, y se deciden de una vez:
 
-![Imágenes parecidas](https://raw.githubusercontent.com/rogalvil/duplicate/09b3e2cd08301337165c14d92cb599f442a8f634/manual/similar-image-laptop-v3.png)
+![Imágenes parecidas](https://raw.githubusercontent.com/rogalvil/duplicate/70649265d8759d7c4fcbdb111200e9a31062bdd0/manual/similar-image-laptop-v4.png)
 
 - **Arriba**, filtros: qué tan parecidas, imágenes o videos o los dos, y **Sin decidir**. Con «idénticas», solo
   aparecen los grupos donde todos los archivos son iguales entre sí.
@@ -185,13 +185,26 @@ video son un grupo, y se deciden de una vez:
 - **Aceptar los N sin decidir** acepta la sugerencia de los grupos que la lista muestra y nadie ha decidido, y antes
   te dice cuántos archivos y bytes son.
 
+**Conservar un archivo con el nombre de otro.** A veces la mejor copia tiene el peor nombre: «foto copia.jpg» tiene
+más resolución, pero el nombre que quieres es el de «foto.jpg». Cuando el grupo conserva un solo archivo, la columna
+**Nombre** elige de quién toma el nombre: marca el radio de «foto.jpg» y el encabezado dice «se conserva como
+«foto.jpg»». Al aplicar, la app manda los otros al basurero y después renombra el que se queda, **en su propia
+carpeta y con su propia extensión**: una foto PNG con el nombre de un JPG se llama `.png`. El radio del archivo que se
+queda vuelve a su propio nombre. Con dos archivos conservados la columna se apaga, porque no hay un solo archivo al
+cual darle el nombre.
+
+- **Nunca escribe encima.** Si otro archivo ya tiene ese nombre, o el archivo que prestaba el nombre no se pudo mandar
+  al basurero, el que se queda conserva su nombre y el reporte dice por qué.
+- **Se deshace con lo demás.** «Deshacer esta sesión» le devuelve su nombre al archivo y después saca del basurero
+  los otros.
+
 **Un archivo solo se descarta si se parece a uno que se conserva.** A veces A se parece a B y B a C, pero A y C no
 se parecen: el grupo lo avisa, y si desmarcas de modo que un archivo quede sin ningún parecido entre los que se
 conservan, la app no confirma y te dice cuál es.
 
 Los videos se comparan por cuadros:
 
-![Videos parecidos](https://raw.githubusercontent.com/rogalvil/duplicate/09b3e2cd08301337165c14d92cb599f442a8f634/manual/similar-video-laptop-v4.png)
+![Videos parecidos](https://raw.githubusercontent.com/rogalvil/duplicate/70649265d8759d7c4fcbdb111200e9a31062bdd0/manual/similar-video-laptop-v5.png)
 
 Las decisiones se guardan por par, el formato que también lee el CLI. Si un escaneo trae decisiones por par que no
 cuadran entre sí (de una versión anterior de la app, o del CLI), el grupo dice «sin cuadrar» y confirmarlo las
