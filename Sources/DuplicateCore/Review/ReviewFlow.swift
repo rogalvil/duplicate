@@ -1,6 +1,4 @@
 /// Where a review has got to.
-///
-/// Ports `FlowStep` (`src/rav/core/duplicate_flow.py:18-31`).
 public enum FlowStep: String, Sendable, CaseIterable {
     case scanned
     case interactiveDone
@@ -9,8 +7,6 @@ public enum FlowStep: String, Sendable, CaseIterable {
 }
 
 /// Something the user can ask for.
-///
-/// Ports `FlowAction` (`src/rav/core/duplicate_flow.py:7-16`).
 public enum FlowAction: String, Sendable, CaseIterable {
     case review
     case showReport
@@ -25,8 +21,8 @@ public enum FlowAction: String, Sendable, CaseIterable {
 /// The state machine that decides what the user may do next.
 ///
 /// **The one invariant worth the whole type: `apply` is reachable only from `dryRunDone`.** Nothing is
-/// moved until a dry run has been produced and shown. The CLI enforces this too
-/// (`src/rav/core/duplicate_flow.py:49-71`), but implicitly, in the branches of its command loop -- so the
+/// moved until a dry run has been produced and shown. The CLI enforces this too,
+/// but implicitly, in the branches of its command loop -- so the
 /// rule lives wherever the loop happens to be correct.
 ///
 /// Here it is a value type Core owns, and the UI *asks* it. A greyed-out button is a presentation detail; a
@@ -53,7 +49,7 @@ public struct ReviewFlow: Sendable, Equatable {
 
     /// Whether an action is offered right now.
     ///
-    /// Ports the per-step option tables of `menu_options` (`src/rav/core/duplicate_flow.py:40-73`), with
+    /// Ports the per-step option tables of `menu_options`, with
     /// `hasDecisions` actually consulted -- the CLI takes that parameter and never reads it, so its
     /// "ver decisiones" is offered even when there is nothing to show.
     public func isAvailable(_ action: FlowAction) -> Bool {

@@ -35,7 +35,7 @@ sobre la app → **Abrir**, o en Ajustes del Sistema → Privacidad y Seguridad 
 
 Es la ventana con la que abre la app. La primera vez está vacía y te dice cómo empezar:
 
-![Biblioteca vacía](https://raw.githubusercontent.com/rogalvil/duplicate/04d73cf7d119be929c5f4d5d1114c928355e25c4/manual/library-empty-laptop.png)
+![Biblioteca vacía](https://raw.githubusercontent.com/rogalvil/duplicate/54876a197de22b1be0d59896a0c027de6135ce05/reference-removal/after-es.png)
 
 La ruta de abajo es dónde guarda los escaneos ([sección 10](#10-dónde-quedan-tus-datos)). Cada escaneo que hagas
 aparece aquí como una fila:
@@ -233,7 +233,7 @@ Deshacer una sesión no tiene atajo a propósito: devolver cuatro mil archivos n
 
 ## 10. Dónde quedan tus datos
 
-- **Escaneos, decisiones y el registro de sesiones**: `~/.local/state/rav/duplicate/`, en JSON legible. El formato
+- **Escaneos, decisiones y el registro de sesiones**: `~/.local/state/duplicate/`, en JSON legible. El formato
   está en [`FORMATO.md`](FORMATO.md).
 - **Cachés de hashes**: `~/Library/Caches/com.rogalvil.duplicate/`. macOS las puede borrar si falta espacio; lo
   único que se pierde es tiempo en el siguiente escaneo.

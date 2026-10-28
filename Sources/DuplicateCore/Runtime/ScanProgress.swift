@@ -3,7 +3,7 @@ import Synchronization
 /// Which stage a scan is in.
 ///
 /// `indexing` has no total: the walk does not know how many files exist until it finishes, exactly as
-/// the CLI's `on_file` hook cannot report one (`src/rav/core/duplicates.py:62`). Everything after it
+/// the CLI's `on_file` hook cannot report one. Everything after it
 /// does, which is why the UI shows an indeterminate bar and then a determinate one.
 public enum ScanPhase: Int, Sendable, CaseIterable {
     case idle = 0
@@ -81,7 +81,7 @@ public struct ScanProgress: Sendable, Equatable {
 
 /// Counters shared by every worker in a scan.
 ///
-/// **Pull, not push.** The CLI's hooks fire once per file (`src/rav/core/duplicates.py:60-63`). At
+/// **Pull, not push.** The CLI's hooks fire once per file. At
 /// 800,000 files, an actor hop or an `AsyncStream` yield per file is both an overhead and a flood: the
 /// UI would spend its time coalescing updates nobody can read. Instead every worker bumps a relaxed
 /// atomic, and the UI reads ``snapshot()`` on a timer -- ten reads a second instead of 800,000 writes

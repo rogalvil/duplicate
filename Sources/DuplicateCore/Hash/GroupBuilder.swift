@@ -1,6 +1,6 @@
 /// Turns hashed files into the groups the shared format stores.
 ///
-/// Ports `find_duplicates`' final stage (`src/rav/core/duplicates.py:81-94`). Two orderings are
+/// Ports `find_duplicates`' final stage. Two orderings are
 /// reproduced exactly, because both are part of the format and neither may depend on the order tasks
 /// happened to finish in:
 ///

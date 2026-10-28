@@ -1,10 +1,10 @@
 import Foundation
 import Synchronization
 
-/// Reads and writes the documents shared with the `rav duplicate` CLI.
+/// Reads and writes persisted scans and decisions.
 ///
-/// **Every write is atomic.** The CLI uses `Path.write_text`, which is not
-/// (`src/rav/core/duplicates.py:107`): a crash or a full disk mid-write leaves a truncated JSON document
+/// **Every write is atomic.** The CLI uses `Path.write_text`, which is not:
+/// a crash or a full disk mid-write leaves a truncated JSON document
 /// where a scan used to be, and the next read of it fails. `Data.write(options: .atomic)` writes a
 /// temporary file and renames it, so a reader sees either the old document or the new one. Strict
 /// improvement with zero impact on the format.

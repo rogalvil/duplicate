@@ -18,9 +18,8 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **El detector de carpetas hashea *todos* los archivos**, no solo los que colisionan por tamaño — 244 de
   10,506 en un árbol medido, 986 de 15,242 en otro. Ahí la caché de hashes deja de ser optimización y es
   la diferencia entre minutos y segundos en la segunda corrida.
-- **En un par de carpetas, `folder_b` es la que se borra: `rav duplicate folders-move` conserva `folder_a`
-  y manda la otra a cuarentena.** El documento es formato compartido, así que la orientación no es
-  cosmética — un escaneo que escriba la app se puede aplicar con el CLI. Se normaliza por bytes:
+- **En un par de carpetas, la orientación se mantiene estable.** El documento se usa para aplicar decisiones,
+  así que la orientación no es cosmética — un escaneo que escriba la app se puede aplicar con el CLI. Se normaliza por bytes:
   `folder_a` es la ruta menor. Tomarla del orden de índices del árbol la tomaba del orden de enumeración,
   que nada promete reproducir. Medido: mismo conjunto de 42 pares que el CLI sobre un árbol real, y **los
   42 al revés**. El caso que lo destapa es una carpeta cuyo nombre es **prefijo del de su hermana** (`wen`

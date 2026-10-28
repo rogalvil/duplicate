@@ -2,9 +2,8 @@
 ///
 /// Foundation has no such type. `JSONSerialization` hands back an `NSDictionary`, which has no
 /// order, and `JSONEncoder` writes keys in declaration or sorted order depending on options. Neither
-/// can reproduce a document whose key order is significant -- and the format shared with the
-/// `rav duplicate` CLI is exactly that, because Python's `json.dumps` writes dictionary keys in
-/// insertion order.
+/// can reproduce a document whose key order is significant. The persisted format follows Python
+/// `json.dumps`, which writes dictionary keys in insertion order.
 public enum JSONValue: Sendable, Equatable {
     /// Members in document order. Duplicate keys are possible in malformed input and preserved.
     case object([JSONMember])

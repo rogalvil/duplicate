@@ -3,9 +3,8 @@
 App nativa de macOS para encontrar archivos duplicados. Swift, AppKit programático, cero
 dependencias externas.
 
-Nació como versión con ventana de `rav duplicate`, una herramienta de línea de comandos del mismo autor que no
-es pública, y agrega lo que esa herramienta no tenía: vista previa antes de borrar, escaneo concurrente con
-caché, y deshacer. Para usarla no hace falta nada más.
+Incluye vista previa antes de borrar, escaneo concurrente con caché y deshacer por sesión.
+Funciona de forma independiente, sin instalar otras herramientas.
 
 **Estado: en construcción, y la lista de abajo es literal.** No hay que deducir qué falta.
 
@@ -107,7 +106,7 @@ make uninstall              # quita la copia de /Applications
 rm -rf ~/Library/Caches/com.rogalvil.duplicate    # la caché de hashes, dato derivado
 ```
 
-El directorio de estado (`~/.local/state/rav/duplicate/`) **no se toca**: son los escaneos y decisiones del
+El directorio de estado (`~/.local/state/duplicate/`) **no se toca**: son los escaneos y decisiones del
 usuario, no de la app.
 
 ## Cómo se usa hoy
@@ -157,7 +156,7 @@ Tres detectores:
 ## Dónde guarda lo que encuentra
 
 ```
-$XDG_STATE_HOME/rav/duplicate/      (o ~/.local/state/rav/duplicate/)
+$XDG_STATE_HOME/duplicate/      (o ~/.local/state/duplicate/)
 ├── scans/                  duplicados exactos
 ├── decisions/              qué conservar, por grupo
 ├── folder-scans/           carpetas parecidas
@@ -167,6 +166,9 @@ $XDG_STATE_HOME/rav/duplicate/      (o ~/.local/state/rav/duplicate/)
 ├── similar-renames/        con qué nombre se conserva un archivo parecido (solo esta app)
 └── journal/                qué se movió y a dónde, para poder deshacerlo
 ```
+
+Si actualizas desde una versión que guardaba el estado en otra ubicación, copia sus subdirectorios a esta
+ruta con la app cerrada para recuperar la biblioteca. La app no mueve ni borra esos datos automáticamente.
 
 Documentos JSON legibles, escritos de forma atómica. Qué campos llevan, en qué orden y por qué el escritor de
 JSON está hecho a mano: [`docs/FORMATO.md`](docs/FORMATO.md).

@@ -2,7 +2,7 @@
 
 App con ventana para macOS que encuentra archivos duplicados: exactos por SHA-256, carpetas por
 coeficiente de Dice, media por hash perceptual. Swift nativo, AppKit programático, sin dependencias
-externas. Puerto de `rav duplicate`, un CLI en Python del mismo autor.
+externas. Aplicación independiente con formatos JSON documentados.
 
 El detalle de arquitectura y las alternativas descartadas están en
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). **Lo que la app hace hoy, capacidad por capacidad, está en
@@ -283,5 +283,5 @@ resultados distintos y no se confunden:
   significa molestar. Los duplicados dentro de `~/Library` son abrumadoramente cachés donde quitar un
   "duplicado" rompe una app. Y una app que pide Acceso Total al Disco para ordenar Descargas es
   indistinguible de malware para un usuario cuidadoso. `~/Library` se excluye por default.
-- **No sandboxear.** `~/.local/state/rav/` está fuera del contenedor, y el estado compartido con el
-  CLI es el punto de la app.
+- **No sandboxear.** `~/.local/state/duplicate/` está fuera del contenedor y debe seguir accesible
+  para respaldar o leer los escaneos con otras herramientas.

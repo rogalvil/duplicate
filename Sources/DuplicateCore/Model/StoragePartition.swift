@@ -84,8 +84,8 @@ public struct StoragePartition: Hashable, Sendable {
 
     /// The files to remove, keeping the cluster that holds `keeper`.
     ///
-    /// **Never `files[1:]`.** That is what the CLI hands to its move and delete paths
-    /// (`src/rav/core/duplicates.py:140-144`), and on a group containing a hardlink it moves a second
+    /// **Never `files[1:]`.** That is what the CLI hands to its move and delete paths,
+    /// and on a group containing a hardlink it moves a second
     /// name for the very inode being kept: the keeper survives, the reported space is not recovered, and
     /// a path the user may still rely on is gone. One representative per cluster, minus the keeper's,
     /// is the only set whose removal frees exactly what was promised.

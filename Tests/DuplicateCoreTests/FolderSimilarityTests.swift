@@ -450,8 +450,7 @@ struct FolderSimilarityTests {
     }
 
     /// **`folderA` is the byte-smaller path, and a folder gets deleted on the strength of it.**
-    /// `rav duplicate folders-move` keeps `folder_a` and quarantines `folder_b`, and the document is the
-    /// shared format, so orientation is not cosmetic.
+    /// Persisted decisions depend on stable pair orientation, so it is not cosmetic.
     ///
     /// The fixture is the shape that exposes it: a directory whose name is a **prefix of a sibling's**.
     /// A depth-first index order visits `wen` before `wen 2` because the shorter name sorts first, while

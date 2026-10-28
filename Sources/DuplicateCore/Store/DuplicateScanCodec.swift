@@ -1,16 +1,12 @@
-/// Maps ``DuplicateScan`` to and from the JSON the `rav duplicate` CLI reads and writes.
+/// Maps ``DuplicateScan`` to and from its persisted JSON representation.
 ///
-/// Field names come from the CLI's `to_dict`/`load_scan` (`src/rav/core/duplicates.py:27-33`,
-/// `:114-133`). Note `sha256`: the JSON key does not match the dataclass field, which is called
-/// `digest`. Automatic key strategies cannot produce that, which is why the mapping is written out.
+/// The digest is stored under `sha256`; the mapping to the model is written out explicitly.
 ///
 /// **Encoding order is the format.** Python writes dictionary keys in insertion order, so
 /// `scan_id, root, created_at, groups` and `size, sha256, files` are not stylistic -- reordering them
 /// produces a file that is valid JSON and not byte-identical.
 ///
-/// **Decoding tolerates unknown keys.** The CLI's `load_scan` reads only the keys it knows and
-/// ignores the rest, so the app can add namespaced keys of its own without breaking the CLI, and must
-/// return the favour.
+/// **Decoding tolerates unknown keys** so additional metadata does not prevent loading a scan.
 public enum DuplicateScanCodec {
     // MARK: - Encoding
 
@@ -31,14 +27,11 @@ public enum DuplicateScanCodec {
         ]
         // Emitted only when the scan actually knows the partition, and under a namespaced key.
         //
-        // Both halves matter. The CLI's `load_scan` reads only the keys it knows and ignores the rest
-        // (`src/rav/core/duplicates.py:114-133`), so an extra key is forward-compatible -- but omitting it
-        // when there is nothing to say is what keeps a re-encode of a CLI-written document byte-identical,
-        // which is the property the interop selftests assert against 226 real files.
+        // Omitting an unknown partition keeps a re-encode of a document without metadata byte-identical.
         if let storage = group.storage {
             members.append(
                 JSONMember(
-                    key: "rav_app",
+                    key: "duplicate_app",
                     value: .object([
                         JSONMember(
                             key: "storage_clusters",
@@ -125,7 +118,7 @@ public enum DuplicateScanCodec {
     /// or an upper bound.
     private static func decodeStorage(_ value: JSONValue, files: [String]) -> StoragePartition? {
         guard
-            let app = value["rav_app"],
+            let app = value["duplicate_app"],
             let raw = app["storage_clusters"]?.arrayValue
         else { return nil }
         var clusters: [[String]] = []

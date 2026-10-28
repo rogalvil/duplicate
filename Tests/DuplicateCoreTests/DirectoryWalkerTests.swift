@@ -277,7 +277,7 @@ struct FileManagerWalkerTests {
         // A real interop break if it were wrong, not a cosmetic one. FileManager.enumerator resolves
         // symlinks in the root, so a walk of /var/x yields /private/var/x, while Python's os.walk
         // string-joins the root it was given. The CLI matches the kept paths in a decisions file back to
-        // a group **by string equality** (src/rav/core/duplicate_review.py:76-83), so a review done in
+        // a group **by string equality**, so a review done in
         // the app would silently fail to apply in the CLI for any root under /tmp, /etc or /var.
         //
         // NSTemporaryDirectory() lives under /var, which is a symlink to /private/var, so this fixture

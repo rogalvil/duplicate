@@ -32,7 +32,7 @@ public struct DuplicateGroup: Hashable, Sendable {
 
     /// The key decisions are stored under: `"<size>:<hex digest>"`.
     ///
-    /// Ports `group_key` (`src/rav/core/duplicate_review.py:160`). Keying on content rather than on
+    /// Ports `group_key`. Keying on content rather than on
     /// paths is what lets a review survive a rescan: the same files found again produce the same key,
     /// so decisions made yesterday still apply.
     public var key: String { "\(size):\(digest.hexString)" }
@@ -65,8 +65,8 @@ public struct DuplicateGroup: Hashable, Sendable {
 
     /// The files to remove when `keeper` is kept: one representative per storage cluster.
     ///
-    /// **Never `files[1:]`.** That is what the CLI hands to its move and delete paths
-    /// (`src/rav/core/duplicates.py:140-144`), and on a group containing a hardlink it moves a second
+    /// **Never `files[1:]`.** That is what the CLI hands to its move and delete paths,
+    /// and on a group containing a hardlink it moves a second
     /// name for the very inode being kept: the keeper survives, the promised space is not recovered,
     /// and a path the user may still rely on is gone.
     public func removalCandidates(keeping keeper: String) -> [String] {
@@ -109,8 +109,7 @@ public struct DuplicateGroup: Hashable, Sendable {
 
     /// Whether any member path is relative.
     ///
-    /// `rav duplicate scan .` stores whatever string it was given, so a scan can carry relative
-    /// paths (`src/rav/core/duplicates.py:97-104`). They cannot be acted on: the app's working
+    /// An imported scan can carry relative paths. They cannot be acted on: the app's working
     /// directory is `/` when Launch Services starts it.
     public var hasRelativePaths: Bool {
         files.contains { !$0.hasPrefix("/") }

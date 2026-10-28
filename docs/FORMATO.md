@@ -4,10 +4,9 @@ Dónde guarda la app lo que encuentra y lo que decides, y cómo está escrito. S
 archivos, para leerlos con otra herramienta, y para entender por qué el escritor de JSON está hecho a mano en vez
 de usar `JSONEncoder`.
 
-**De dónde viene el formato.** La app nació como versión con ventana de `rav duplicate`, una herramienta de línea
-de comandos en Python del mismo autor, que no es pública. Las dos comparten estos archivos, así que el formato
-sigue las reglas de cómo Python los escribe: el orden de las rutas, el escape de caracteres, `1.0` y no `1`. Esas
-reglas son las que explican casi todo lo que sigue. No hace falta tener esa herramienta para usar la app.
+**Reglas del formato.** Los documentos son JSON legible y siguen las convenciones de `json.dumps` de
+Python: el orden de las rutas, el escape de caracteres, `1.0` y no `1`. Esas reglas permiten leerlos con
+otras herramientas y explican casi todo lo que sigue.
 
 Todo lo que sigue está verificado contra archivos reales —119 escaneos, 55 archivos de decisiones, 226 documentos—
 con modos de selftest que decodifican, vuelven a codificar y **comparan bytes**.
@@ -15,7 +14,7 @@ con modos de selftest que decodifican, vuelven a codificar y **comparan bytes**.
 ## Dónde
 
 ```
-$XDG_STATE_HOME/rav/duplicate/      (o ~/.local/state/rav/duplicate/ si no está puesta)
+$XDG_STATE_HOME/duplicate/      (o ~/.local/state/duplicate/ si no está puesta)
 ├── scans/<scan_id>.json                 duplicados exactos
 ├── decisions/<scan_id>.json             qué conservar, por grupo
 ├── folder-scans/<scan_id>.json          carpetas parecidas
@@ -26,16 +25,15 @@ $XDG_STATE_HOME/rav/duplicate/      (o ~/.local/state/rav/duplicate/ si no está
 └── journal/<session_id>.jsonl           qué se movió y a dónde, para poder deshacerlo
 ```
 
-Fuera de ahí, en `~/Library/Caches/com.rogalvil.duplicate/`, están las cachés de hashes (`hashes.v1` y
-`phashes.v1`). Son datos derivados: macOS las puede borrar cuando falta espacio, y lo único que se pierde es
+Fuera de ahí, en `~/Library/Caches/com.rogalvil.duplicate/`, están las cachés de hashes (`hashes.v2` y
+`phashes.v2`). Son datos derivados: macOS las puede borrar cuando falta espacio, y lo único que se pierde es
 tiempo en el siguiente escaneo.
 
 **Un subdirectorio ausente es normal**, no un error: `folder-decisions/` no existe hasta que alguien decide algo
 sobre carpetas. Quien lea estos archivos no puede asumir que los seis existen.
 
-**`XDG_STATE_HOME` puesta pero vacía cuenta como ausente** y cae a `~/.local/state`. Es lo que hace Python (`""` es
-falso ahí); en Swift `""` es verdadero, y una traducción literal resolvería la raíz a `/rav` y dejaría de ver todos
-los escaneos que ya existen, reportando éxito.
+**`XDG_STATE_HOME` puesta pero vacía cuenta como ausente** y cae a `~/.local/state`. Usar una base vacía
+resolvería la raíz a `/duplicate` y ocultaría los escaneos existentes.
 
 ## `scan_id`
 
@@ -74,8 +72,9 @@ posiciones 8 y 15.
 - `created_at` es una **cadena opaca**: se guarda como llegó y no se reconstruye, lo que de paso evita el problema
   de los seis dígitos.
 - `size` en bytes, el mismo para todos los miembros del grupo por construcción. `sha256` en hexadecimal minúscula.
-- **Las claves desconocidas se ignoran al leer.** La app agrega `shared_storage` y `partial` a cada grupo, y un
-  lector que solo conozca `size`, `sha256` y `files` los salta sin problema.
+- **Las claves desconocidas se ignoran al leer.** El campo opcional `duplicate_app` contiene
+  `storage_clusters` (rutas que comparten almacenamiento) y `storage_exact` (si la partición es exacta).
+  Sin esa información, el espacio recuperable se presenta como cota superior.
 - `root` puede ser **relativo** en un escaneo hecho desde una terminal con `.` como raíz. Esas rutas no se pueden
   accionar desde una app —Launch Services la arranca con `/` como directorio de trabajo, así que resolverlas
   apuntaría a otro lado—, y la app las marca y se niega a actuar sobre ellas.

@@ -1,6 +1,6 @@
 /// One exact-duplicate scan, as stored in `duplicate/scans/<scan_id>.json`.
 ///
-/// Mirrors the CLI's dataclass (`src/rav/core/duplicates.py:35`) field for field, including the
+/// Mirrors the CLI's dataclass field for field, including the
 /// decision to hold `createdAt` as an opaque `String`.
 public struct DuplicateScan: Hashable, Sendable {
     public let scanID: String

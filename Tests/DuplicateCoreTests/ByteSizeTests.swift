@@ -6,7 +6,7 @@ import Testing
 struct ByteSizeParseTests {
     @Test("Parses the forms the CLI accepts")
     func parsesCLIForms() throws {
-        // Binary multipliers, matching _SIZE_UNITS (src/rav/core/duplicates.py:18-24). Decimal units
+        // Binary multipliers, matching _SIZE_UNITS. Decimal units
         // would make "10mb" in and "10.4 MB" out disagree with each other.
         #expect(try ByteSize.parse("0") == 0)
         #expect(try ByteSize.parse("512") == 512)

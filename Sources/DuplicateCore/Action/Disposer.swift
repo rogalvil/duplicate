@@ -130,11 +130,8 @@ public struct TrashDisposer: ItemDisposing {
 /// The layout mirrors the CLI's -- `<root>/<session>/<basename>` with `-2`/`-3` collision suffixes -- so a
 /// user who has used both tools recognises what they are looking at.
 ///
-/// **The root is deliberately not under `~/.Trash`.** The CLI defaults to
-/// `~/.Trash/rav-duplicates` (`src/rav/commands/duplicate.py:115`) and does not exclude it from its own
-/// walk, so running `rav duplicate ~` twice re-discovers everything the first run just quarantined and
-/// offers to quarantine it again. Living in Application Support avoids that entirely, and the walker
-/// excludes both roots anyway.
+/// **The root is deliberately outside `~/.Trash`.** Quarantined files must remain separate from the
+/// system Trash. The walker excludes both roots so later scans cannot rediscover discarded files.
 public struct QuarantineDisposer: ItemDisposing {
     public static func defaultRoot(
         bundleIdentifier: String = "com.rogalvil.duplicate",

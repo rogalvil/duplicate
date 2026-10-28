@@ -74,10 +74,10 @@ public struct HashCacheRecord: Hashable, Sendable {
 /// version discards the whole file. **There is no state in which the cache can be wrong without also
 /// failing its CRC.**
 public enum HashCacheFormat {
-    /// `RAVHC` plus a version, so a file from a future layout is recognised and discarded rather than
+    /// `DUPHC` plus a version, so a file from a future layout is recognised and discarded rather than
     /// misread.
-    public static let magic: [UInt8] = Array("RAVHC1\0\0".utf8)
-    public static let version: UInt32 = 1
+    public static let magic: [UInt8] = Array("DUPHC2\0\0".utf8)
+    public static let version: UInt32 = 2
     public static let headerSize = 32
     /// 8 volume + 8 inode + 8 size + 8 mtime + 8 generation + 32 digest + 4 crc + 4 padding.
     ///

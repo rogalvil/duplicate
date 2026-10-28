@@ -104,7 +104,7 @@ struct StoragePartitionTests {
 
     @Test("The removal set is one file per cluster, never every other file")
     func removalSetIsOnePerCluster() {
-        // The CLI hands files[1:] to its move and delete paths (src/rav/core/duplicates.py:140-144). On
+        // The CLI hands files[1:] to its move and delete paths. On
         // this group that would move /a-clone -- a second name for the very storage being kept -- so the
         // keeper survives, nothing is freed, and a path the user may rely on is gone.
         let partition = StoragePartition.of([
@@ -327,7 +327,7 @@ struct StoragePartitionCodecTests {
             try DuplicateScanCodec.decode(
                 group: JSONReader.parse(
                     """
-                    {"size": 1, "sha256": "\(valid)", "files": ["/a", "/b"], "rav_app": \(storageJSON)}
+                    {"size": 1, "sha256": "\(valid)", "files": ["/a", "/b"], "duplicate_app": \(storageJSON)}
                     """
                 ),
                 at: 0

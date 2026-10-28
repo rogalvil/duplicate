@@ -14,24 +14,22 @@ struct StateDirectoryTests {
         )
     }
 
-    @Test("Falls back to ~/.local/state/rav when XDG_STATE_HOME is unset")
+    @Test("Falls back to ~/.local/state/duplicate when XDG_STATE_HOME is unset")
     func fallsBackWhenUnset() {
-        #expect(state().ravRootPath == "/Users/tester/.local/state/rav")
-        #expect(state().duplicateRootPath == "/Users/tester/.local/state/rav/duplicate")
+        #expect(state().stateRootPath == "/Users/tester/.local/state")
+        #expect(state().duplicateRootPath == "/Users/tester/.local/state/duplicate")
     }
 
     @Test("Falls back when XDG_STATE_HOME is set but empty")
     func fallsBackWhenEmpty() {
-        // Python's os.environ.get returns "" here, which is falsy, so the CLI falls through to
-        // ~/.local/state. An empty Swift String is truthy, so a literal translation resolves the
-        // root to /rav -- and an app that quietly sees zero existing scans looks exactly like an
-        // app whose user has never run a scan.
-        #expect(state("").ravRootPath == state().ravRootPath)
+        // An empty base must use the default state directory. Appending the app name to it
+        // would resolve to /duplicate and silently hide existing scans.
+        #expect(state("").stateRootPath == state().stateRootPath)
     }
 
     @Test("Honours an absolute XDG_STATE_HOME")
     func honoursAbsoluteOverride() {
-        #expect(state("/var/state").ravRootPath == "/var/state/rav")
+        #expect(state("/var/state").stateRootPath == "/var/state")
     }
 
     @Test("Never produces a trailing slash, whatever the input")
@@ -41,10 +39,11 @@ struct StateDirectoryTests {
         // would read as "nothing here" and the real error would surface later, somewhere else,
         // without mentioning the collision. This suite found that exact bug.
         for input in ["/var/state/", "/var/state//", "~/custom/"] {
-            #expect(!state(input).ravRootPath.hasSuffix("/"), "\(input) produced a trailing slash")
+            #expect(
+                !state(input).stateRootPath.hasSuffix("/"), "\(input) produced a trailing slash")
         }
-        #expect(state("/var/state/").ravRootPath == "/var/state/rav")
-        #expect(state("~/custom/").ravRootPath == "/Users/tester/custom/rav")
+        #expect(state("/var/state/").stateRootPath == "/var/state")
+        #expect(state("~/custom/").stateRootPath == "/Users/tester/custom")
         for slot in StateDirectory.Slot.allCases {
             #expect(!state().path(for: slot).hasSuffix("/"))
         }
@@ -52,37 +51,34 @@ struct StateDirectoryTests {
 
     @Test("Expands a leading tilde against the injected home")
     func expandsTilde() {
-        // The CLI applies Path(base).expanduser(), so ~ must expand or the two tools disagree on
-        // where the shared state lives.
-        #expect(state("~/custom").ravRootPath == "/Users/tester/custom/rav")
-        #expect(state("~").ravRootPath == "/Users/tester/rav")
+        // Expand against the injected home, independently of the process environment.
+        #expect(state("~/custom").stateRootPath == "/Users/tester/custom")
+        #expect(state("~").stateRootPath == "/Users/tester")
     }
 
-    @Test("Treats ~otheruser as a literal component, unlike Python")
+    @Test("Treats ~otheruser as a literal component")
     func doesNotExpandOtherUser() {
-        // A documented divergence. Python's expanduser resolves ~name through the password
-        // database; doing that here would ignore the injected home and make this type untestable.
+        // Looking up ~name through the password database would ignore the injected home.
         // The result is visibly not absolute, so a caller can refuse it.
         let resolved = state("~other/s")
-        #expect(resolved.ravRootPath == "~other/s/rav")
+        #expect(resolved.stateRootPath == "~other/s")
         #expect(!resolved.isAbsolute)
     }
 
     @Test("Keeps a relative root relative instead of resolving it against the working directory")
     func keepsRelativeRootRelative() {
-        // Python uses a relative XDG_STATE_HOME as-is even though the XDG spec forbids it. This
-        // reproduces that. Holding the path as a String rather than a URL is what makes it
+        // Holding the path as a String rather than a URL is what makes a relative base
         // detectable: URL(filePath:) would silently prepend the process's working directory, and
         // Launch Services starts the app with / as its working directory.
         let relative = state("relative/dir")
-        #expect(relative.ravRootPath == "relative/dir/rav")
+        #expect(relative.stateRootPath == "relative/dir")
         #expect(!relative.isAbsolute)
         #expect(state().isAbsolute)
     }
 
-    @Test("Spells the six shared subdirectories exactly as the CLI spells them")
-    func slotNamesMatchTheCLI() {
-        // Hyphenated, not camel-cased. A rename here means the app writes scans the CLI cannot see.
+    @Test("Keeps the persisted subdirectory names stable")
+    func slotNamesAreStable() {
+        // Renaming a slot would hide documents saved by previous builds.
         #expect(
             StateDirectory.Slot.allCases.map(\.rawValue) == [
                 "scans", "decisions", "folder-scans", "folder-decisions",
@@ -109,7 +105,7 @@ struct StateDirectoryTests {
     func buildsFilePath() throws {
         let path = try state().filePath(for: .scans, id: "20260511-112539-973098")
         #expect(
-            path == "/Users/tester/.local/state/rav/duplicate/scans/20260511-112539-973098.json")
+            path == "/Users/tester/.local/state/duplicate/scans/20260511-112539-973098.json")
     }
 
     @Test("URL accessors carry no trailing slash either")
@@ -118,7 +114,7 @@ struct StateDirectoryTests {
         // a URL built with directoryHint .isDirectory would append a slash and reintroduce the
         // fileExists blind spot through the back door.
         let resolved = state()
-        #expect(resolved.ravRoot.path(percentEncoded: false) == resolved.ravRootPath)
+        #expect(resolved.stateRoot.path(percentEncoded: false) == resolved.stateRootPath)
         #expect(resolved.duplicateRoot.path(percentEncoded: false) == resolved.duplicateRootPath)
         for slot in StateDirectory.Slot.allCases {
             #expect(

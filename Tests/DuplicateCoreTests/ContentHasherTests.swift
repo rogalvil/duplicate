@@ -112,8 +112,8 @@ struct ContentHasherTests {
 
     @Test("Reports a missing file as skippable rather than fatal")
     func reportsMissingFileAsSkippable() throws {
-        // The CLI's sha256_file returns None for an unreadable file and the scan carries on
-        // (src/rav/core/duplicates.py:208-219). A scan that aborts on the first vanished temporary
+        // The CLI's sha256_file returns None for an unreadable file and the scan carries on.
+        // A scan that aborts on the first vanished temporary
         // file is useless on a live machine.
         let hasher = ContentHasher()
         let missing = "/nonexistent-\(UUID().uuidString)/file"

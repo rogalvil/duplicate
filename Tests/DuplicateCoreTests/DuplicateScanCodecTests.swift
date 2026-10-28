@@ -89,7 +89,7 @@ struct DuplicateScanCodecTests {
 
     @Test("Flags a scan that stored relative paths")
     func flagsRelativePaths() throws {
-        // `rav duplicate scan .` stores the string it was given. Those paths cannot be acted on:
+        // Imported scans may contain relative paths. Those paths cannot be acted on:
         // Launch Services starts the app with / as its working directory, so a planner would target
         // the wrong files entirely.
         let absolute = try DuplicateScanCodec.decode(
@@ -142,7 +142,7 @@ struct DuplicateScanCodecTests {
                   "shared_storage": [["/x/a"]]
                 }
               ],
-              "rav_app": {"partial": true}
+              "duplicate_app": {"partial": true}
             }
             """
         )

@@ -37,7 +37,7 @@ public protocol FileHashing: Sendable {
 /// benchmark says so.
 public struct ContentHasher: FileHashing, Sendable {
     public struct Configuration: Sendable {
-        /// Read size. The CLI uses 1 MiB (`src/rav/core/duplicates.py:213`); keeping it means a
+        /// Read size. The CLI uses 1 MiB; keeping it means a
         /// chunk-boundary bug shows up the same way in both tools. Whether 4 MiB is better under
         /// `F_NOCACHE` is a measurement nobody has taken yet, so the default stays where the CLI is.
         public var chunkBytes: Int

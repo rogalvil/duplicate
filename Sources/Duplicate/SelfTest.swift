@@ -175,12 +175,9 @@ enum SelfTest {
 
     // MARK: - state-dir
 
-    /// Proves the state directory resolves the way the CLI resolves it.
+    /// Proves the state directory honours overrides and falls back when they are unset or empty.
     ///
-    /// The interesting assertion is the empty-`XDG_STATE_HOME` one: Python's `os.environ.get`
-    /// returns a falsy `""` and falls back to `~/.local/state`, while an empty Swift `String` is
-    /// truthy. A literal translation resolves the root to `/rav` and stops seeing every scan the
-    /// CLI ever wrote, while reporting success.
+    /// Appending the app name to an empty base would resolve to `/duplicate` and hide existing scans.
     ///
     /// Proof of teeth: change the `base.isEmpty` guard in StateDirectory to `base == nil` and this
     /// fails on the second assertion.
@@ -189,24 +186,24 @@ enum SelfTest {
 
         let unset = StateDirectory(environment: [:], homePath: home)
         try expect(
-            unset.ravRootPath == "/Users/tester/.local/state/rav",
-            "unset XDG_STATE_HOME resolved to \(unset.ravRootPath)"
+            unset.duplicateRootPath == "/Users/tester/.local/state/duplicate",
+            "unset XDG_STATE_HOME resolved to \(unset.duplicateRootPath)"
         )
 
         let empty = StateDirectory(environment: ["XDG_STATE_HOME": ""], homePath: home)
         try expect(
-            empty.ravRootPath == unset.ravRootPath,
-            "empty XDG_STATE_HOME resolved to \(empty.ravRootPath), "
+            empty.stateRootPath == unset.stateRootPath,
+            "empty XDG_STATE_HOME resolved to \(empty.stateRootPath), "
                 + "expected the same fallback as unset"
         )
 
         let tilde = StateDirectory(environment: ["XDG_STATE_HOME": "~/custom"], homePath: home)
         try expect(
-            tilde.ravRootPath == "/Users/tester/custom/rav",
-            "tilde was not expanded: \(tilde.ravRootPath)"
+            tilde.duplicateRootPath == "/Users/tester/custom/duplicate",
+            "tilde was not expanded: \(tilde.duplicateRootPath)"
         )
 
-        // The six shared slots must be spelled exactly as the CLI spells them.
+        // Persisted subdirectory names must stay stable.
         let expected = [
             "scans", "decisions", "folder-scans", "folder-decisions",
             "similar-scans", "similar-decisions", "similar-renames", "journal",
@@ -1993,8 +1990,8 @@ enum SelfTest {
     /// Proves a partly reviewed scan saves only what was reviewed.
     ///
     /// This is the fix for the most dangerous defect the port inherited. The CLI's `decisions()` writes an
-    /// entry for **every** group, including ones the user never opened, filled in with the heuristic's guess
-    /// (`src/rav/core/duplicate_review.py:152-157`). Quit after group 1 of 50 and the file records decisions
+    /// entry for **every** group, including ones the user never opened, filled in with the heuristic's guess.
+    /// Quit after group 1 of 50 and the file records decisions
     /// for 49 groups; apply then acts on all of them. In a terminal that needs a deliberate `q`. In a window,
     /// quitting is closing a window.
     ///
@@ -4610,8 +4607,7 @@ enum SelfTest {
         )
 
         // 5. Orientation, in the saved document, is decided by bytes and not by the walk.
-        // `rav duplicate folders-move` keeps `folder_a` and quarantines `folder_b`, so a document this app
-        // writes decides which folder that command destroys.
+        // Stable orientation keeps persisted decisions attached to the same folder.
         // Teeth: orient by the node indices instead and `folder_a` reads `.../wen/s`.
         let deep = try expectSome(
             reloaded.pairs.first { $0.folderA.hasSuffix("/s") && $0.folderB.hasSuffix("/s") },
@@ -7345,8 +7341,7 @@ enum SelfTest {
 
     /// Proves the keeper heuristic, and that the two ways of reaching it agree.
     ///
-    /// **The CLI's fifth defect**: its batch path takes `files[0]` while its interactive path uses the heuristic,
-    /// so `rav duplicate move` and a review of the same scan keep different files. One policy here, asserted from
+    /// Batch planning and interactive review must choose the same keeper. One policy is asserted from
     /// both directions.
     ///
     /// **And the answer is counter-intuitive on purpose**: the *deepest* file wins, because `depthScore` is

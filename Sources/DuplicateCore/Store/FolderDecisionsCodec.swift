@@ -44,7 +44,7 @@ public struct FolderDecisionsDocument: Hashable, Sendable {
     }
 }
 
-/// Maps ``FolderDecisionsDocument`` to and from the JSON `rav duplicate folders-review` reads and writes.
+/// Maps ``FolderDecisionsDocument`` to and from its persisted JSON representation.
 public enum FolderDecisionsCodec {
 
     public static func encode(_ document: FolderDecisionsDocument) -> JSONValue {

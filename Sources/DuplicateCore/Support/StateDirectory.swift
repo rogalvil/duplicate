@@ -1,10 +1,9 @@
 import Foundation
 
-/// Resolves the state directory shared with the `rav duplicate` CLI.
+/// Resolves the app's state directory under `$XDG_STATE_HOME/duplicate`.
 ///
-/// This is a port of `src/rav/config/paths.py:state_dir()`. Everything is injected -- the
-/// environment and the home directory -- so the resolution rules can be tested without touching
-/// the real `$HOME` or mutating the process environment.
+/// The environment and home directory are injected so resolution can be tested without touching the real
+/// `$HOME` or mutating the process environment.
 ///
 /// **Paths are held as strings, and `URL` is only a convenience accessor.** Two reasons, both
 /// learned the hard way:
@@ -17,25 +16,23 @@ import Foundation
 ///   A file sitting where a directory belongs then reads as "nothing here", and the real failure
 ///   surfaces later as an opaque Cocoa error that does not mention the collision.
 ///
-/// Two behaviours of the Python are load-bearing and easy to get wrong in Swift:
+/// Two resolution rules are load-bearing:
 ///
-/// 1. **An empty `XDG_STATE_HOME` must fall back.** Python's `os.environ.get` returns `""`, which
-///    is falsy, so the CLI falls through to `~/.local/state`. `ProcessInfo`'s equivalent returns
-///    `""` too, but an empty Swift `String` is not falsy, so a literal translation would resolve
-///    the state directory to `/rav` and silently stop seeing every existing scan.
-/// 2. **A leading tilde is expanded.** The CLI applies `Path(base).expanduser()`.
+/// 1. **An empty `XDG_STATE_HOME` must fall back** to `~/.local/state`, just like an unset variable.
+///    Appending the app's name to an empty base would point at `/duplicate` and hide existing scans.
+/// 2. **A leading tilde is expanded** against the injected home directory.
 ///
-/// Two deliberate divergences, documented rather than fixed:
+/// Two additional rules keep invalid paths detectable:
 ///
-/// - `~otheruser` is not expanded. Python's `expanduser` resolves it through the password
-///   database; doing the same here would ignore the injected home and make this type untestable.
+/// - `~otheruser` is not expanded. Looking it up through the password database
+///   would ignore the injected home and make this type untestable.
 ///   A tilde followed by anything other than `/` is treated as a literal path component.
-/// - A relative `XDG_STATE_HOME` is kept relative, exactly as Python keeps it, even though the XDG
+/// - A relative `XDG_STATE_HOME` is kept relative, even though the XDG
 ///   specification says it must be absolute. Callers that need an absolute path should check
 ///   ``isAbsolute`` and refuse: Launch Services starts the app with `/` as its working directory,
-///   so a relative root points somewhere the CLI never wrote to.
+///   so a relative root could point at the wrong directory.
 public struct StateDirectory: Sendable, Equatable {
-    /// The subdirectories under `<state>/rav/duplicate/`.
+    /// The subdirectories under `<state>/duplicate/`.
     ///
     /// The first six are shared with the CLI. ``journal`` is this app's own: it records what was
     /// moved where so a session can be undone, an action the CLI does not perform.
@@ -55,8 +52,8 @@ public struct StateDirectory: Sendable, Equatable {
         public var isSharedWithCLI: Bool { self != .journal && self != .similarRenames }
     }
 
-    /// The `rav` root as a path string, without a trailing slash.
-    public let ravRootPath: String
+    /// The state base as a path string, without a trailing slash; the app directory is appended separately.
+    public let stateRootPath: String
 
     /// Resolves the root from an environment and a home directory path.
     ///
@@ -67,9 +64,9 @@ public struct StateDirectory: Sendable, Equatable {
         let home = Self.trimmingTrailingSlashes(homePath)
         let base = environment["XDG_STATE_HOME"] ?? ""
         if base.isEmpty {
-            ravRootPath = Self.joining(home, ".local", "state", "rav")
+            stateRootPath = Self.joining(home, ".local", "state")
         } else {
-            ravRootPath = Self.joining(Self.expandingTilde(base, home: home), "rav")
+            stateRootPath = Self.expandingTilde(base, home: home)
         }
     }
 
@@ -84,8 +81,8 @@ public struct StateDirectory: Sendable, Equatable {
             environment: ProcessInfo.processInfo.environment, homePath: NSHomeDirectory())
     }
 
-    /// `<rav root>/duplicate`, without a trailing slash.
-    public var duplicateRootPath: String { Self.joining(ravRootPath, "duplicate") }
+    /// `<state base>/duplicate`, without a trailing slash.
+    public var duplicateRootPath: String { Self.joining(stateRootPath, "duplicate") }
 
     /// The path of one slot's directory, without a trailing slash. Does not create it.
     public func path(for slot: Slot) -> String {
@@ -107,14 +104,14 @@ public struct StateDirectory: Sendable, Equatable {
     }
 
     /// Whether the resolved root is absolute. See the note on relative `XDG_STATE_HOME`.
-    public var isAbsolute: Bool { ravRootPath.hasPrefix("/") }
+    public var isAbsolute: Bool { stateRootPath.hasPrefix("/") }
 
     // MARK: - URL accessors
     //
     // Only meaningful when `isAbsolute` is true: URL(filePath:) resolves a relative path against
     // the process's working directory.
 
-    public var ravRoot: URL { URL(filePath: ravRootPath, directoryHint: .notDirectory) }
+    public var stateRoot: URL { URL(filePath: stateRootPath, directoryHint: .notDirectory) }
     public var duplicateRoot: URL { URL(filePath: duplicateRootPath, directoryHint: .notDirectory) }
 
     public func directory(for slot: Slot) -> URL {

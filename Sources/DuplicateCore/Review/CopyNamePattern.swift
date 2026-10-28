@@ -2,12 +2,8 @@ import Foundation
 
 /// Recognises the names Finder and Windows give to a copy.
 ///
-/// The pattern is the CLI's, transliterated character for character from
-/// `src/rav/core/duplicate_review.py:15-38` and fed to `NSRegularExpression` with the same two options
-/// Python uses (`IGNORECASE | VERBOSE` becomes `.caseInsensitive | .allowCommentsAndWhitespace`).
-/// Reusing the text rather than hand-rolling the logic is deliberate: the two tools have to agree about
-/// which file looks like a copy, and a subtly different `\s` or `\d` interpretation would make them
-/// disagree only on the awkward names nobody thinks to test.
+/// The regular expression uses case-insensitive, verbose matching. Tests cover the whitespace and digit
+/// rules that decide which file looks like a copy.
 ///
 /// **One false positive is preserved on purpose.** The last alternative, `[ _-]\d+$`, matches any name
 /// ending in a separator and digits -- so `IMG_1234` scores as a copy. That is wrong for camera output,
@@ -86,7 +82,7 @@ public enum CopyNamePattern {
 
 /// Picks which file in a group to keep.
 ///
-/// Ports `_best_keep_index` (`src/rav/core/duplicate_review.py:55-57`): the lexicographic minimum of
+/// Ports `_best_keep_index`: the lexicographic minimum of
 /// `(copyScore, depthScore, index)`.
 ///
 /// **Deeper wins**, which is the surprising half. `depthScore` is the *negative* depth below the scan
