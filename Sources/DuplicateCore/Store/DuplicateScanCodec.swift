@@ -117,8 +117,10 @@ public enum DuplicateScanCodec {
     /// "unknown", not "no sharing", and the difference decides whether the reclaimable figure is exact
     /// or an upper bound.
     private static func decodeStorage(_ value: JSONValue, files: [String]) -> StoragePartition? {
+        // Read the historical key only for compatibility. Losing its partition would offer a keeper's
+        // hardlinks or clones for removal when an older scan is copied into the current state directory.
         guard
-            let app = value["duplicate_app"],
+            let app = value["duplicate_app"] ?? value["rav_app"],
             let raw = app["storage_clusters"]?.arrayValue
         else { return nil }
         var clusters: [[String]] = []

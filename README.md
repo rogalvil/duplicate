@@ -169,6 +169,8 @@ $XDG_STATE_HOME/duplicate/      (o ~/.local/state/duplicate/)
 
 Si actualizas desde una versión que guardaba el estado en otra ubicación, copia sus subdirectorios a esta
 ruta con la app cerrada para recuperar la biblioteca. La app no mueve ni borra esos datos automáticamente.
+Al abrirlos conserva las clases de almacenamiento guardadas por versiones anteriores; volver a guardarlos
+usa la clave de metadatos actual.
 
 Documentos JSON legibles, escritos de forma atómica. Qué campos llevan, en qué orden y por qué el escritor de
 JSON está hecho a mano: [`docs/FORMATO.md`](docs/FORMATO.md).

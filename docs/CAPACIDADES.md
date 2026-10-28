@@ -226,6 +226,9 @@ cuenta como un archivo de la sesión, con tamaño 0.
 | Cachés de digests y de hashes perceptuales | `~/Library/Caches` |
 | Escaneos, decisiones, nombres elegidos y journals | `~/.local/state/duplicate/` ([`FORMATO.md`](FORMATO.md)) |
 
+Los escaneos importados de versiones anteriores conservan sus clases de almacenamiento: el plan excluye la
+clase del archivo conservado y elige un representante de cada clase restante. Al guardarlos usa la clave actual.
+
 ---
 
 ## 2. Los tres visores, lado a lado

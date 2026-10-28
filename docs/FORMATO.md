@@ -74,6 +74,8 @@ posiciones 8 y 15.
 - `size` en bytes, el mismo para todos los miembros del grupo por construcción. `sha256` en hexadecimal minúscula.
 - **Las claves desconocidas se ignoran al leer.** El campo opcional `duplicate_app` contiene
   `storage_clusters` (rutas que comparten almacenamiento) y `storage_exact` (si la partición es exacta).
+  Al importar documentos antiguos también se reconoce la clave histórica, para conservar esas clases al
+  planear eliminaciones. Si aparecen ambas, se usa `duplicate_app`; al guardar solo se escribe esa clave.
   Sin esa información, el espacio recuperable se presenta como cota superior.
 - `root` puede ser **relativo** en un escaneo hecho desde una terminal con `.` como raíz. Esas rutas no se pueden
   accionar desde una app —Launch Services la arranca con `/` como directorio de trabajo, así que resolverlas
