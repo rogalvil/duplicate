@@ -39,7 +39,7 @@ public enum PackageHandling: Sendable {
 public struct ScanPolicy: Sendable {
     /// Directories dropped wherever they appear.
     ///
-    /// Seeded from `DEFAULT_IGNORE_DIRS` (`src/rav/core/duplicates.py:17`) plus the macOS metadata
+    /// Seeded from `DEFAULT_IGNORE_DIRS` plus the macOS metadata
     /// stores, which are large, uninteresting, and full of byte-identical files.
     public var ignoredDirectoryNames: Set<String>
 
@@ -56,8 +56,8 @@ public struct ScanPolicy: Sendable {
 
     /// Whether to keep files whose name starts with a dot.
     ///
-    /// **A divergence from the CLI, on purpose.** `iter_files` has no hidden-file filter at all
-    /// (`src/rav/core/duplicates.py:193-205`), so the CLI reports the `.DS_Store` groups described
+    /// **A divergence from the CLI, on purpose.** `iter_files` has no hidden-file filter at all,
+    /// so the CLI reports the `.DS_Store` groups described
     /// above. Turning this on restores the CLI's behaviour exactly.
     public var includesHiddenFiles: Bool
 
@@ -109,7 +109,7 @@ public struct ScanPolicy: Sendable {
         self.crossesMountPoints = crossesMountPoints
     }
 
-    /// The policy that reproduces `rav duplicate`'s behaviour, divergences and all.
+    /// The compatibility policy for importing scans from other tools.
     ///
     /// Exists so the two tools can be compared on the same tree without arguing about which
     /// difference came from which change.

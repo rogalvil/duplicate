@@ -60,8 +60,8 @@ public struct FileManagerWalker: DirectoryEnumerating, Sendable {
     ///
     /// Prefetched values are cached on each `URL` the enumerator hands back, so reading them costs no
     /// syscall. The CLI pays three to four stat-family calls per file instead: an `lstat` from
-    /// `is_symlink()` and a `stat` from `is_file()` (`src/rav/core/duplicates.py:203`), another `stat`
-    /// from `.stat()` (`:65`), and an `lstat` per directory in `_filter_dirnames` (`:198`).
+    /// `is_symlink()` and a `stat` from `is_file()`, another `stat`
+    /// from `.stat()`, and an `lstat` per directory in `_filter_dirnames`.
     ///
     /// Volume *traits* are deliberately absent from this list. They resolve through `statfs` and disk
     /// arbitration rather than the directory batch, so asking for them per entry is a classic
@@ -105,8 +105,8 @@ public struct FileManagerWalker: DirectoryEnumerating, Sendable {
         // `FileManager.enumerator` resolves symbolic links in the root, so a scan of `/var/x` yields
         // paths under `/private/var/x`. Python's `os.walk` does not: it string-joins the root it was
         // given. Recording the resolved form would be a real interop break, not a cosmetic one -- the
-        // CLI matches the kept paths in a decisions file back to a group **by string equality**
-        // (`src/rav/core/duplicate_review.py:76-83`), so a review done in the app would silently fail to
+        // CLI matches the kept paths in a decisions file back to a group **by string equality**,
+        // so a review done in the app would silently fail to
         // apply in the CLI for any root containing a symlinked component: `/tmp`, `/etc`, `/var`.
         //
         // So the resolved prefix is swapped back for the requested one on every entry. It has to come

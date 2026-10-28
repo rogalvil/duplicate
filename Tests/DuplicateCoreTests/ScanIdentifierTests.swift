@@ -7,7 +7,7 @@ import Testing
 struct ScanIdentifierValidationTests {
     @Test("Accepts an identifier the CLI actually wrote")
     func acceptsRealIdentifier() {
-        // Copied from filenames in ~/.local/state/rav/duplicate/.
+        // Copied from filenames in ~/.local/state/duplicate/.
         #expect(ScanIdentifier.isValid("20260511-112539-973098"))
         #expect(ScanIdentifier.isValid("20260510-194604-719477"))
     }

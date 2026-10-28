@@ -4,7 +4,7 @@ import DuplicateCore
 /// The scan library window: the app's home.
 ///
 /// Lists every scan under the shared state directory, whichever tool wrote it, and stays current while the
-/// window is open -- a `rav duplicate scan` finished in a terminal appears here without the user asking.
+/// window is open -- a scan saved by another process appears here without the user asking.
 ///
 /// Deliberately not an `NSDocument` app. A scan is not the user's document: it is derived state keyed by a
 /// timestamp, and `CFBundleDocumentTypes` would invite opening one by double-click and drag the whole

@@ -15,7 +15,7 @@ struct CollisionResolverTests {
 
     @Test("Counts from two, before the extension")
     func countsFromTwo() {
-        // Ports unique_destination (src/rav/core/duplicates.py:172-186). Starting at 2 rather than 1 is
+        // Ports unique_destination. Starting at 2 rather than 1 is
         // what the CLI does, and a quarantine directory the two tools disagree about is worse than an odd
         // starting number.
         var taken: Set<String> = ["/q/photo.jpg"]
@@ -206,8 +206,7 @@ struct QuarantineDisposerTests {
 
     @Test("The default root is outside ~/.Trash")
     func defaultRootAvoidsTheTrash() {
-        // Defect 6. The CLI defaults to ~/.Trash/rav-duplicates and does not exclude it from its own walk,
-        // so running it twice re-discovers everything the first run quarantined.
+        // Keeping quarantine outside Trash lets the walker exclude both roots independently.
         let root = QuarantineDisposer.defaultRoot(
             applicationSupport: URL(filePath: "/Users/tester/Library/Application Support")
         )
@@ -430,7 +429,7 @@ private struct ReadOnlyVolume {
                 atPath: scratch, withIntermediateDirectories: true)) != nil
         else { return nil }
         imagePath = scratch + "/ro.dmg"
-        let volumeName = "RavRO\(abs(name.hashValue % 10_000))"
+        let volumeName = "DuplicateRO\(abs(name.hashValue % 10_000))"
         mountPoint = "/Volumes/" + volumeName
         filePath = mountPoint + "/" + name
 

@@ -3,10 +3,10 @@ import Foundation
 /// Byte-wise ordering and equality for filesystem paths.
 ///
 /// This exists because Swift's `String` comparison is the wrong tool for paths, in two ways that
-/// both fail silently and both matter for compatibility with the `rav duplicate` CLI.
+/// both fail silently and both matter for stable path identity.
 ///
-/// **Ordering.** The CLI stores the files of a group as `tuple(sorted(duplicate_paths))`
-/// (`src/rav/core/duplicates.py:92`), sorting `pathlib.Path` objects. `PurePath.__lt__` compares
+/// **Ordering.** The CLI stores the files of a group as `tuple(sorted(duplicate_paths))`,
+/// sorting `pathlib.Path` objects. `PurePath.__lt__` compares
 /// the path string, and Python compares strings by Unicode code point. Swift's `<` on `String`
 /// compares under canonical equivalence, which is *not* code-point order. Since UTF-8 byte order
 /// is code-point order, comparing the raw bytes reproduces Python exactly.

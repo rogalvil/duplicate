@@ -4,7 +4,7 @@ import Foundation
 ///
 /// **Three states, not two, and that is the fix for the most dangerous defect in the CLI.**
 /// `ReviewState.decisions()` there emits an entry for *every* group, including ones the user never looked
-/// at, filled in with the heuristic's guess (`src/rav/core/duplicate_review.py:152-157`). Quit after group
+/// at, filled in with the heuristic's guess. Quit after group
 /// 1 of 50 and the file records decisions for 49 groups; apply then acts on all of them. In a terminal that
 /// takes a deliberate `q`. In a window, quitting is closing a window.
 public enum GroupDecision: Sendable, Equatable {
@@ -32,7 +32,7 @@ public enum GroupDecision: Sendable, Equatable {
 ///
 /// Three cases, because the CLI's `confirm_group()` returns a `Bool` that means three different things --
 /// "advanced", "that was the last group", and "you kept nothing, try again" -- and the TUI reads any
-/// `false` as "we are done" and exits (`src/rav/ui/duplicate_review.py:175-179`). Pressing enter with
+/// `false` as "we are done" and exits. Pressing enter with
 /// nothing checked quits the review.
 public enum ConfirmOutcome: Sendable, Equatable {
     case advanced
@@ -160,7 +160,7 @@ public struct ExactReviewState: Sendable {
     /// Removes every file in the group.
     ///
     /// Named for what it does. The CLI calls this "Mover todos" and then skips the group at apply time
-    /// because its keep list is empty (`src/rav/core/duplicate_review.py:196-197`) -- a labelled destructive
+    /// because its keep list is empty -- a labelled destructive
     /// action that silently does nothing.
     public mutating func discardEntireGroup() {
         guard currentGroup != nil else { return }
@@ -185,8 +185,8 @@ public struct ExactReviewState: Sendable {
 
     /// Passes over the group without deciding.
     ///
-    /// Leaves the heuristic's preview alone. The CLI resets the keep set to index `0`
-    /// (`src/rav/core/duplicate_review.py:120-122`), which its own docs contradict -- "skip" should mean
+    /// Leaves the heuristic's preview alone. The CLI resets the keep set to index `0`,
+    /// which its own docs contradict -- "skip" should mean
     /// "decide nothing", not "silently pick the lexicographically first file".
     public mutating func skip() -> ConfirmOutcome {
         guard currentGroup != nil else { return .finished }
@@ -233,7 +233,7 @@ public struct ExactReviewState: Sendable {
     ///
     /// **Only groups the user actually decided.** An undecided or skipped group is absent, and that absence
     /// is the whole fix: the CLI's `_apply_decisions` only overrides keys that are present
-    /// (`src/rav/core/duplicate_review.py:76-83`) and `decision_candidates` skips absent ones (`:192-201`),
+    /// and `decision_candidates` skips absent ones,
     /// so a partially reviewed file written by this app makes even the CLI act on exactly the reviewed
     /// groups. Strictly safer in both tools.
     ///

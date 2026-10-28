@@ -106,8 +106,7 @@ public enum HashingError: Error, Equatable, Sendable {
     case outOfMemory(bytes: Int)
 
     /// Whether this is the ordinary "the file went away or is not readable" case, which a scan should
-    /// skip rather than abort on. The CLI's `sha256_file` returns `None` for exactly these
-    /// (`src/rav/core/duplicates.py:208-219`).
+    /// skip rather than abort on. The CLI's `sha256_file` returns `None` for exactly these.
     public var isSkippable: Bool {
         switch self {
         case .cannotOpen(_, let code), .readFailed(_, let code):

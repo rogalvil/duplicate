@@ -2,9 +2,8 @@ import Foundation
 
 /// Parses JSON into a ``JSONValue``, preserving key order and the integer/float distinction.
 ///
-/// Exists for one reason: to make byte-for-byte compatibility with the `rav duplicate` CLI a
-/// measurement rather than an argument. Reading a real scan file, re-encoding it with
-/// ``JSONWriter``, and diffing the bytes proves the contract holds on data that already exists.
+/// Makes byte-for-byte preservation of the persisted JSON format measurable. Reading a real scan file,
+/// re-encoding it with ``JSONWriter``, and diffing the bytes proves the contract holds on existing data.
 /// `JSONSerialization` cannot serve that purpose -- it returns an unordered `NSDictionary` and
 /// collapses `1` and `1.0` into the same `NSNumber`, so a re-encode could never be byte-identical.
 ///

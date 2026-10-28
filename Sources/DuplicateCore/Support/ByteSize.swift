@@ -1,4 +1,4 @@
-/// Parses and renders byte counts the way the `rav duplicate` CLI does.
+/// Parses and renders byte counts with binary multipliers.
 ///
 /// Both directions are pinned to fixed output rather than delegated to Foundation. `ByteCountFormatter`
 /// is locale-sensitive, which makes UI widths unpredictable and tests unstable, and it uses decimal
@@ -9,7 +9,7 @@
 /// and a decimal separator that changes with the user's locale would make the two tools disagree about
 /// the same file. Dates are localised; these are not.
 public enum ByteSize {
-    /// Binary multipliers, matching `_SIZE_UNITS` (`src/rav/core/duplicates.py:18-24`).
+    /// Binary multipliers, matching `_SIZE_UNITS`.
     static let multipliers: [(suffix: String, factor: Int64)] = [
         ("b", 1),
         ("kb", 1 << 10),
@@ -19,7 +19,7 @@ public enum ByteSize {
 
     /// Parses an expression like `10mb`, `512`, `2 GB`.
     ///
-    /// Ports `parse_size` (`src/rav/core/duplicates.py:221-234`): a run of digits, then an optional
+    /// Ports `parse_size`: a run of digits, then an optional
     /// unit, case-insensitive, surrounding whitespace trimmed. A bare number is bytes.
     ///
     /// - Throws: ``ByteSizeError/invalidExpression`` on anything else. The CLI raises

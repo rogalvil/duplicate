@@ -2,7 +2,7 @@ import Foundation
 
 /// A persistent map from file identity to SHA-256, so a rescan does not re-read the disk.
 ///
-/// **Where it lives, and why not with the scans.** `~/Library/Caches/<bundle id>/hashes.v1`, never the
+/// **Where it lives, and why not with the scans.** `~/Library/Caches/<bundle id>/hashes.v2`, never the
 /// state directory shared with the CLI. Two different kinds of data: a scan document is a documented
 /// interop format another tool reads and must never lose, while this is derived data that can always be
 /// rebuilt -- and `~/Library/Caches` is precisely the directory macOS is allowed to purge under disk
@@ -28,7 +28,7 @@ public actor HashCache {
         return
             base
             .appending(path: bundleIdentifier, directoryHint: .isDirectory)
-            .appending(path: "hashes.v1", directoryHint: .notDirectory)
+            .appending(path: "hashes.v2", directoryHint: .notDirectory)
     }
 
     /// What loading found, so the caller can report it instead of guessing.
@@ -335,7 +335,7 @@ public actor HashCache {
         }
 
         let temporary = directory.appending(
-            path: "hashes.v1.compacting-\(ProcessInfo.processInfo.processIdentifier)",
+            path: "hashes.v2.compacting-\(ProcessInfo.processInfo.processIdentifier)",
             directoryHint: .notDirectory
         )
         try Data(payload).write(to: temporary, options: .atomic)

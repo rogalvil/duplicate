@@ -22,7 +22,7 @@ private let fixtureNames = [
     "escapes.json",
 ]
 
-@Suite("JSON interop with the rav CLI")
+@Suite("JSON compatibility with Python fixtures")
 struct JSONInteropTests {
     @Test("Re-encoding a file Python wrote reproduces it byte for byte", arguments: fixtureNames)
     func roundTripsPythonOutput(name: String) throws {

@@ -31,10 +31,8 @@ public enum JSONWriter {
         return output
     }
 
-    /// The full file contents the CLI writes: `json.dumps(..., indent=2) + "\n"`.
-    ///
-    /// `save_scan` in `src/rav/core/duplicates.py:107` appends that newline, so a document without
-    /// it differs from the CLI's output in its last byte.
+    /// Full document contents: `json.dumps(..., indent=2) + "\n"` compatible JSON.
+    /// The final newline is part of the persisted format.
     public static func document(_ value: JSONValue) throws -> Data {
         // Appended in place: `encode(value) + "\n"` built a second copy of the whole document only to add one
         // byte, the last thing a scan allocates before it ends (#161).

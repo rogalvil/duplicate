@@ -71,7 +71,7 @@ public struct SimilarScan: Sendable, Hashable {
     }
 }
 
-/// Maps ``SimilarScan`` to and from the JSON `rav duplicate similar` reads and writes.
+/// Maps ``SimilarScan`` to and from its persisted JSON representation.
 ///
 /// The shape is from `perceptual.py:38-64` and was verified against the 31 real documents on this machine:
 /// `{scan_id, root, created_at, img_threshold, vid_threshold, pairs[]}` with pair keys `file_a`, `file_b`,

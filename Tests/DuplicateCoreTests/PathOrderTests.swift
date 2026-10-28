@@ -6,7 +6,7 @@ import Testing
 @Suite("PathOrder")
 struct PathOrderTests {
     // The two forms below were taken from a real scan file in the user's state directory,
-    // ~/.local/state/rav/duplicate/scans/, where both appear in the same JSON document. APFS
+    // ~/.local/state/duplicate/scans/, where both appear in the same JSON document. APFS
     // preserves whatever bytes each writer used, so a corpus accumulates both.
     static let decomposed = "Kitzia Sua\u{0301}rez"  // a + combining acute
     static let precomposed = "Kitzia Su\u{00E1}rez"  // precomposed a-acute

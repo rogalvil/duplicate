@@ -4,7 +4,7 @@ import Testing
 @testable import DuplicateCore
 
 /// A store rooted in a temp dir. Every test in this file uses one, so none of them can see -- let alone
-/// write to -- the real `~/.local/state/rav/duplicate`, which holds 119 scans this user cares about.
+/// write to -- the real `~/.local/state/duplicate`, which contains the user's saved scans.
 private struct StoreScratch {
     let directory: String
     let store: ScanStore

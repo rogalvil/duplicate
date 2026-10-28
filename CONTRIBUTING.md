@@ -127,10 +127,8 @@ El nombre de un test dice qué se rompe, y un comentario dice por qué le import
 ```swift
 @Test("Falls back when XDG_STATE_HOME is set but empty")
 func fallsBackWhenEmpty() {
-    // Python's os.environ.get returns "" here, which is falsy, so the CLI falls through to
-    // ~/.local/state. An empty Swift String is truthy, so a literal translation resolves the
-    // root to /rav -- and an app that quietly sees zero existing scans looks exactly like an
-    // app whose user has never run a scan.
+    // An empty base must use the default state directory. Appending the app name to it
+    // would resolve to /duplicate and silently hide existing scans.
 ```
 
 Cubrir los casos que no se producen a mano: placeholders sin sustituir, estado guardado corrupto,
@@ -161,7 +159,7 @@ make selftest-all
 ```
 
 `json-roundtrip` corre contra el corpus real en
-`$XDG_STATE_HOME/rav/duplicate/`. Es de solo lectura: no escribe, no mueve, no borra. Si la máquina
+`$XDG_STATE_HOME/duplicate/`. Es de solo lectura: no escribe, no mueve, no borra. Si la máquina
 todavía no tiene escaneos, imprime `SKIPPED` con el conteo de directorios ausentes en vez de un OK
 silencioso.
 

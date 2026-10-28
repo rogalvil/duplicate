@@ -1,7 +1,6 @@
 /// The three detectors, and the state subdirectories each one reads and writes.
 ///
-/// The directory names are part of the format shared with the `rav duplicate` CLI, so they are
-/// spelled exactly as the CLI spells them -- hyphenated, not camel-cased.
+/// The directory names are part of the persisted format and must remain stable.
 public enum ScanKind: String, CaseIterable, Sendable {
     /// Byte-identical files, grouped by SHA-256.
     case files

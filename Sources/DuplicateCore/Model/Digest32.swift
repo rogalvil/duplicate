@@ -9,7 +9,7 @@
 /// same order as comparing the 32 bytes lexicographically -- which in turn gives the same order as
 /// comparing the lowercase hex strings, because hex digits are monotonic in nibble value. That
 /// equivalence is what lets the group sort match the CLI's `key=lambda g: (-g.size, g.digest)`
-/// (`src/rav/core/duplicates.py:94`) without materialising a single string.
+/// without materialising a single string.
 public struct Digest32: Hashable, Sendable, Comparable {
     public let a: UInt64
     public let b: UInt64

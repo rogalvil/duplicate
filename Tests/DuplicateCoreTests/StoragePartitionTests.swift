@@ -104,7 +104,7 @@ struct StoragePartitionTests {
 
     @Test("The removal set is one file per cluster, never every other file")
     func removalSetIsOnePerCluster() {
-        // The CLI hands files[1:] to its move and delete paths (src/rav/core/duplicates.py:140-144). On
+        // The CLI hands files[1:] to its move and delete paths. On
         // this group that would move /a-clone -- a second name for the very storage being kept -- so the
         // keeper survives, nothing is freed, and a path the user may rely on is gone.
         let partition = StoragePartition.of([
@@ -318,8 +318,85 @@ struct StoragePartitionCodecTests {
         #expect(try JSONWriter.document(DuplicateScanCodec.encode(reloaded)) == data)
     }
 
-    @Test("A malformed partition is treated as unknown, not as no sharing")
-    func malformedPartitionIsUnknown() throws {
+    @Test("Older scans preserve shared storage through planning and resaving")
+    func legacyPartitionSurvivesPlanningAndResaving() throws {
+        let scan = try DuplicateScanCodec.decode(
+            JSONReader.parse(
+                """
+                {
+                  "scan_id": "20260511-064716-000001",
+                  "root": "/",
+                  "created_at": "2026-05-11T06:47:16.000001Z",
+                  "groups": [{
+                    "size": 1000,
+                    "sha256": "\(String(repeating: "a", count: 64))",
+                    "files": ["/a", "/a-clone", "/a-hardlink", "/b", "/b-clone"],
+                    "rav_app": {
+                      "storage_clusters": [["/a", "/a-clone", "/a-hardlink"], ["/b", "/b-clone"]],
+                      "storage_exact": true
+                    }
+                  }]
+                }
+                """
+            )
+        )
+        let expected = StoragePartition(
+            clusters: [["/a", "/a-clone", "/a-hardlink"], ["/b", "/b-clone"]],
+            isExact: true
+        )
+        #expect(scan.groups[0].storage == expected)
+        #expect(scan.reclaimableBytes == 1000)
+
+        let encoded = DuplicateScanCodec.encode(scan)
+        let savedGroup = try #require(encoded["groups"]?.arrayValue?.first)
+        #expect(savedGroup["duplicate_app"] != nil)
+        #expect(savedGroup["rav_app"] == nil)
+        let reloaded = try DuplicateScanCodec.decode(JSONReader.parse(JSONWriter.document(encoded)))
+        #expect(reloaded.groups[0].storage == expected)
+
+        // A keeper's whole class survives, and only one representative of the other class is moved.
+        // Check the production plan both before and after saving the imported scan with the new key.
+        for document in [scan, reloaded] {
+            for kept in [["/a"], ["/a-clone"], ["/a-hardlink"], ["/b-clone"], ["/a", "/b-clone"]] {
+                let review = ExactReviewState(
+                    scan: document, root: document.root,
+                    priorDecisions: [document.groups[0].key: kept]
+                )
+                let expectedPaths =
+                    kept.count > 1 ? [] : (kept == ["/b-clone"] ? ["/a"] : ["/b"])
+                let plan = ApplyPlan.from(review)
+                #expect(plan.items.map(\.path) == expectedPaths, "kept \(kept)")
+                #expect(plan.byteCount == Int64(expectedPaths.count) * 1000)
+                #expect(review.plannedReclaimBytes == plan.byteCount)
+            }
+        }
+    }
+
+    @Test("Current storage metadata takes precedence over the historical key")
+    func currentPartitionTakesPrecedence() throws {
+        let group = try DuplicateScanCodec.decode(
+            group: JSONReader.parse(
+                """
+                {
+                  "size": 1000,
+                  "sha256": "\(String(repeating: "a", count: 64))",
+                  "files": ["/a", "/b"],
+                  "duplicate_app": {"storage_clusters": [["/a", "/b"]], "storage_exact": true},
+                  "rav_app": {"storage_clusters": [["/a"], ["/b"]], "storage_exact": false}
+                }
+                """
+            ),
+            at: 0
+        )
+        #expect(group.storage == StoragePartition(clusters: [["/a", "/b"]], isExact: true))
+        #expect(group.removalCandidates(keepingAll: ["/a"]).isEmpty)
+    }
+
+    @Test(
+        "A malformed partition is treated as unknown, not as no sharing",
+        arguments: ["duplicate_app", "rav_app"]
+    )
+    func malformedPartitionIsUnknown(metadataKey: String) throws {
         // "Unknown" and "no sharing" are different answers, and acting on the wrong one would move files
         // the partition never described.
         let valid = String(repeating: "b", count: 64)
@@ -327,7 +404,7 @@ struct StoragePartitionCodecTests {
             try DuplicateScanCodec.decode(
                 group: JSONReader.parse(
                     """
-                    {"size": 1, "sha256": "\(valid)", "files": ["/a", "/b"], "rav_app": \(storageJSON)}
+                    {"size": 1, "sha256": "\(valid)", "files": ["/a", "/b"], "\(metadataKey)": \(storageJSON)}
                     """
                 ),
                 at: 0

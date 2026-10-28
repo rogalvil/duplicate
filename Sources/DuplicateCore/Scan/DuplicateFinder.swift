@@ -2,8 +2,8 @@ import Foundation
 
 /// Runs a full exact-duplicate scan: walk, bucket, probe, hash, group.
 ///
-/// The orchestration the CLI does inline in `find_duplicates`
-/// (`src/rav/core/duplicates.py:51-94`), with two structural changes.
+/// The orchestration the CLI does inline in `find_duplicates`,
+/// with two structural changes.
 ///
 /// **Parallel over files, not over buckets.** Bucket sizes are wildly skewed -- one bucket of 40,000
 /// `.DS_Store` files next to 30,000 buckets of two -- so a task per bucket has terrible load balance:

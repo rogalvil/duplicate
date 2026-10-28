@@ -1,6 +1,6 @@
 /// Finds a free name when a destination is already taken.
 ///
-/// Ports `unique_destination` (`src/rav/core/duplicates.py:172-186`): a counter starting at 2, inserted
+/// Ports `unique_destination`: a counter starting at 2, inserted
 /// before the extension, so `photo.jpg` becomes `photo-2.jpg` and then `photo-3.jpg`.
 ///
 /// **The `.tar.gz` quirk is preserved deliberately.** Python's `Path.stem` and `Path.suffix` see only the

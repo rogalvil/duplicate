@@ -34,7 +34,7 @@ public struct SystemTrashRootResolver: TrashRootResolving, Sendable {
         }
         roots.append(home + "/.Trash")
         // The CLI's three quarantine directories all live under ~/.Trash, so excluding it covers every
-        // one of them at once (`src/rav/commands/duplicate.py:115,457,700`).
+        // one of them at once.
         return roots
     }
 }

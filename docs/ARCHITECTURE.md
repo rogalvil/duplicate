@@ -21,14 +21,14 @@ se lee del código son las alternativas que se descartaron.
     │  GroupBuilder │   hardlinks y clones no cuentan como espacio recuperable
     └───────┬───────┘
             ▼
-      scans/<id>.json ──────────► también legible por `rav duplicate`
+      scans/<id>.json ──────────► JSON legible por otras herramientas
             │
             ▼
     ┌───────────────┐   tri-estado por grupo: sin decidir / decidido / omitido
     │  ReviewState  │   solo lo decidido llega a decisions/
     └───────┬───────┘
             ▼
-      decisions/<id>.json ──────► también legible por `rav duplicate`
+      decisions/<id>.json ──────► JSON legible por otras herramientas
             │
             ▼
     ┌───────────────┐   re-hashea antes de actuar; Papelera real; journal append-only
@@ -42,7 +42,7 @@ se lee del código son las alternativas que se descartaron.
 
 ### Swift nativo, no una GUI sobre el CLI en Python
 
-**Descartado: que la app hiciera `subprocess` a `rav duplicate --json` y parseara la salida.** Menos
+**Descartado: delegar el escaneo a un proceso de Python y parsear su salida JSON.** Menos
 código y una sola implementación de la lógica. Se rechazó por tres razones: requeriría Python
 instalado y en la versión correcta; heredaría el escaneo serial y sin caché, que es justamente el
 problema a resolver; y TCC sobre un subprocess es un dolor — el proceso responsable sería el
@@ -132,10 +132,9 @@ Cinco diferencias, verificadas contra los archivos reales:
 
 ### Papelera real más journal, no cuarentena
 
-**Descartado: mover a una carpeta de cuarentena, como hace el CLI.** Dos defectos concretos: no da
-"Devolver" de Finder, porque un `shutil.move` a `~/.Trash/rav-duplicates` no es una operación de
-papelera real; y el CLI no excluye `~/.Trash` del recorrido, así que correr `rav duplicate ~` dos veces
-re-descubre todo lo que la primera corrida acaba de poner en cuarentena, y ofrece volver a ponerlo.
+**Descartado: usar una carpeta de cuarentena como destino principal.** Mover un archivo a una carpeta
+no da «Devolver» de Finder. Además, una cuarentena dentro de la raíz escaneada volvería a aparecer
+en el siguiente recorrido si no se excluye explícitamente.
 
 `FileManager.trashItem` da "Devolver" gratis. El journal — JSON Lines append-only, un registro por
 archivo con ruta original, URL resultante, digest y mecanismo — da un deshacer por sesión dentro de la
@@ -200,8 +199,8 @@ silencio y no hay chequeo del compilador.
 
 **Descartado: sandboxear con bookmarks security-scoped del `NSOpenPanel`.** La elección en el panel
 *es* la concesión, que es un modelo de consentimiento genuinamente mejor que los prompts de TCC. Pero
-`~/.local/state/rav/` está fuera del contenedor, y el estado compartido con el CLI es el punto de la
-app. Alcanzarlo pediría un entitlement `temporary-exception.files.home-relative-path`, frágil e
+`~/.local/state/duplicate/` está fuera del contenedor y debe ser accesible para respaldos y otras
+herramientas. Alcanzarlo pediría un entitlement `temporary-exception.files.home-relative-path`, frágil e
 indocumentado, del tipo que se rompe en una actualización de OS. Ese requisito decide.
 
 **Descartado también: pedir Full Disk Access.** No hay API para pedirlo, solo un toggle manual, así
@@ -233,7 +232,7 @@ copiar local. Muestra chica, y se reporta como tal.
 ### Escrituras atómicas, y por qué es mejora gratis
 
 `ScanStore` escribe con `Data.write(options: .atomic)`: archivo temporal más rename. El CLI usa
-`Path.write_text` (`src/rav/core/duplicates.py:107`), que no lo es — un crash o un disco lleno a media
+`Path.write_text`, que no lo es — un crash o un disco lleno a media
 escritura deja un JSON truncado donde había un scan, y la siguiente lectura de ese scan falla. El
 formato no cambia en un byte, así que es mejora estricta sin costo de interop.
 
@@ -248,7 +247,7 @@ datos de la app; fallar cerrada dejaría 118 scans buenos escondidos detrás de 
 ### La compuerta de aplicar: una simulación vigente, no una simulación cualquiera
 
 El CLI también impone "aplicar solo después de simular", pero de forma implícita, en las ramas de su
-loop de comandos (`src/rav/core/duplicate_flow.py:49-71`). Ahí la regla vive donde el loop resulte
+loop de comandos. Ahí la regla vive donde el loop resulte
 estar correcto. En una ventana eso no alcanza: un botón gris es detalle de presentación, y un atajo de
 teclado o una hoja que quedó abierta lo alcanzan igual.
 
@@ -268,10 +267,8 @@ nunca lo consulta: su "ver decisiones" se ofrece incluso cuando no hay nada que 
 
 ### La biblioteca se mantiene al día sola, y el watch tiene un hueco conocido
 
-La ventana lista todo escaneo bajo el estado compartido, sin importar qué herramienta lo escribió, y
-se actualiza mientras está abierta: un `rav duplicate scan` que termina en una terminal aparece sin
-que nadie pida nada. Eso es el punto de compartir el formato — si hubiera que apretar Actualizar, las
-dos herramientas serían dos programas y no uno visto de dos maneras.
+La ventana lista los escaneos guardados y se actualiza mientras está abierta: un documento guardado
+por otro proceso aparece sin pulsar Actualizar.
 
 Se hace con `DispatchSource.makeFileSystemObjectSource` sobre `scans/`, `decisions/`, `folder-scans/` y
 `similar-scans/`, no con un poll:
@@ -638,8 +635,8 @@ deja en orden de `os.walk`, que no es reproducible entre máquinas; la alternati
 un archivo que cambia entre corridas.
 
 **Dentro de un par, la orientación también se normaliza por bytes, y eso no es cosmético.**
-`rav duplicate folders-move` conserva `folder_a` y manda `folder_b` a cuarentena, así que en un documento
-compartido cuál ruta va en cuál campo decide cuál carpeta se destruye. Tomarla de los índices del árbol la
+Las decisiones guardadas dependen de cuál ruta ocupa cada campo, así que invertir los lados puede
+cambiar qué carpeta se conserva. Tomarla de los índices del árbol la
 tomaba del orden de enumeración del recorrido, que nada promete reproducir en otra máquina ni después de
 mover un archivo. Ninguna de las dos es semánticamente la sobreviviente —la del CLI es orden de `os.walk`—
 pero arbitraria y reproducible le gana a arbitraria y dependiente del enumerador cuando un comando borra uno
@@ -706,9 +703,9 @@ responde igual. Hay un test que lo fija con su razón.
 
 ### El escaneo perceptual, y lo que un documento suyo no dice
 
-El escaneo de imágenes ya corre de punta a punta: recorre, hashea **todas** las imágenes de las extensiones del
-CLI (`jpg`, `jpeg`, `png`, `webp`, `gif`), indexa, verifica y guarda un documento que `rav duplicate similar`
-lee byte a byte — verificado contra los 31 reales de esta máquina, 1,271 pares, 1,100 de ellos en `1.0`.
+El escaneo de imágenes ya corre de punta a punta: recorre, hashea **todas** las imágenes de las extensiones
+`jpg`, `jpeg`, `png`, `webp` y `gif`, indexa, verifica y guarda un documento JSON que conserva el formato
+byte a byte — verificado contra los 31 reales de esta máquina, 1,271 pares, 1,100 de ellos en `1.0`.
 
 **Y no trae ni un par de video.** Eso no es un detalle de formato: cambia lo que el escaneo encuentra. El
 documento lleva su `vid_threshold` porque el lector del CLI lo espera y porque un escaneo a otro umbral de video
@@ -1121,7 +1118,7 @@ Reversiones verificadas para este scaffolding:
 | Rotura | Modo que falla |
 |---|---|
 | borrar una línea de `es.lproj/Localizable.strings` | `l10n`, nombrando la clave |
-| tratar `XDG_STATE_HOME` vacío como puesto | `state-dir`, reportando que resolvió a `/rav` |
+| tratar `XDG_STATE_HOME` vacío como puesto | `state-dir`, reportando que resolvió a `/duplicate` |
 | quitar una sustitución `sed` del Makefile | `bundle`, nombrando el placeholder |
 | dar el mismo atajo a dos ítems de menú | `menu`, nombrando los dos títulos |
 | cambiar el indent del JSON de 2 a 4 | `json-roundtrip`, en los 226 documentos, "differs at byte 4" |

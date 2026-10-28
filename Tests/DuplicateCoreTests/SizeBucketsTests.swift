@@ -123,7 +123,7 @@ struct GroupBuilderTests {
 
     @Test("Orders groups by descending size, then ascending digest")
     func ordersGroups() {
-        // The CLI's key=(-size, digest) (src/rav/core/duplicates.py:94). Comparing Digest32 values
+        // The CLI's key=(-size, digest). Comparing Digest32 values
         // gives the same order as comparing their hex strings, so 20,000 groups sort without
         // allocating a single string.
         let input = [

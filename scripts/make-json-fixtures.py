@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Regenerate the JSON interop fixtures under Tests/DuplicateCoreTests/Fixtures/.
 
-The fixtures are produced by the same call the CLI uses to save a scan --
-`json.dumps(obj, indent=2) + "\\n"`, written as UTF-8 -- see
-`src/rav/core/duplicates.py:107` in the rav CLI. That provenance is the point: the Swift
-encoder is asserted byte-for-byte against files a Python `json.dumps` really wrote, so the
-compatibility claim is a measurement and not an argument.
+The fixtures are produced with `json.dumps(obj, indent=2) + "\\n"`, written as UTF-8.
+The Swift encoder is asserted byte-for-byte against files Python really wrote, so format
+compatibility is measured against an independent implementation.
 
 The content is synthetic on purpose. The user's real state directory holds private paths, and a
 test fixture is a published file. Byte-compatibility is a property of the *format*, so synthetic

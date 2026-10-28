@@ -26,10 +26,10 @@ public struct PerceptualCacheEntry: Hashable, Sendable {
 /// rows would buy that back and give up the arithmetic that detects a torn tail: `(fileSize - headerSize) %
 /// recordSize != 0` is the whole crash-recovery story, and it only works when rows are one size.
 public enum PerceptualCacheFormat {
-    /// `RAVPC` plus a layout version, so a file from a future layout is recognised and discarded rather than
+    /// `DUPPC` plus a layout version, so a file from a future layout is recognised and discarded rather than
     /// misread.
-    public static let magic: [UInt8] = Array("RAVPC1\0\0".utf8)
-    public static let version: UInt32 = 1
+    public static let magic: [UInt8] = Array("DUPPC2\0\0".utf8)
+    public static let version: UInt32 = 2
     public static let headerSize = 32
     /// The most frames one row can hold. The CLI samples eight.
     public static let maximumFrames = 8
@@ -204,7 +204,7 @@ public actor PerceptualCache {
         return
             base
             .appending(path: bundleIdentifier, directoryHint: .isDirectory)
-            .appending(path: "phashes.v1", directoryHint: .notDirectory)
+            .appending(path: "phashes.v2", directoryHint: .notDirectory)
     }
 
     /// What loading found, so a caller can report it instead of guessing.
@@ -423,7 +423,7 @@ public actor PerceptualCache {
         }
 
         let temporary = directory.appending(
-            path: "phashes.v1.compacting-\(ProcessInfo.processInfo.processIdentifier)",
+            path: "phashes.v2.compacting-\(ProcessInfo.processInfo.processIdentifier)",
             directoryHint: .notDirectory
         )
         try Data(payload).write(to: temporary, options: .atomic)

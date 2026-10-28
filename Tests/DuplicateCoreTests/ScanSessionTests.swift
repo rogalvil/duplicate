@@ -93,9 +93,7 @@ struct ScanSessionTests {
         #expect(result.savedPath != nil)
     }
 
-    /// **The CLI's live bug, closed.** `rav duplicate ~` twice re-discovers everything the first run
-    /// quarantined, because its walk does not exclude the quarantine roots -- which default to inside
-    /// `~/.Trash`.
+    /// Scanning the home directory repeatedly must not rediscover files in Trash or quarantine.
     @Test("Files under a Trash root are never scanned")
     func excludesTheTrashRoot() async throws {
         let scratch = try SessionScratch()

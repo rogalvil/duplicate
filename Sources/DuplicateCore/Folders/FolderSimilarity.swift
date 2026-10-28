@@ -263,9 +263,8 @@ public enum FolderSimilarity {
     /// is a divergence in output order only, and the alternative is a file that differs between runs.
     ///
     /// **Within a pair, `folderA` is the byte-smaller path, and that is a safety property rather than
-    /// cosmetics.** `rav duplicate folders-move` keeps `folder_a` and moves `folder_b` to quarantine, so
-    /// orientation in a shared document decides which folder a caller destroys. Taking it from the node
-    /// indices would take it from the walk's enumeration order, which nothing promises to reproduce on
+    /// cosmetics.** Pair orientation must remain stable so persisted decisions keep their meaning. Taking
+    /// it from the node indices would take it from the walk's enumeration order, which nothing promises to reproduce on
     /// another machine or after the tree changes. Neither side is semantically the survivor -- the CLI's
     /// own orientation is `os.walk` order -- but arbitrary and reproducible beats arbitrary and
     /// enumerator-dependent when a command deletes one of the two.

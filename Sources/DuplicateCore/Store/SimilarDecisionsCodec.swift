@@ -53,7 +53,7 @@ public struct SimilarDecisionsDocument: Hashable, Sendable {
     }
 }
 
-/// Maps ``SimilarDecisionsDocument`` to and from the JSON `rav duplicate similar-review` reads and writes.
+/// Maps ``SimilarDecisionsDocument`` to and from its persisted JSON representation.
 public enum SimilarDecisionsCodec {
 
     public static func encode(_ document: SimilarDecisionsDocument) -> JSONValue {

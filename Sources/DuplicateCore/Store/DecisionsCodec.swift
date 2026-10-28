@@ -32,16 +32,13 @@ public struct DecisionsDocument: Hashable, Sendable {
     }
 }
 
-/// Maps ``DecisionsDocument`` to and from the JSON the `rav duplicate` CLI reads and writes.
+/// Maps ``DecisionsDocument`` to and from its persisted JSON representation.
 ///
-/// The wrapped shape -- `{scan_id, created_at, decisions: {…}}` -- from
-/// `src/rav/core/duplicate_review.py:168-177`. Deliberately a separate type from the media decisions
-/// store, which is a **bare map** with no wrapper at all (`src/rav/ui/similar_review.py:310-315`). One type
-/// cannot honestly represent both, and conflating them silently corrupts one.
+/// The wrapped shape is `{scan_id, created_at, decisions: {…}}`. Media decisions use a bare map instead,
+/// so the two formats deliberately have separate types.
 ///
-/// **Absence is the contract.** A group the user never decided is simply not a key here, and that is what
-/// makes a partially reviewed file safe in both tools: the CLI's `_apply_decisions` only overrides keys
-/// that are present (`:76-83`) and `decision_candidates` skips absent ones (`:192-201`).
+/// **Absence is the contract.** A group the user never decided has no key here, so applying a partially
+/// reviewed scan acts only on reviewed groups.
 public enum DecisionsCodec {
     public static func encode(_ document: DecisionsDocument) -> JSONValue {
         .object([

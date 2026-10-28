@@ -561,7 +561,7 @@ struct HashCacheTests {
         let url = HashCache.defaultURL(caches: URL(filePath: "/Users/tester/Library/Caches"))
         #expect(
             url.path(percentEncoded: false)
-                == "/Users/tester/Library/Caches/com.rogalvil.duplicate/hashes.v1"
+                == "/Users/tester/Library/Caches/com.rogalvil.duplicate/hashes.v2"
         )
         #expect(!url.path(percentEncoded: false).contains(".local/state"))
     }

@@ -35,7 +35,7 @@ public struct FolderScan: Sendable, Hashable {
     }
 }
 
-/// Maps ``FolderScan`` to and from the JSON the `rav duplicate folders` command reads and writes.
+/// Maps ``FolderScan`` to and from its persisted JSON representation.
 ///
 /// The shape is from `folder_duplicates.py:172-186` and was verified against the four real documents on this
 /// machine: `{scan_id, root, created_at, threshold, pairs[]}` with pair keys `folder_a`, `folder_b`,

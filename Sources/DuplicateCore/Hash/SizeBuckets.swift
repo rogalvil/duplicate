@@ -1,6 +1,6 @@
 /// Finds the files worth hashing: those sharing a byte length with at least one other file.
 ///
-/// Ports the first stage of `find_duplicates` (`src/rav/core/duplicates.py:57-79`), but by sorting
+/// Ports the first stage of `find_duplicates`, but by sorting
 /// rather than by building a dictionary of arrays.
 ///
 /// The CLI uses `defaultdict(list)`. For 800,000 files that allocates 800,000 arrays, nearly all of
@@ -47,7 +47,7 @@ public enum SizeBuckets {
 
     /// How many files would be hashed, which is the denominator the progress bar needs.
     ///
-    /// The CLI computes the same count (`src/rav/core/duplicates.py:72-73`) so the hashing phase can
+    /// The CLI computes the same count so the hashing phase can
     /// show a determinate total while the indexing phase cannot.
     public static func candidateCount(in entries: [FileEntry], minimumSize: Int64 = 1) -> Int {
         candidates(in: entries, minimumSize: minimumSize).reduce(0) { $0 + $1.count }

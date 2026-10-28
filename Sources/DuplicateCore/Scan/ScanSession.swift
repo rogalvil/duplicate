@@ -90,9 +90,8 @@ public struct ScanSession: Sendable {
         var cache = request.usesCache ? HashCache(url: cacheURL ?? HashCache.defaultURL()) : nil
         await cache?.loadAndRepair()
 
-        // The Trash and the CLI's three quarantine roots are excluded by **identity**, so a root reached
-        // through a symlink is pruned too. This is the CLI's live bug: `rav duplicate ~` twice
-        // re-discovers everything the first run just quarantined, and offers to quarantine it again.
+        // Trash and quarantine roots are excluded by identity, including when reached through symlinks,
+        // so later scans cannot rediscover discarded files.
         let exclusions = ExclusionSet.forScan(of: request.root, resolver: trashResolver)
 
         let configuration = DuplicateFinder.Configuration(

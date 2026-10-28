@@ -20,10 +20,8 @@ Se carga sola al tocar los archivos de arriba. Viene de `CLAUDE.md`, tal cual.
 - **`URL(filePath:)` resuelve una ruta relativa contra el directorio de trabajo.** Un
   `XDG_STATE_HOME` relativo se volvería absoluto en silencio y no habría forma de detectarlo. Launch
   Services arranca la app con `/` como directorio de trabajo.
-- **`os.environ.get` de Python devuelve `""` para una variable puesta pero vacía, y `""` es falsy.**
-  Un `XDG_STATE_HOME` vacío hace que el CLI caiga a `~/.local/state`. En Swift `""` es truthy, así
-  que una traducción literal resuelve la raíz a `/rav` y deja de ver todos los scans existentes —
-  reportando éxito.
+- **Un `XDG_STATE_HOME` vacío cuenta como ausente** y cae a `~/.local/state`. Concatenar el nombre de
+  la app a una base vacía resolvería la raíz a `/duplicate` y ocultaría los escaneos existentes.
 - **El `errorHandler` de `FileManager.enumerator` no hace lo que dice la documentación.** Foundation
   documenta que devolver `false` detiene la enumeración. **Medido en este SDK, no la detiene**: un
   EACCES sobre un subdirectorio da la misma lista de archivos con `true`, con `false`, y sin handler.

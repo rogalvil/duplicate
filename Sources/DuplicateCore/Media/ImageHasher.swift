@@ -87,7 +87,7 @@ public struct ImageHasher: Sendable {
 
         /// Stamped into any cache key that stores a hash, so a change to this pipeline invalidates it instead
         /// of serving numbers that mean something else.
-        public static let version = "RavPHash v1"
+        public static let version = "DuplicatePHash v1"
     }
 
     public let configuration: Configuration

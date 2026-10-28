@@ -1,8 +1,8 @@
 import Foundation
 
-/// Builds and validates the scan identifiers and timestamps shared with the `rav duplicate` CLI.
+/// Builds and validates persisted scan identifiers and timestamps.
 ///
-/// The CLI derives both from one `datetime.now(UTC)` (`src/rav/core/duplicates.py:99-103`):
+/// The CLI derives both from one `datetime.now(UTC)`:
 ///
 ///     scan_id    = now.strftime("%Y%m%d-%H%M%S-%f")
 ///     created_at = now.isoformat().replace("+00:00", "Z")

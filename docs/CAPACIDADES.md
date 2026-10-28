@@ -14,7 +14,7 @@ razón de la regla de abajo.
 ## En una página
 
 Tres detectores, y los tres cierran el ciclo completo desde la app, sobre documentos JSON en
-`~/.local/state/rav/duplicate/` (formato en [`FORMATO.md`](FORMATO.md)). El recorrido con capturas, para quien
+`~/.local/state/duplicate/` (formato en [`FORMATO.md`](FORMATO.md)). El recorrido con capturas, para quien
 usa la app, está en el [manual](MANUAL.md):
 
 | | Escanear | Revisar | Decidir | Simular y aplicar | Deshacer |
@@ -224,7 +224,10 @@ cuenta como un archivo de la sesión, con tamaño 0.
 | Tamaño de ventana | biblioteca, revisión exacta y carpetas; **el visor de parecidos no** |
 | Resultado del chequeo de disco | `~/Library/Caches`, por clave de grupo |
 | Cachés de digests y de hashes perceptuales | `~/Library/Caches` |
-| Escaneos, decisiones, nombres elegidos y journals | `~/.local/state/rav/duplicate/` ([`FORMATO.md`](FORMATO.md)) |
+| Escaneos, decisiones, nombres elegidos y journals | `~/.local/state/duplicate/` ([`FORMATO.md`](FORMATO.md)) |
+
+Los escaneos importados de versiones anteriores conservan sus clases de almacenamiento: el plan excluye la
+clase del archivo conservado y elige un representante de cada clase restante. Al guardarlos usa la clave actual.
 
 ---
 
@@ -356,7 +359,7 @@ una vez.
 | Cruzar volúmenes por default | Escanear `~` no baja a los discos externos montados dentro |
 | Escanear `~/Library` | Son cachés donde quitar un "duplicado" rompe una app. Excepción: la raíz elegida está dentro |
 | Pedir Full Disk Access | No hay API para pedirlo, y una app que lo pide para ordenar Descargas parece malware |
-| Sandbox | El estado vive en `~/.local/state/rav/duplicate/`, fuera del contenedor, para que otras herramientas lo lean |
+| Sandbox | El estado vive en `~/.local/state/duplicate/`, fuera del contenedor, para que otras herramientas lo lean |
 | Bookmarks security-scoped | Sin sandbox, un permiso de TCC persiste por bundle id |
 | Cortar la cancelación dentro de un chunk | El límite es una lectura de 1 MiB |
 | `folder-decisions/` contra un archivo real | No existe uno escrito fuera de la app; el round-trip se prueba contra uno sintetizado |
